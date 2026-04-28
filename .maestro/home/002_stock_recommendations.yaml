@@ -1,0 +1,38 @@
+# HOME-002: Stock recommendations display
+# Equivalent to: Cypress recommendations.cy.js → "Recommendations API Intercept"
+appId: com.arpint.alphaquark
+tags:
+  - smoke
+  - home
+  - trading
+
+env:
+  TEST_EMAIL: "testuser@alphaquark.in"
+  TEST_PASSWORD: "Test@12345"
+
+---
+
+- runFlow: ../helpers/login.yaml
+
+# Navigate to Home tab (should already be there)
+- tapOn:
+    text: "(?i)home"
+    optional: true
+
+- waitForAnimationToEnd
+
+# Wait for recommendations to load (API call)
+- extendedWaitUntil:
+    visible:
+      text: "(?i)(buy|sell|hold|no.*advice|no.*recommendation|connect.*broker)"
+    timeout: 15000
+    label: "Recommendations or empty state loaded"
+
+# Verify recommendation card elements (if recommendations exist)
+- assertVisible:
+    text: "(?i)(buy|sell|nse|bse|quantity|qty|price|exchange)"
+    optional: true
+    label: "Trade recommendation card elements visible"
+
+# Take screenshot
+- takeScreenshot: stock_recommendations

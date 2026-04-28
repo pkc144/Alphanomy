@@ -1,0 +1,39 @@
+# PORTFOLIO-002: Portfolio holdings list displays correctly
+appId: com.arpint.alphaquark
+tags:
+  - regression
+  - portfolio
+
+env:
+  TEST_EMAIL: "testuser@alphaquark.in"
+  TEST_PASSWORD: "Test@12345"
+
+---
+
+- runFlow: ../helpers/login.yaml
+
+# Navigate to Portfolio tab
+- tapOn:
+    text: "(?i)portfolio"
+- waitForAnimationToEnd
+
+# Wait for holdings to load
+- extendedWaitUntil:
+    visible:
+      text: "(?i)(holdings|invested|no.*holding|connect)"
+    timeout: 15000
+
+# If holdings exist, verify individual stock rows
+- assertVisible:
+    text: "(?i)(nse|bse|qty|quantity|avg|ltp|p&l|profit|loss)"
+    optional: true
+    label: "Stock holding row elements visible"
+
+# Scroll down to see more holdings
+- scroll:
+    direction: DOWN
+
+- waitForAnimationToEnd
+
+# Take screenshot of holdings list
+- takeScreenshot: portfolio_holdings

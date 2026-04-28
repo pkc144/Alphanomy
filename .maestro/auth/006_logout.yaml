@@ -1,0 +1,50 @@
+# AUTH-006: Logout flow
+# Equivalent to: Cypress login.cy.js → "Logout" tests
+appId: com.arpint.alphaquark
+tags:
+  - smoke
+  - auth
+
+env:
+  TEST_EMAIL: "testuser@alphaquark.in"
+  TEST_PASSWORD: "Test@12345"
+
+---
+
+# Login first
+- runFlow: ../helpers/login.yaml
+
+# Navigate to settings/more tab
+- tapOn:
+    text: "(?i)(more|settings|menu)"
+
+- waitForAnimationToEnd
+
+# Scroll to find logout
+- scrollUntilVisible:
+    element:
+      text: "(?i)log ?out"
+    direction: DOWN
+    timeout: 10000
+
+# Tap logout
+- tapOn:
+    text: "(?i)log ?out"
+
+# Confirm logout dialog if present
+- tapOn:
+    text: "(?i)(yes|confirm|log ?out)"
+    optional: true
+
+- waitForAnimationToEnd
+
+# Verify returned to login screen
+- assertVisible:
+    text: "(?i)(sign in|log in|login|welcome)"
+    label: "Login screen visible after logout"
+
+# Verify home content is NOT visible
+- assertNotVisible:
+    text: "(?i)(portfolio|orders|holdings)"
+    optional: true
+    label: "Authenticated content not visible after logout"

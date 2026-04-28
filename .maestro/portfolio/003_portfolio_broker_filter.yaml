@@ -1,0 +1,44 @@
+# PORTFOLIO-003: Multi-broker portfolio filter
+# Tests filtering holdings by connected broker
+appId: com.arpint.alphaquark
+tags:
+  - regression
+  - portfolio
+
+env:
+  TEST_EMAIL: "testuser@alphaquark.in"
+  TEST_PASSWORD: "Test@12345"
+
+---
+
+- runFlow: ../helpers/login.yaml
+
+# Navigate to Portfolio tab
+- tapOn:
+    text: "(?i)portfolio"
+- waitForAnimationToEnd
+
+# Look for broker filter/selector (dropdown or tabs)
+- tapOn:
+    text: "(?i)(all|broker|filter|zerodha|angel|select)"
+    optional: true
+- waitForAnimationToEnd
+
+# If broker filter dropdown opens, tap a broker
+- tapOn:
+    text: "(?i)(zerodha|angel.*one|upstox|dhan)"
+    optional: true
+- waitForAnimationToEnd
+
+# Verify filtered view loads
+- assertVisible:
+    id: ".*"
+    label: "Portfolio filtered without crash"
+
+# Switch back to All
+- tapOn:
+    text: "(?i)(all|all.*broker)"
+    optional: true
+- waitForAnimationToEnd
+
+- takeScreenshot: portfolio_broker_filter

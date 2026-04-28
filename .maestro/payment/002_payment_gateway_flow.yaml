@@ -1,0 +1,50 @@
+# PAYMENT-002: Payment gateway opens (without completing payment)
+# Equivalent to: Cypress payment/validation.cy.js
+appId: com.arpint.alphaquark
+tags:
+  - regression
+  - payment
+
+env:
+  TEST_EMAIL: "testuser@alphaquark.in"
+  TEST_PASSWORD: "Test@12345"
+
+---
+
+- runFlow: ../helpers/login.yaml
+
+# Navigate to Model Portfolio and find Invest Now
+- tapOn:
+    text: "(?i)(model.*portfolio|mp)"
+    optional: true
+- tapOn:
+    text: "(?i)(more|menu)"
+    optional: true
+- waitForAnimationToEnd
+- tapOn:
+    text: "(?i)(model.*portfolio)"
+    optional: true
+- waitForAnimationToEnd
+
+# Look for invest/subscribe button
+- tapOn:
+    text: "(?i)(invest.*now|subscribe|buy)"
+    optional: true
+- waitForAnimationToEnd
+
+# If payment gateway opens (Razorpay/Cashfree), verify it appears
+- assertVisible:
+    text: "(?i)(pay|razorpay|cashfree|upi|card|net.*banking|amount|₹)"
+    optional: true
+    label: "Payment gateway UI visible"
+
+# Close payment without completing
+- pressKey: back
+- waitForAnimationToEnd
+
+# Verify app returns to previous screen without crash
+- assertVisible:
+    id: ".*"
+    label: "App stable after cancelling payment"
+
+- takeScreenshot: payment_gateway

@@ -1,0 +1,42 @@
+# ORDERS-001: Order screen loads and shows tabs
+# Equivalent to: Cypress recommendations.cy.js → "Order Book Page"
+appId: com.arpint.alphaquark
+tags:
+  - smoke
+  - orders
+
+env:
+  TEST_EMAIL: "testuser@alphaquark.in"
+  TEST_PASSWORD: "Test@12345"
+
+---
+
+- runFlow: ../helpers/login.yaml
+
+# Navigate to Orders tab
+- tapOn:
+    text: "(?i)orders"
+- waitForAnimationToEnd
+
+# Verify order screen loaded
+- assertVisible:
+    text: "(?i)(orders|order.*book|placed|rejected|pending)"
+    label: "Order screen content visible"
+
+# Verify tabs exist (Placed / Rejected)
+- assertVisible:
+    text: "(?i)(placed|executed|completed)"
+    optional: true
+    label: "Placed orders tab visible"
+
+- assertVisible:
+    text: "(?i)(rejected|failed|cancelled)"
+    optional: true
+    label: "Rejected orders tab visible"
+
+# No crash
+- assertNotVisible:
+    text: "(?i)(error|something went wrong)"
+    optional: true
+
+- takeScreenshot: order_screen

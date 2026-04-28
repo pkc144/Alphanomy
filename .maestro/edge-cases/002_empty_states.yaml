@@ -1,0 +1,52 @@
+# EDGE-002: Empty states display correctly
+# Tests that screens with no data show proper empty states (not crashes)
+# Equivalent to: Cypress admin tests → "Shows empty state when no records"
+appId: com.arpint.alphaquark
+tags:
+  - regression
+  - edge-case
+
+env:
+  TEST_EMAIL: "testuser@alphaquark.in"
+  TEST_PASSWORD: "Test@12345"
+
+---
+
+- runFlow: ../helpers/login.yaml
+
+# Check Orders screen empty state
+- tapOn:
+    text: "(?i)orders"
+- waitForAnimationToEnd
+
+# Should show orders or "no orders" message
+- assertVisible:
+    text: "(?i)(order|no.*order|empty|nothing)"
+    label: "Orders screen shows content or empty state"
+- takeScreenshot: edge_empty_orders
+
+# Check Ignored Trades empty state
+- tapOn:
+    text: "(?i)(more|settings)"
+- waitForAnimationToEnd
+
+- scrollUntilVisible:
+    element:
+      text: "(?i)ignored.*trade"
+    direction: DOWN
+    timeout: 10000
+
+- tapOn:
+    text: "(?i)ignored.*trade"
+    optional: true
+- waitForAnimationToEnd
+
+- assertVisible:
+    text: "(?i)(ignored|no.*trade|empty|nothing)"
+    optional: true
+    label: "Ignored trades shows content or empty state"
+
+- takeScreenshot: edge_empty_ignored_trades
+
+- pressKey: back
+- waitForAnimationToEnd

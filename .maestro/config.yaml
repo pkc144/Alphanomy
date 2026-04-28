@@ -1,0 +1,18 @@
+# Maestro E2E Test Configuration for AlphaQuark B2B App
+# Run: maestro test .maestro/
+# Run single: maestro test .maestro/auth/login.yaml
+
+appId: com.arpint.alphaquark
+name: AlphaQuark B2B App E2E Tests
+
+# Global settings
+tags:
+  smoke: true
+  regression: true
+
+env:
+  TEST_EMAIL: "testuser@alphaquark.in"
+  TEST_PASSWORD: "Test@12345"
+  TEST_PHONE: "9999999999"
+  ADVISOR_NAME: "AlphaQuark"
+  APP_PACKAGE: "com.arpint.alphaquark"

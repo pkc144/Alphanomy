@@ -1,0 +1,40 @@
+# AUTH-001: App launches and shows login screen
+# Equivalent to: Cypress login.cy.js → "Landing Page Access"
+appId: com.arpint.alphaquark
+tags:
+  - smoke
+  - auth
+
+---
+
+- launchApp:
+    clearState: true
+
+- waitForAnimationToEnd
+
+# Verify login screen elements are visible
+- assertVisible:
+    text: "(?i)(sign in|log in|login|welcome)"
+    label: "Login screen title is visible"
+
+# Verify email input exists
+- assertVisible:
+    text: "(?i)(email|e-mail)"
+    optional: true
+    label: "Email field or label is visible"
+
+# Verify password input exists
+- assertVisible:
+    text: "(?i)(password)"
+    optional: true
+    label: "Password field or label is visible"
+
+# Verify sign-in button exists
+- assertVisible:
+    text: "(?i)(sign in|log in|login|continue)"
+    label: "Sign-in button is visible"
+
+# App did not crash
+- assertVisible:
+    id: ".*"
+    label: "App rendered without crash"

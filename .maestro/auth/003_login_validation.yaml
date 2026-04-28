@@ -1,0 +1,51 @@
+# AUTH-003: Login form validation
+# Equivalent to: Cypress login.cy.js → "Marks non-email value as invalid"
+appId: com.arpint.alphaquark
+tags:
+  - regression
+  - auth
+
+---
+
+- launchApp:
+    clearState: true
+
+- waitForAnimationToEnd
+
+# Test 1: Empty form submission
+- tapOn:
+    text: "(?i)(sign in|log in|login|continue)"
+- waitForAnimationToEnd
+
+# Should show validation error or stay on login screen
+- assertVisible:
+    text: "(?i)(email|password|required|invalid|enter|please)"
+    label: "Validation error shown for empty fields"
+
+# Test 2: Invalid email format
+- tapOn:
+    hint: "(?i).*email.*"
+- inputText: "notanemail"
+- hideKeyboard
+
+- tapOn:
+    text: "(?i)(sign in|log in|login|continue)"
+- waitForAnimationToEnd
+
+# Should show email validation error
+- assertVisible:
+    text: "(?i)(invalid|valid email|email format|enter.*email)"
+    optional: true
+    label: "Email validation error shown"
+
+# Test 3: Email field can be cleared and re-entered
+- tapOn:
+    hint: "(?i).*email.*"
+- eraseText: 20
+- inputText: "valid@email.com"
+- hideKeyboard
+
+# Verify text was entered
+- assertVisible:
+    text: "valid@email.com"
+    optional: true

@@ -1,0 +1,51 @@
+# HOME-005: Interact with recommendation card (review trade)
+# Equivalent to: Cypress recommendations.cy.js → trade interaction
+appId: com.arpint.alphaquark
+tags:
+  - regression
+  - home
+  - trading
+
+env:
+  TEST_EMAIL: "testuser@alphaquark.in"
+  TEST_PASSWORD: "Test@12345"
+
+---
+
+- runFlow: ../helpers/login.yaml
+
+# Wait for recommendations
+- extendedWaitUntil:
+    visible:
+      text: "(?i)(buy|sell)"
+    timeout: 15000
+    label: "Wait for trade recommendations to appear"
+
+# Tap on first recommendation card / execute button
+- tapOn:
+    text: "(?i)(execute|place.*order|review|trade)"
+    optional: true
+    label: "Tap execute/review button on recommendation"
+
+- waitForAnimationToEnd
+
+# If a review trade modal opens, verify its contents
+- assertVisible:
+    text: "(?i)(review|confirm|order|quantity|qty|price|total)"
+    optional: true
+    label: "Review trade modal opened"
+
+# Close modal without executing (back press or close button)
+- tapOn:
+    text: "(?i)(close|cancel|back|dismiss)"
+    optional: true
+
+# Alternatively press back button
+- pressKey: back
+
+- waitForAnimationToEnd
+
+# Verify still on home screen
+- assertVisible:
+    text: "(?i)(home|advice|recommendation)"
+    label: "Back on home screen after closing modal"

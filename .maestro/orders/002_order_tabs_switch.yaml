@@ -1,0 +1,38 @@
+# ORDERS-002: Switch between order tabs
+# Equivalent to: Cypress recommendations.cy.js → "Trade History Page"
+appId: com.arpint.alphaquark
+tags:
+  - regression
+  - orders
+
+env:
+  TEST_EMAIL: "testuser@alphaquark.in"
+  TEST_PASSWORD: "Test@12345"
+
+---
+
+- runFlow: ../helpers/login.yaml
+
+# Navigate to Orders tab
+- tapOn:
+    text: "(?i)orders"
+- waitForAnimationToEnd
+
+# Tap Placed/Executed tab
+- tapOn:
+    text: "(?i)(placed|executed|completed)"
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: orders_placed_tab
+
+# Tap Rejected tab
+- tapOn:
+    text: "(?i)(rejected|failed)"
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: orders_rejected_tab
+
+# Verify content or empty state
+- assertVisible:
+    text: "(?i)(no.*order|order|symbol|quantity|qty|placed|rejected|empty)"
+    label: "Order list or empty state visible"

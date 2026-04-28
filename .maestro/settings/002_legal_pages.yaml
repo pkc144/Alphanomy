@@ -1,0 +1,63 @@
+# SETTINGS-002: Legal pages load correctly
+# Equivalent to: Cypress login.cy.js → "Public Pages" (disclaimer, privacy, terms)
+appId: com.arpint.alphaquark
+tags:
+  - regression
+  - settings
+
+env:
+  TEST_EMAIL: "testuser@alphaquark.in"
+  TEST_PASSWORD: "Test@12345"
+
+---
+
+- runFlow: ../helpers/login.yaml
+
+# Navigate to More/Settings
+- tapOn:
+    text: "(?i)(more|settings)"
+- waitForAnimationToEnd
+
+# Test Privacy Policy
+- scrollUntilVisible:
+    element:
+      text: "(?i)privacy.*policy"
+    direction: DOWN
+    timeout: 10000
+
+- tapOn:
+    text: "(?i)privacy.*policy"
+- waitForAnimationToEnd
+
+- assertVisible:
+    text: "(?i)(privacy|data|information|collect|personal)"
+    optional: true
+    label: "Privacy policy content loaded"
+
+- pressKey: back
+- waitForAnimationToEnd
+
+# Test Terms & Conditions
+- scrollUntilVisible:
+    element:
+      text: "(?i)terms"
+    direction: DOWN
+    timeout: 10000
+
+- tapOn:
+    text: "(?i)terms.*condition"
+    optional: true
+- tapOn:
+    text: "(?i)terms"
+    optional: true
+- waitForAnimationToEnd
+
+- assertVisible:
+    text: "(?i)(terms|agreement|condition|service|usage)"
+    optional: true
+    label: "Terms content loaded"
+
+- pressKey: back
+- waitForAnimationToEnd
+
+- takeScreenshot: legal_pages

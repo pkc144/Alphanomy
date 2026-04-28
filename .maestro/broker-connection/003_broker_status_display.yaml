@@ -1,0 +1,32 @@
+# BROKER-003: Connected broker status shows correctly
+# Tests that connected brokers show green/active status
+appId: com.arpint.alphaquark
+tags:
+  - regression
+  - broker
+
+env:
+  TEST_EMAIL: "testuser@alphaquark.in"
+  TEST_PASSWORD: "Test@12345"
+
+---
+
+- runFlow: ../helpers/login.yaml
+
+# Navigate to broker settings
+- tapOn:
+    text: "(?i)(more|settings)"
+- waitForAnimationToEnd
+
+- tapOn:
+    text: "(?i)(broker|connect.*broker)"
+    optional: true
+- waitForAnimationToEnd
+
+# Verify broker status indicators
+- assertVisible:
+    text: "(?i)(connected|active|disconnect|expired|reconnect)"
+    optional: true
+    label: "Broker connection status visible"
+
+- takeScreenshot: broker_status

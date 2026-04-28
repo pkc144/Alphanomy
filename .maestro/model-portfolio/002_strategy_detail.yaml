@@ -1,0 +1,52 @@
+# MP-002: Strategy detail view
+# Equivalent to: Cypress portfolio/model-portfolio.cy.js → "Portfolio Detail Page"
+appId: com.arpint.alphaquark
+tags:
+  - regression
+  - model-portfolio
+
+env:
+  TEST_EMAIL: "testuser@alphaquark.in"
+  TEST_PASSWORD: "Test@12345"
+
+---
+
+- runFlow: ../helpers/login.yaml
+
+# Navigate to Model Portfolio
+- tapOn:
+    text: "(?i)(model.*portfolio|mp|strategies)"
+    optional: true
+- tapOn:
+    text: "(?i)(more|menu)"
+    optional: true
+- waitForAnimationToEnd
+- tapOn:
+    text: "(?i)(model.*portfolio)"
+    optional: true
+- waitForAnimationToEnd
+
+# Tap on first strategy card
+- tapOn:
+    text: "(?i)(growth|value|momentum|income|strateg)"
+    optional: true
+    index: 0
+
+- waitForAnimationToEnd
+
+# Verify strategy detail elements
+- assertVisible:
+    text: "(?i)(composition|stocks|weight|allocation|performance|subscribe|invest)"
+    optional: true
+    label: "Strategy detail elements visible"
+
+# Scroll down to see full composition
+- scroll:
+    direction: DOWN
+- waitForAnimationToEnd
+
+- takeScreenshot: strategy_detail
+
+# Navigate back
+- pressKey: back
+- waitForAnimationToEnd

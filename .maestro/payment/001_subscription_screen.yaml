@@ -1,0 +1,39 @@
+# PAYMENT-001: Subscription/pricing screen loads
+# Equivalent to: Cypress payment/subscription.cy.js → "Pricing Page"
+appId: com.arpint.alphaquark
+tags:
+  - regression
+  - payment
+
+env:
+  TEST_EMAIL: "testuser@alphaquark.in"
+  TEST_PASSWORD: "Test@12345"
+
+---
+
+- runFlow: ../helpers/login.yaml
+
+# Navigate to Plans/Pricing
+- tapOn:
+    text: "(?i)(more|settings)"
+- waitForAnimationToEnd
+
+- tapOn:
+    text: "(?i)(plan|pricing|subscription|upgrade)"
+    optional: true
+- waitForAnimationToEnd
+
+# Verify pricing elements
+- assertVisible:
+    text: "(?i)(plan|price|subscribe|₹|invest|premium|free)"
+    optional: true
+    label: "Pricing/plan content visible"
+
+# Verify plan cards
+- assertVisible:
+    text: "(?i)(month|year|annual|quarter|₹)"
+    optional: true
+    label: "Plan duration/price visible"
+
+# Do NOT tap subscribe to avoid actual payment
+- takeScreenshot: subscription_screen

@@ -1,0 +1,33 @@
+# HOME-001: Home screen loads after login
+# Equivalent to: Cypress recommendations.cy.js → "Page Load"
+appId: com.arpint.alphaquark
+tags:
+  - smoke
+  - home
+
+env:
+  TEST_EMAIL: "testuser@alphaquark.in"
+  TEST_PASSWORD: "Test@12345"
+
+---
+
+- runFlow: ../helpers/login.yaml
+
+# Verify home screen loaded
+- assertVisible:
+    text: "(?i)(home|advice|recommendation)"
+    label: "Home screen content visible"
+
+# Verify no error/crash screen
+- assertNotVisible:
+    text: "(?i)(error|something went wrong|crash)"
+    optional: true
+    label: "No error screen displayed"
+
+# Verify interactive elements exist
+- assertVisible:
+    text: "(?i)(portfolio|orders|home)"
+    label: "Bottom tab bar visible"
+
+# Take screenshot for visual reference
+- takeScreenshot: home_screen_loaded

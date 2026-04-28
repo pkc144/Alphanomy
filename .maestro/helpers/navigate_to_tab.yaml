@@ -1,0 +1,7 @@
+# Reusable tab navigation helper
+# Pass TAB_NAME env variable: Home, Orders, Portfolio, News, More
+appId: com.arpint.alphaquark
+
+- tapOn:
+    text: "(?i)${TAB_NAME}"
+- waitForAnimationToEnd

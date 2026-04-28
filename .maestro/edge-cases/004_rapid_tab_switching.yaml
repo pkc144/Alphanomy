@@ -1,0 +1,38 @@
+# EDGE-004: Rapid tab switching doesn't crash
+# Stress test for navigation stability
+appId: com.arpint.alphaquark
+tags:
+  - regression
+  - edge-case
+
+env:
+  TEST_EMAIL: "testuser@alphaquark.in"
+  TEST_PASSWORD: "Test@12345"
+
+---
+
+- runFlow: ../helpers/login.yaml
+
+# Rapidly switch between all tabs
+- repeat:
+    times: 3
+    commands:
+      - tapOn:
+          text: "(?i)home"
+      - tapOn:
+          text: "(?i)orders"
+      - tapOn:
+          text: "(?i)portfolio"
+      - tapOn:
+          text: "(?i)(more|settings)"
+      - tapOn:
+          text: "(?i)home"
+
+- waitForAnimationToEnd
+
+# Verify app is still running and responsive
+- assertVisible:
+    text: "(?i)(home|advice|recommendation|portfolio|orders)"
+    label: "App stable after rapid tab switching"
+
+- takeScreenshot: edge_rapid_tabs

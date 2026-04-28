@@ -1,0 +1,62 @@
+# NAV-002: Drawer navigation works correctly
+# Tests right-side drawer menu items
+appId: com.arpint.alphaquark
+tags:
+  - regression
+  - navigation
+
+env:
+  TEST_EMAIL: "testuser@alphaquark.in"
+  TEST_PASSWORD: "Test@12345"
+
+---
+
+- runFlow: ../helpers/login.yaml
+
+# Open drawer (swipe from right or tap hamburger)
+- swipe:
+    start: 95%, 50%
+    end: 30%, 50%
+    duration: 300
+
+- waitForAnimationToEnd
+
+# Verify drawer menu items
+- assertVisible:
+    text: "(?i)(model.*portfolio|broker|ignored.*trade|privacy|terms|log ?out)"
+    optional: true
+    label: "Drawer menu items visible"
+
+# Tap Model Portfolio from drawer
+- tapOn:
+    text: "(?i)model.*portfolio"
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: drawer_model_portfolio
+
+# Navigate back
+- pressKey: back
+- waitForAnimationToEnd
+
+# Open drawer again
+- swipe:
+    start: 95%, 50%
+    end: 30%, 50%
+    duration: 300
+- waitForAnimationToEnd
+
+# Tap Ignored Trades
+- tapOn:
+    text: "(?i)ignored.*trade"
+    optional: true
+- waitForAnimationToEnd
+
+- assertVisible:
+    text: "(?i)(ignored|no.*trade|trade)"
+    optional: true
+    label: "Ignored trades screen loaded"
+
+- takeScreenshot: drawer_ignored_trades
+
+- pressKey: back
+- waitForAnimationToEnd

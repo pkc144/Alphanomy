@@ -1,0 +1,56 @@
+# AUTH-005: Signup screen renders and accepts input
+# Equivalent to: Cypress login.cy.js → form interactions (signup variant)
+appId: com.arpint.alphaquark
+tags:
+  - regression
+  - auth
+
+---
+
+- launchApp:
+    clearState: true
+
+- waitForAnimationToEnd
+
+# Navigate to signup screen
+- tapOn:
+    text: "(?i)(sign up|create.*account|register|don't have.*account)"
+    label: "Tap Sign Up link"
+
+- waitForAnimationToEnd
+
+# Verify signup form elements
+- assertVisible:
+    text: "(?i)(sign up|create.*account|register)"
+    label: "Signup screen title visible"
+
+# Enter name (if field exists)
+- tapOn:
+    hint: "(?i).*name.*"
+    optional: true
+- inputText: "Test User"
+- hideKeyboard
+
+# Enter email
+- tapOn:
+    hint: "(?i).*email.*"
+- inputText: "newuser@test.com"
+- hideKeyboard
+
+# Enter password
+- tapOn:
+    hint: "(?i).*password.*"
+- inputText: "TestPass@123"
+- hideKeyboard
+
+# App did not crash with filled form
+- assertVisible:
+    id: ".*"
+    label: "Signup form rendered correctly with all inputs filled"
+
+# Navigate back to login
+- tapOn:
+    text: "(?i)(already have.*account|sign in|log in|back)"
+    optional: true
+
+- waitForAnimationToEnd

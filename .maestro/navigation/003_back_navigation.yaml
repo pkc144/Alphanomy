@@ -1,0 +1,53 @@
+# NAV-003: Back navigation works correctly
+# Tests that Android back button returns to previous screen
+appId: com.arpint.alphaquark
+tags:
+  - regression
+  - navigation
+
+env:
+  TEST_EMAIL: "testuser@alphaquark.in"
+  TEST_PASSWORD: "Test@12345"
+
+---
+
+- runFlow: ../helpers/login.yaml
+
+# Navigate deep: Home → Orders → Portfolio → Settings
+- tapOn:
+    text: "(?i)orders"
+- waitForAnimationToEnd
+
+- tapOn:
+    text: "(?i)portfolio"
+- waitForAnimationToEnd
+
+- tapOn:
+    text: "(?i)(more|settings)"
+- waitForAnimationToEnd
+
+# Now use back button to return
+- pressKey: back
+- waitForAnimationToEnd
+
+# Should still be in the app (not exited)
+- assertVisible:
+    text: "(?i)(home|portfolio|orders|settings)"
+    label: "App still running after back press"
+
+# Navigate to a sub-screen via settings
+- tapOn:
+    text: "(?i)(more|settings)"
+- waitForAnimationToEnd
+- tapOn:
+    text: "(?i)(privacy|terms|about)"
+    optional: true
+- waitForAnimationToEnd
+
+# Back should return to settings
+- pressKey: back
+- waitForAnimationToEnd
+
+- assertVisible:
+    text: "(?i)(more|settings|account|broker|log ?out)"
+    label: "Returned to settings screen after back"

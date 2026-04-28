@@ -1,0 +1,57 @@
+# BROKER-002: Broker connection modal opens correctly
+# Tests that tapping a broker opens its auth modal/form
+appId: com.arpint.alphaquark
+tags:
+  - regression
+  - broker
+
+env:
+  TEST_EMAIL: "testuser@alphaquark.in"
+  TEST_PASSWORD: "Test@12345"
+
+---
+
+- runFlow: ../helpers/login.yaml
+
+# Navigate to broker connection
+- tapOn:
+    text: "(?i)(more|settings)"
+- waitForAnimationToEnd
+- tapOn:
+    text: "(?i)(broker|connect.*broker)"
+    optional: true
+- waitForAnimationToEnd
+
+# Tap on a credential-based broker (Dhan — simple clientCode + token)
+- tapOn:
+    text: "(?i)dhan"
+    optional: true
+- waitForAnimationToEnd
+
+# Verify connection modal/form opens
+- assertVisible:
+    text: "(?i)(connect|client.*code|client.*id|token|access.*token|api.*key)"
+    optional: true
+    label: "Broker connection form visible"
+
+# Close modal without connecting
+- pressKey: back
+- waitForAnimationToEnd
+
+# Try an OAuth-based broker (Zerodha)
+- tapOn:
+    text: "(?i)zerodha"
+    optional: true
+- waitForAnimationToEnd
+
+# Should open WebView or redirect
+- assertVisible:
+    text: "(?i)(connect|zerodha|kite|login|authorize)"
+    optional: true
+    label: "Zerodha OAuth flow initiated"
+
+# Close
+- pressKey: back
+- waitForAnimationToEnd
+
+- takeScreenshot: broker_connect_modal

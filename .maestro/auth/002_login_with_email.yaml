@@ -1,0 +1,48 @@
+# AUTH-002: Login with email and password
+# Equivalent to: Cypress login.cy.js → "Login Form Interactions" + "Authenticated Access"
+appId: com.arpint.alphaquark
+tags:
+  - smoke
+  - auth
+
+env:
+  TEST_EMAIL: "testuser@alphaquark.in"
+  TEST_PASSWORD: "Test@12345"
+
+---
+
+- launchApp:
+    clearState: true
+
+- waitForAnimationToEnd
+
+# Step 1: Enter email
+- tapOn:
+    hint: "(?i).*email.*"
+- inputText: ${TEST_EMAIL}
+
+# Step 2: Enter password
+- tapOn:
+    hint: "(?i).*password.*"
+- inputText: ${TEST_PASSWORD}
+
+# Step 3: Hide keyboard
+- hideKeyboard
+
+# Step 4: Tap sign-in button
+- tapOn:
+    text: "(?i)(sign in|log in|login|continue)"
+
+- waitForAnimationToEnd
+
+# Step 5: Verify successful login — home screen visible
+- extendedWaitUntil:
+    visible:
+      text: "(?i)(home|portfolio|orders|advice|recommendations|hello|hi)"
+    timeout: 20000
+    label: "Home screen loaded after login"
+
+# Step 6: Verify bottom navigation is visible
+- assertVisible:
+    text: "(?i)(home|portfolio|orders)"
+    label: "Bottom tab bar is visible after login"

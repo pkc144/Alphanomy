@@ -1,0 +1,43 @@
+# HOME-003: Home screen tabs switch correctly
+# Tests tab switching within the Home screen (Advice, Rebalance, etc.)
+appId: com.arpint.alphaquark
+tags:
+  - regression
+  - home
+
+env:
+  TEST_EMAIL: "testuser@alphaquark.in"
+  TEST_PASSWORD: "Test@12345"
+
+---
+
+- runFlow: ../helpers/login.yaml
+
+# Try switching between sub-tabs on home screen if they exist
+# These may include: Advices, Model Portfolio, Knowledge Hub, etc.
+
+# Tap on Advice/Recommendations tab
+- tapOn:
+    text: "(?i)(advice|recommendation|stock)"
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: home_tab_advice
+
+# Tap on Model Portfolio / Rebalance tab (if visible)
+- tapOn:
+    text: "(?i)(model.*portfolio|rebalance|mp)"
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: home_tab_model_portfolio
+
+# Tap on Knowledge Hub / Education tab (if visible)
+- tapOn:
+    text: "(?i)(knowledge|education|learn|blog)"
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: home_tab_knowledge
+
+# Verify no crash during tab switches
+- assertVisible:
+    id: ".*"
+    label: "App stable after tab switches"

@@ -1,0 +1,37 @@
+# Reusable login flow — called by other tests via runFlow
+appId: com.arpint.alphaquark
+
+- launchApp:
+    clearState: true
+
+# Wait for login screen to fully load
+- waitForAnimationToEnd
+
+# Enter email
+- tapOn:
+    text: ".*email.*"
+    optional: true
+- tapOn:
+    hint: ".*email.*"
+    optional: true
+- inputText: ${TEST_EMAIL}
+
+# Enter password
+- tapOn:
+    text: ".*password.*"
+    optional: true
+- tapOn:
+    hint: ".*password.*"
+    optional: true
+- inputText: ${TEST_PASSWORD}
+
+# Tap login/sign in button
+- tapOn:
+    text: "(?i)(sign in|log in|login|continue)"
+- waitForAnimationToEnd
+
+# Wait for home screen to load (presence of bottom tab or home content)
+- extendedWaitUntil:
+    visible:
+      text: "(?i)(home|portfolio|orders|advice|recommendations)"
+    timeout: 15000

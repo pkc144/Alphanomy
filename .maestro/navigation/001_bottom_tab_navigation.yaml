@@ -1,0 +1,65 @@
+# NAV-001: Bottom tab navigation works correctly
+# Equivalent to: Cypress dashboard.cy.js → "Navigation to Related Routes"
+appId: com.arpint.alphaquark
+tags:
+  - smoke
+  - navigation
+
+env:
+  TEST_EMAIL: "testuser@alphaquark.in"
+  TEST_PASSWORD: "Test@12345"
+
+---
+
+- runFlow: ../helpers/login.yaml
+
+# Tab 1: Home
+- tapOn:
+    text: "(?i)home"
+- waitForAnimationToEnd
+- assertVisible:
+    text: "(?i)(home|advice|recommendation|hello)"
+    label: "Home tab content visible"
+- takeScreenshot: nav_tab_home
+
+# Tab 2: Orders
+- tapOn:
+    text: "(?i)orders"
+- waitForAnimationToEnd
+- assertVisible:
+    text: "(?i)(orders|order.*book|placed|rejected|pending)"
+    label: "Orders tab content visible"
+- takeScreenshot: nav_tab_orders
+
+# Tab 3: Portfolio
+- tapOn:
+    text: "(?i)portfolio"
+- waitForAnimationToEnd
+- assertVisible:
+    text: "(?i)(portfolio|holdings|invested|p&l|connect)"
+    label: "Portfolio tab content visible"
+- takeScreenshot: nav_tab_portfolio
+
+# Tab 4: News (if present)
+- tapOn:
+    text: "(?i)(news|insights|market)"
+    optional: true
+- waitForAnimationToEnd
+- takeScreenshot: nav_tab_news
+
+# Tab 5: More/Settings
+- tapOn:
+    text: "(?i)(more|settings)"
+- waitForAnimationToEnd
+- assertVisible:
+    text: "(?i)(account|profile|broker|settings|log ?out)"
+    label: "Settings tab content visible"
+- takeScreenshot: nav_tab_settings
+
+# Navigate back to Home to confirm round-trip
+- tapOn:
+    text: "(?i)home"
+- waitForAnimationToEnd
+- assertVisible:
+    text: "(?i)(home|advice|recommendation)"
+    label: "Back on Home tab"

@@ -1,0 +1,28 @@
+# HOME-004: Pull-to-refresh on home screen
+appId: com.arpint.alphaquark
+tags:
+  - regression
+  - home
+
+env:
+  TEST_EMAIL: "testuser@alphaquark.in"
+  TEST_PASSWORD: "Test@12345"
+
+---
+
+- runFlow: ../helpers/login.yaml
+
+# Pull to refresh gesture
+- swipe:
+    direction: DOWN
+    duration: 500
+
+- waitForAnimationToEnd
+
+# Verify content reloaded (screen still visible, no crash)
+- assertVisible:
+    text: "(?i)(home|advice|recommendation|portfolio|orders)"
+    label: "Content visible after pull-to-refresh"
+
+# Take screenshot
+- takeScreenshot: home_after_refresh

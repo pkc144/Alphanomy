@@ -1,0 +1,39 @@
+# PORTFOLIO-001: Portfolio screen loads with holdings
+# Equivalent to: Cypress portfolio/dashboard.cy.js → "Dashboard Load"
+appId: com.arpint.alphaquark
+tags:
+  - smoke
+  - portfolio
+
+env:
+  TEST_EMAIL: "testuser@alphaquark.in"
+  TEST_PASSWORD: "Test@12345"
+
+---
+
+- runFlow: ../helpers/login.yaml
+
+# Navigate to Portfolio tab
+- tapOn:
+    text: "(?i)portfolio"
+- waitForAnimationToEnd
+
+# Wait for portfolio data to load
+- extendedWaitUntil:
+    visible:
+      text: "(?i)(portfolio|holdings|invested|current|p&l|profit|loss|no.*holding|connect.*broker)"
+    timeout: 15000
+    label: "Portfolio screen loaded"
+
+# Verify key portfolio elements
+- assertVisible:
+    text: "(?i)(invested|current|total|p&l|profit|loss|holdings)"
+    optional: true
+    label: "Portfolio summary visible"
+
+# No crash
+- assertNotVisible:
+    text: "(?i)(error|something went wrong)"
+    optional: true
+
+- takeScreenshot: portfolio_screen

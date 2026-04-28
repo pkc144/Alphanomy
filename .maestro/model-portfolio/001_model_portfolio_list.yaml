@@ -1,0 +1,45 @@
+# MP-001: Model Portfolio list screen loads
+# Equivalent to: Cypress portfolio/model-portfolio.cy.js → "Page Load"
+appId: com.arpint.alphaquark
+tags:
+  - smoke
+  - model-portfolio
+
+env:
+  TEST_EMAIL: "testuser@alphaquark.in"
+  TEST_PASSWORD: "Test@12345"
+
+---
+
+- runFlow: ../helpers/login.yaml
+
+# Navigate to Model Portfolio (via drawer or home tab)
+- tapOn:
+    text: "(?i)(model.*portfolio|mp|strategies)"
+    optional: true
+
+# If not found on home, try drawer navigation
+- tapOn:
+    text: "(?i)(more|menu)"
+    optional: true
+- waitForAnimationToEnd
+
+- tapOn:
+    text: "(?i)(model.*portfolio)"
+    optional: true
+- waitForAnimationToEnd
+
+# Wait for strategies to load
+- extendedWaitUntil:
+    visible:
+      text: "(?i)(model.*portfolio|strateg|subscri|no.*portfolio|growth|value)"
+    timeout: 15000
+    label: "Model Portfolio screen loaded"
+
+# Verify strategy cards or empty state
+- assertVisible:
+    text: "(?i)(strateg|subscribe|invest|cagr|return|no.*portfolio)"
+    optional: true
+    label: "Strategy cards or empty state visible"
+
+- takeScreenshot: model_portfolio_list

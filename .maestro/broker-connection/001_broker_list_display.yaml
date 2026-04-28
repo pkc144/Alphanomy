@@ -1,0 +1,49 @@
+# BROKER-001: Broker connection list displays all brokers
+# Equivalent to: Cypress subscription.cy.js → "Shows broker name"
+appId: com.arpint.alphaquark
+tags:
+  - smoke
+  - broker
+
+env:
+  TEST_EMAIL: "testuser@alphaquark.in"
+  TEST_PASSWORD: "Test@12345"
+
+---
+
+- runFlow: ../helpers/login.yaml
+
+# Navigate to broker connection screen
+# Try via settings/more tab first
+- tapOn:
+    text: "(?i)(more|settings|menu)"
+- waitForAnimationToEnd
+
+- tapOn:
+    text: "(?i)(broker|connect.*broker|broker.*settings)"
+    optional: true
+- waitForAnimationToEnd
+
+# If not in settings, try through portfolio screen
+- tapOn:
+    text: "(?i)(connect|add.*broker|link.*broker)"
+    optional: true
+- waitForAnimationToEnd
+
+# Verify broker list shows known brokers
+- assertVisible:
+    text: "(?i)(zerodha|angel.*one|upstox|dhan|fyers|icici|kotak|groww)"
+    optional: true
+    label: "At least one broker name visible in list"
+
+# Scroll to see more brokers
+- scroll:
+    direction: DOWN
+- waitForAnimationToEnd
+
+- assertVisible:
+    text: "(?i)(alice.*blue|hdfc|motilal|axis)"
+    optional: true
+    label: "Additional brokers visible after scroll"
+
+- takeScreenshot: broker_list

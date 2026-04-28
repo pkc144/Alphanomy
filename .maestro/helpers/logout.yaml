@@ -1,0 +1,27 @@
+# Reusable logout flow
+appId: com.arpint.alphaquark
+
+# Open drawer or settings
+- tapOn:
+    text: "(?i)(more|settings|menu)"
+    optional: true
+
+- scrollUntilVisible:
+    element:
+      text: "(?i)log ?out"
+    direction: DOWN
+    timeout: 10000
+
+- tapOn:
+    text: "(?i)log ?out"
+
+# Confirm logout if dialog appears
+- tapOn:
+    text: "(?i)(yes|confirm|log ?out)"
+    optional: true
+
+- waitForAnimationToEnd
+
+# Should see login screen
+- assertVisible:
+    text: "(?i)(sign in|log in|login|email)"

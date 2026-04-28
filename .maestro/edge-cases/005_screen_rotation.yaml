@@ -1,0 +1,39 @@
+# EDGE-005: Screen rotation doesn't crash or lose state
+appId: com.arpint.alphaquark
+tags:
+  - regression
+  - edge-case
+
+env:
+  TEST_EMAIL: "testuser@alphaquark.in"
+  TEST_PASSWORD: "Test@12345"
+
+---
+
+- runFlow: ../helpers/login.yaml
+
+# Navigate to portfolio (has data to preserve)
+- tapOn:
+    text: "(?i)portfolio"
+- waitForAnimationToEnd
+- takeScreenshot: edge_rotation_portrait
+
+# Rotate to landscape
+- setDeviceOrientation: landscape
+- waitForAnimationToEnd
+
+# Verify content still visible
+- assertVisible:
+    text: "(?i)(portfolio|holdings|invested|home|orders)"
+    label: "Content visible in landscape"
+- takeScreenshot: edge_rotation_landscape
+
+# Rotate back to portrait
+- setDeviceOrientation: portrait
+- waitForAnimationToEnd
+
+# Verify state preserved
+- assertVisible:
+    text: "(?i)(portfolio|holdings|invested|home|orders)"
+    label: "Content visible after rotation back to portrait"
+- takeScreenshot: edge_rotation_back_portrait

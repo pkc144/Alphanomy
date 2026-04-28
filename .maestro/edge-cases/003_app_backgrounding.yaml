@@ -1,0 +1,43 @@
+# EDGE-003: App resumes correctly after backgrounding
+# Tests that state is preserved when app goes to background and returns
+appId: com.arpint.alphaquark
+tags:
+  - regression
+  - edge-case
+
+env:
+  TEST_EMAIL: "testuser@alphaquark.in"
+  TEST_PASSWORD: "Test@12345"
+
+---
+
+- runFlow: ../helpers/login.yaml
+
+# Navigate to portfolio
+- tapOn:
+    text: "(?i)portfolio"
+- waitForAnimationToEnd
+
+# Send app to background
+- pressKey: home
+
+# Wait a moment
+- waitForAnimationToEnd
+
+# Bring app back to foreground
+- launchApp
+
+- waitForAnimationToEnd
+
+# Verify we're still on the portfolio screen (state preserved)
+- assertVisible:
+    text: "(?i)(portfolio|holdings|invested|home|orders)"
+    label: "App restored correctly after backgrounding"
+
+# Verify no auth screen shown (session preserved)
+- assertNotVisible:
+    text: "(?i)(sign in|log in|login)"
+    optional: true
+    label: "Auth session maintained after background"
+
+- takeScreenshot: edge_app_resume

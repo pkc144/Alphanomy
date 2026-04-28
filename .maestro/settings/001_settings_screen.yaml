@@ -1,0 +1,51 @@
+# SETTINGS-001: Settings/More screen loads with all sections
+# Equivalent to: Cypress admin/admin-settings → "Renders form inputs"
+appId: com.arpint.alphaquark
+tags:
+  - smoke
+  - settings
+
+env:
+  TEST_EMAIL: "testuser@alphaquark.in"
+  TEST_PASSWORD: "Test@12345"
+
+---
+
+- runFlow: ../helpers/login.yaml
+
+# Navigate to More/Settings tab
+- tapOn:
+    text: "(?i)(more|settings)"
+- waitForAnimationToEnd
+
+# Verify settings sections are visible
+- assertVisible:
+    text: "(?i)(account|profile|setting|broker)"
+    label: "Account section visible"
+
+# Scroll to see all menu items
+- scroll:
+    direction: DOWN
+
+# Verify additional sections
+- assertVisible:
+    text: "(?i)(privacy|terms|contact|support|about|log ?out)"
+    optional: true
+    label: "Legal/support section visible"
+
+- takeScreenshot: settings_screen
+
+# Tap Account/Profile settings
+- tapOn:
+    text: "(?i)(account|profile|personal)"
+    optional: true
+- waitForAnimationToEnd
+
+# Verify account details visible
+- assertVisible:
+    text: "(?i)(name|email|phone|mobile)"
+    optional: true
+    label: "Account details visible"
+
+- pressKey: back
+- waitForAnimationToEnd

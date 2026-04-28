@@ -1,0 +1,53 @@
+# MP-003: Model Portfolio rebalance / review trade flow
+# Tests the rebalance execution flow for subscribed strategies
+appId: com.arpint.alphaquark
+tags:
+  - regression
+  - model-portfolio
+  - trading
+
+env:
+  TEST_EMAIL: "testuser@alphaquark.in"
+  TEST_PASSWORD: "Test@12345"
+
+---
+
+- runFlow: ../helpers/login.yaml
+
+# Navigate to Model Portfolio
+- tapOn:
+    text: "(?i)(model.*portfolio|mp)"
+    optional: true
+- tapOn:
+    text: "(?i)(more|menu)"
+    optional: true
+- waitForAnimationToEnd
+- tapOn:
+    text: "(?i)(model.*portfolio)"
+    optional: true
+- waitForAnimationToEnd
+
+# Look for subscribed strategy with rebalance action
+- tapOn:
+    text: "(?i)(rebalance|execute|review|invest.*now|subscribe)"
+    optional: true
+
+- waitForAnimationToEnd
+
+# If rebalance modal/screen opens, verify contents
+- assertVisible:
+    text: "(?i)(buy|sell|quantity|qty|total|review|confirm|stock|symbol)"
+    optional: true
+    label: "Rebalance review screen elements"
+
+# Verify fund information if visible
+- assertVisible:
+    text: "(?i)(fund|balance|available|amount|invest)"
+    optional: true
+
+# Do NOT execute — just verify the modal opens correctly
+# Close/back
+- pressKey: back
+- waitForAnimationToEnd
+
+- takeScreenshot: rebalance_review

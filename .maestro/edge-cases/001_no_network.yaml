@@ -1,0 +1,55 @@
+# EDGE-001: App handles no network gracefully
+# Tests offline behavior and error states
+appId: com.arpint.alphaquark
+tags:
+  - regression
+  - edge-case
+
+env:
+  TEST_EMAIL: "testuser@alphaquark.in"
+  TEST_PASSWORD: "Test@12345"
+
+---
+
+- runFlow: ../helpers/login.yaml
+
+# Toggle airplane mode ON
+- toggleAirplaneMode
+
+# Wait for network error propagation
+- waitForAnimationToEnd
+
+# Try navigating to portfolio (requires API)
+- tapOn:
+    text: "(?i)portfolio"
+- waitForAnimationToEnd
+
+# Verify error/offline message instead of crash
+- assertVisible:
+    text: "(?i)(offline|no.*internet|network|retry|connection|error|try.*again)"
+    optional: true
+    label: "Offline message or graceful error"
+
+# App should NOT have crashed
+- assertVisible:
+    id: ".*"
+    label: "App still running without network"
+
+# Toggle airplane mode OFF
+- toggleAirplaneMode
+
+# Wait for reconnection
+- waitForAnimationToEnd
+
+# Pull to refresh
+- swipe:
+    direction: DOWN
+    duration: 500
+
+- extendedWaitUntil:
+    visible:
+      text: "(?i)(portfolio|holdings|invested|connect)"
+    timeout: 15000
+    label: "Content restored after network recovery"
+
+- takeScreenshot: edge_no_network
