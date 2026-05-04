@@ -81,3 +81,7 @@ GoogleService-Info.plist
 
 # Bundled JS artifacts (generated, may embed keys)
 *.bundle
+
+# Metro build artifacts (regenerated on each release build)
+android/app/src/main/assets/index.android.bundle
+android/app/src/main/res/drawable-mdpi/
