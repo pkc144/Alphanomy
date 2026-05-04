@@ -70,15 +70,14 @@ const LoginScreen = () => {
     getModelPortfolioStrategyDetails,
   } = useTrade();
 
-  // Configure Google Sign-In with correct Web client ID from google-services.json (client_type: 3)
-  const WEB_CLIENT_ID = config?.googleWebClientId || '892331696104-e26pu9iotqrjk1o6jq4ifd4e95fasil1.apps.googleusercontent.com';
+  const WEB_CLIENT_ID = (config?.googleWebClientId || Config.REACT_APP_GOOGLE_WEB_CLIENT_ID_FALLBACK || '').trim();
 
   React.useEffect(() => {
     GoogleSignin.configure({
       webClientId: WEB_CLIENT_ID,
     });
-    console.log('Google Sign-In configured with Web Client ID:', WEB_CLIENT_ID);
-  }, []);
+    console.log('Google Sign-In configured with Web Client ID:', JSON.stringify(WEB_CLIENT_ID));
+  }, [WEB_CLIENT_ID]);
 
   // Navigation handler - store data and navigate
   const handlePostLoginNavigation = async (userDetails, userEmail) => {

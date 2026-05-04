@@ -31,9 +31,10 @@ const LogoutScreen = ({navigation}) => {
 
   // Configure Google Sign-In with webClientId from config (matches LoginScreen)
   useEffect(() => {
-    if (config?.googleWebClientId) {
+    const webClientId = config?.googleWebClientId?.trim();
+    if (webClientId) {
       GoogleSignin.configure({
-        webClientId: config.googleWebClientId,
+        webClientId,
       });
     }
   }, [config?.googleWebClientId]);

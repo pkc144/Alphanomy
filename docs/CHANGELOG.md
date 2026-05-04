@@ -4,6 +4,61 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ---
 
+## [1.0.0] - 2026-04-28
+
+### Changed — Android rebrand prep: version reset + new release keystore + signing config rewire
+
+**Context.** This tree is being rebranded from the `alphaquark` Android app (`com.aq.alphaquark`, versionCode 37, versionName "3.7.0") to a new Play Store listing under `com.aq.alphanomy`. New package = new Play Store app from Google's perspective; the version line restarts at 1 / "1.0.0" so the Play Console history begins fresh.
+
+**Files changed (this repo):**
+- `android/app/build.gradle` lines 38–43 — `versionCode 37 → 1`, `versionName "3.7.0" → "1.0.0"`. `applicationId` and `namespace` were already `com.aq.alphanomy` (no change). Existing `signingConfigs.release` block (lines 74–83) reads `MYAPP_UPLOAD_*` properties and is unchanged.
+- `android/gradle.properties` lines 49–52 — replaced legacy zamzam signing creds (`my-upload-key.keystore` / `my-key-alias-zamzam` / plain-text `zamzam12345` × 2) with `alphanomy-release.keystore` / `alphanomy-release` / placeholder `PASTE_KEYSTORE_PASSWORD_HERE` × 2. File `chmod 600`. Still gitignored via `android/.gitignore` line 1, so no secret hits git.
+
+**Files added (untracked, gitignored):**
+- `android/app/alphanomy-release.keystore` — PKCS12, RSA 2048, validity 10 000 days. Alias `alphanomy-release`. DN cosmetically wrong (`C="+91"` instead of `IN`) but Play Store identifies the app by the key pair, not the DN string — left as-is rather than regenerate.
+- Keystore + password attached to a 1Password item ("Alphanomy Android Release Keystore") by the user. Loss of either = permanent inability to publish updates under `com.aq.alphanomy`.
+
+**Release-keystore fingerprints (public — safe to commit):**
+
+| Algorithm | Fingerprint |
+|-----------|-------------|
+| SHA-1     | `15:38:0D:C8:F2:0C:76:E8:1F:CD:71:DD:FB:09:37:64:20:7B:73:4F` |
+| SHA-256   | `1F:84:A3:3E:66:8A:AA:E6:C2:9C:FC:09:33:51:9F:AE:05:64:1B:3E:10:9E:48:AF:53:70:77:B4:BE:90:A0:C2` |
+| MD5       | `6C:84:0E:46:21:52:93:7F:D5:3D:0D:C0:4D:DE:71:0F` |
+| Valid until | 2053-09-13 |
+
+These are needed for: Google Play Console (App integrity → app signing), Firebase Console (Project Settings → Add fingerprint, for Auth + Dynamic Links + App Check), Google Sign-In OAuth client setup, and any third-party SDK that does signature attestation. Captured via `./gradlew :app:signingReport` (Variant: release).
+
+**Manual follow-up still completed (2026-04-28 same-day):**
+- Keystore password pasted into both `MYAPP_UPLOAD_STORE_PASSWORD` and `MYAPP_UPLOAD_KEY_PASSWORD` lines in `android/gradle.properties`.
+- Verified end-to-end via `./gradlew :app:signingReport` — release variant resolves to `alphanomy-release.keystore` / alias `alphanomy-release`, and password is accepted (otherwise signingReport would have errored). Full release-build (`bundleRelease`) not yet run, but the signing config is proven valid.
+
+### Changed — App display name rebrand (Android + iOS launcher names)
+
+**Context.** Step 7 of the rebrand: replace the Android launcher name and the iOS launcher/RN-module names so users see "Alphanomy" instead of "AlphaQuark" / "AlphaPro by AlphaQuark". `app.json` and `package.json` already say "Alphanomy" (changed in earlier untracked edits).
+
+**Files changed:**
+- `android/app/src/main/res/values/strings.xml` — `<string name="app_name">AlphaQuark</string>` → `Alphanomy`. This is what shows under the Android launcher icon and as the title of the app on the recents screen.
+- `ios/AlphaQuark/Info.plist` line 10 — `<key>CFBundleDisplayName</key><string>AlphaPro by AlphaQuark</string>` → `Alphanomy`. This is what shows under the iOS launcher icon. (`CFBundleName` on line 18 still uses `$(PRODUCT_NAME)` from xcconfig — unchanged here, will be updated when the iOS target is renamed in a later step.)
+- `ios/AlphaQuark/AppDelegate.mm` line 10 — `self.moduleName = @"AlphaProByAlphaQuark";` → `@"Alphanomy"`. **This also fixes a latent crash** — `app.json.name` was already `"Alphanomy"`, which means `AppRegistry.registerComponent("Alphanomy", ...)` in `index.js` was registering the root component under that key, but iOS was looking up `"AlphaProByAlphaQuark"`. Any iOS launch would have failed to find the JS root component. Android was unaffected because Android's `MainActivity.getMainComponentName()` reads from a different source.
+
+**Deliberately NOT changed (flagged for separate review):**
+- `src/utils/Config.js` variant key `alphaquark: { ... }` and `src/utils/variantHelper.js` fallback to `'alphaquark'` — variant rename is a coordinated change with `gradle.properties:33` `APP_VARIANT=alphaquark`. Will be a separate step.
+- `src/components/ModelPortfolioComponents/UserStrategySubscribeModal.js:906` — `trade_given_by: ... || 'AlphaQuark'`. This value is persisted to backend MongoDB on every trade for attribution/reporting. Changing the fallback risks splitting historical attribution. Leave until backend confirms the new attribution value.
+- `src/FunctionCall/PaymentHandle.js:151,223` — `if (advisor === "AlphaQuark") return "prod"`. This is a tenant-name → payment-environment routing check. Backend `appadvisors` document for the new tenant must be confirmed before changing.
+- JS display-string fallbacks of the form `Config?.REACT_APP_WHITE_LABEL_TEXT || 'AlphaQuark'` in `AlphaQuarkBanner.js`, `DdpiModal.js`, `BrokerConnectionModal/HelpModal.js` (5x), `UIComponents/BrokerConnectionUI/HelpUI/*.js` (5 files). These are only visible if a tenant has neither `REACT_APP_WHITE_LABEL_TEXT` nor backend `appName` set, so they don't affect the current alphaquark tenant in production. Will be updated as part of the broader brand sweep once Config.js variant is renamed.
+- `src/screens/Home/HomeScreen.js:1551` — commented-out `// Made with ❤️ by AlphaQuark` tagline. Dead code, not user-visible.
+
+**Known follow-ups not addressed in this commit:**
+- `android/gradle.properties` line 33 still reads `APP_VARIANT=alphaquark` — needs coordinated update with `src/utils/Config.js` variant entry.
+- iOS bundle identifier (`PRODUCT_BUNDLE_IDENTIFIER` in `.xcodeproj`) and signing setup not touched.
+- iOS target folder still named `ios/AlphaQuark/` — folder rename + Xcode project rename is a separate involved step.
+- Firebase `google-services.json` not regenerated for new package name `com.aq.alphanomy`.
+- Launcher icons + splash screen drawables not yet replaced.
+- AndroidManifest deep-link `host=` entries not yet audited.
+
+---
+
 ## [3.9.30] - 2026-04-26
 
 ### Fixed — AliceBlue post-connect "Authentication Required" loop + place-order session-expired loop + dual-modal stack

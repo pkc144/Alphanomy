@@ -11,7 +11,7 @@ def enableProguardInReleaseBuilds = false
 def jscFlavor = 'org.webkit:android-jsc:+'
 
 android {
-    namespace "com.arpint.alphaquark"
+    namespace "com.aq.alphanomy"
 
     lint {
         checkReleaseBuilds false
@@ -36,11 +36,11 @@ android {
     // }
 
     defaultConfig {
-        applicationId "com.arpint.alphaquark"
+        applicationId "com.aq.alphanomy"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 37
-        versionName "3.7.0"
+        versionCode 1
+        versionName "1.0.0"
 
         missingDimensionStrategy "store", "play"
         ndk {

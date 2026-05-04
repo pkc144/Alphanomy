@@ -1,4 +1,4 @@
-package com.arpint.alphaquark
+package com.aq.alphanomy
 
 import android.app.Application
 import com.facebook.react.PackageList

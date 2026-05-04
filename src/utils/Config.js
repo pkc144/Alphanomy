@@ -23,7 +23,7 @@ const sharedUIConfig = {
   selectedTabcolor: '#8555EF',
   basketcolor: '#600CC0',
   basketsymbolbg: '#6D0DD6',
-  googleWebClientId: '892331696104-e26pu9iotqrjk1o6jq4ifd4e95fasil1.apps.googleusercontent.com',
+  googleWebClientId: '713385591555-uj9v6fdjnceg9dr5ts0gb0l5523uhqr2.apps.googleusercontent.com',
 };
 
 // Per-advisor config: subdomain + advisorRaCode
@@ -50,7 +50,7 @@ const APP_VARIANTS = {
     basketsymbolbg: '#8D2952',
     basket1: '#9D2115',
     basket2: '#6B1207',
-    googleWebClientId: '892331696104-e26pu9iotqrjk1o6jq4ifd4e95fasil1.apps.googleusercontent.com',
+    googleWebClientId: '713385591555-uj9v6fdjnceg9dr5ts0gb0l5523uhqr2.apps.googleusercontent.com',
     subdomain: 'prod',
     advisorRaCode: 'ALPHAQUARK',
     paymentModal: {
@@ -69,6 +69,7 @@ const APP_VARIANTS = {
   rgxresearch:   {...sharedUIConfig, subdomain: 'rgxresearch',     advisorRaCode: 'RGXRESEARCH'},
   arfs:          {...sharedUIConfig, subdomain: 'arfs',            advisorRaCode: 'ARFS'},
   magnus:        {...sharedUIConfig, subdomain: 'zamzamcapital',   advisorRaCode: 'ZAMZAMCAPITAL'},
+  alphanomy:     {...sharedUIConfig, subdomain: 'alphanomy',       advisorRaCode: 'ALPHANOMY'},
 
   EmptyStateUi: {
     backgroundColor: '#6B1400',
