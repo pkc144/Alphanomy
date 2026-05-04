@@ -128,7 +128,7 @@ import AngelOneCautionaryWarning from './AngelOneCautionaryWarning';
 // Set is intentionally empty today — keep it so future near-term
 // gaps have a documented home rather than scattering fallback
 // decisions across files.
-const SDK_LEGACY_FALLBACK = new Set(['Motilal Oswal']);
+const SDK_LEGACY_FALLBACK = new Set([]);
 
 const useSdkBrokerFlow = () => {
   const v = String(Config?.REACT_APP_USE_SDK_BROKER_FLOW || '')
