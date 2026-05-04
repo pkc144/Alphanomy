@@ -4,6 +4,47 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ---
 
+## [unreleased] - 2026-05-04
+
+### Alphanomy fork — port design system + SDK refactor from Alphab2bapp (cross-repo sync)
+
+Alphanomy is a rebrand fork of Alphab2bapp. This commit cycle brings the Alphab2bapp `feature/sdk-plus-config-ui` HEAD (`bb416e8`) into the Alphanomy repo so both share the same design-system and SDK plumbing going forward.
+
+**Mechanics**: rsync from `../Alphab2bapp` (excluding `.git`, `node_modules`, build artifacts), then restore Alphanomy-specific rebrand files (`package.json` name/version, `app.json`, Android `com.aq.alphanomy` package, iOS Info.plist, Login/LogOut/Config). Histories are unrelated (Alphanomy is a fresh `git init` from a copy, not a fork) so a true `git merge` was not viable; commits land as a single port commit on top of `99f1c20` rebrand checkpoint.
+
+**Files added (high level)**:
+- `designs/` — variant registry + default variant (`tokens/`, `primitives/`, `composites/`, `screens/`, `sdk/`)
+- `src/design/` — DesignProvider + variant resolver + useDesign hook
+- `src/sdk/` — Phase 3 SDK orchestration (SdkProviderRoot, brokerSdkBridge, SdkBrokerConnectModal, test screens, useSdkClient)
+- `src/components/BrokerConnectionModal/` — Phase3SdkBrokerModal, Phase3BrokerHelp, BrokerConnectModalDispatch, ExecutionGate, AngelOneCautionaryWarning
+- `src/theme/` — token modules (radii, shadows, spacing, typography, useTokens)
+- `src/utils/` — orderUtils, sdkErrorHumanize, tradeVariant
+- `patches/react-native-version-check++semver+6.3.1.patch`
+- 17 new architecture docs (DESIGN_*, SDK_*, PHASE3_*, BROKER_FLOW_AUDIT)
+
+**Files modified**: 100+ broker connection modals, screens, contexts, utils — all updated to the Phase 3 SDK-dispatch flow. ConfigContext, MultiBrokerContext, MarketDataContext refactored. Authentication screens (Login/LogOut preserved as Alphanomy variant).
+
+**Dependencies**:
+- Added `@alphaquark/mobile-sdk` as `file:../alphaquark-mobile-sdk/packages/rn` (path adjusted from Alphab2b's `file:../../alphaquark-mobile-sdk/...` for Alphanomy's parent-folder layout).
+- Added `@react-native-clipboard/clipboard@^1.16.3`.
+- SDK requires `lib/` build (TypeScript). Built once via `cd ../alphaquark-mobile-sdk/packages/rn && npm install --legacy-peer-deps && npx tsc -p tsconfig.json`.
+
+**Preserved (Alphanomy rebrand, intact)**:
+- `package.json` name `Alphanomy` / version `1.0.0`
+- `app.json` name + displayName `Alphanomy`
+- Android namespace `com.aq.alphanomy` (stale `com.alphaquark/` package directory deleted to avoid duplicate-class conflicts)
+- iOS `CFBundleDisplayName` Alphanomy (Xcode folder names still `AlphaQuark/` — out of scope)
+- `src/screens/Authentication/{Login,LogOut}Screen.js` Alphanomy copy
+- `src/utils/Config.js` Alphanomy variant entry
+
+**Not done in this commit** (follow-ups):
+- iOS folder/scheme rename `AlphaQuark/` → `Alphanomy/` (Xcode project surgery)
+- Android pod resolution for new SDK deps (`cd ios && pod install`)
+- Smoke test on device (Metro start + install on emulator/device)
+- Audit of 10 Alphanomy-only orphan files (`src/utils/ProcessTrades.js`, `src/components/BrokerOverlay.js`, etc.) — preserved by rsync without `--delete`; some may be dead code from a pre-Phase-3 snapshot
+
+**Per CLAUDE.md cross-repo sync clause**: Alphab2bapp and Alphanomy now share architecture-doc state. Future doc updates affecting shared surfaces (broker flow, MP, rebalance, design system, SDK orchestration) MUST be applied to both repos in the same commit cycle.
+
 ## [unreleased] - 2026-05-03
 
 ### Design-system Phase I — MPInvestNowModal container/presentation split (5364 LOC)
