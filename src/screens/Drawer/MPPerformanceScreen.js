@@ -311,18 +311,23 @@ const MPPerformanceScreen = ({route}) => {
   // EDIS verification
   useEffect(() => {
     if (!userDetails || !broker) return;
+    const ccxtHeaders = {
+      'Content-Type': 'application/json',
+      'X-Advisor-Subdomain': configData?.config?.REACT_APP_HEADER_NAME,
+      'aq-encrypted-key': generateToken(Config.REACT_APP_AQ_KEYS, Config.REACT_APP_AQ_SECRET),
+    };
     if (broker === 'Angel One') {
       axios.post(`${server.ccxtServer.baseUrl}angelone/verify-edis`, {
         apiKey: checkValidApiAnSecret(apiKey),
         jwtToken: userDetails.jwtToken,
         userEmail: userDetails?.email,
-      }).then(r => setEdisStatus(r.data)).catch(() => {});
+      }, { headers: ccxtHeaders }).then(r => setEdisStatus(r.data)).catch(() => {});
     }
     if (broker === 'Dhan') {
       axios.post(`${server.ccxtServer.baseUrl}dhan/edis-status`, {
         clientId: clientCode,
         accessToken: userDetails.jwtToken,
-      }).then(r => setDhanEdisStatus(r.data)).catch(() => {});
+      }, { headers: ccxtHeaders }).then(r => setDhanEdisStatus(r.data)).catch(() => {});
     }
     if (broker === 'Zerodha' && apiKey && secretKey) {
       axios.post(`${server.ccxtServer.baseUrl}zerodha/save-ddpi-status`, {
@@ -330,7 +335,7 @@ const MPPerformanceScreen = ({route}) => {
         secretKey: checkValidApiAnSecret(secretKey),
         accessToken: userDetails.jwtToken,
         userEmail: userDetails.email,
-      }).catch(() => {});
+      }, { headers: ccxtHeaders }).catch(() => {});
     }
   }, [userDetails, broker]);
 

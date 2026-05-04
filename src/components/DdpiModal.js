@@ -1523,6 +1523,13 @@ export function DhanTpinModal({
               clientId: userDetails.clientCode,
               accessToken: userDetails.jwtToken,
             },
+            {
+              headers: {
+                'Content-Type': 'application/json',
+                'X-Advisor-Subdomain': configData?.config?.REACT_APP_HEADER_NAME || configData?.subdomain || getAdvisorSubdomain(),
+                'aq-encrypted-key': generateToken(Config.REACT_APP_AQ_KEYS, Config.REACT_APP_AQ_SECRET),
+              },
+            },
           );
           console.log('Dhan local EDIS fetch:', response.data);
           setLocalDhanEdisStatus(response.data);
@@ -1730,6 +1737,8 @@ export function DhanTpinModal({
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
+              'X-Advisor-Subdomain': configData?.config?.REACT_APP_HEADER_NAME || configData?.subdomain || getAdvisorSubdomain(),
+              'aq-encrypted-key': generateToken(Config.REACT_APP_AQ_KEYS, Config.REACT_APP_AQ_SECRET),
             },
             body: JSON.stringify({
               clientId: userDetails?.clientCode,
@@ -1753,6 +1762,8 @@ export function DhanTpinModal({
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
+                'X-Advisor-Subdomain': configData?.config?.REACT_APP_HEADER_NAME || configData?.subdomain || getAdvisorSubdomain(),
+                'aq-encrypted-key': generateToken(Config.REACT_APP_AQ_KEYS, Config.REACT_APP_AQ_SECRET),
               },
               body: JSON.stringify({
                 clientId: userDetails?.clientCode,
@@ -2748,6 +2759,8 @@ export function FyersTpinModal({isOpen, setIsOpen, userDetails, reopenRebalanceM
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
+              'X-Advisor-Subdomain': configData?.config?.REACT_APP_HEADER_NAME || configData?.subdomain || getAdvisorSubdomain(),
+              'aq-encrypted-key': generateToken(Config.REACT_APP_AQ_KEYS, Config.REACT_APP_AQ_SECRET),
             },
             body: JSON.stringify({
               clientId: userDetails?.clientCode,
@@ -2772,6 +2785,8 @@ export function FyersTpinModal({isOpen, setIsOpen, userDetails, reopenRebalanceM
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
+                'X-Advisor-Subdomain': configData?.config?.REACT_APP_HEADER_NAME || configData?.subdomain || getAdvisorSubdomain(),
+                'aq-encrypted-key': generateToken(Config.REACT_APP_AQ_KEYS, Config.REACT_APP_AQ_SECRET),
               },
               body: JSON.stringify({
                 clientId: userDetails?.clientCode,
