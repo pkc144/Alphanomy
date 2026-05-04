@@ -17,7 +17,7 @@
  * "Read More / See Less" toggle outside the component.
  */
 import React, {useEffect} from 'react';
-import {View, Text, ScrollView, StyleSheet} from 'react-native';
+import {View, Text, StyleSheet} from 'react-native';
 
 const GrowwHelpContent = ({expanded, onExpandChange}) => {
   useEffect(() => {
@@ -26,7 +26,7 @@ const GrowwHelpContent = ({expanded, onExpandChange}) => {
 
   return (
     <View>
-      <ScrollView style={styles.container} contentContainerStyle={{paddingBottom: 20}}>
+      <View style={[styles.container, {paddingBottom: 20}]}>
         <Text style={styles.title}>About this connection</Text>
         <Text style={styles.intro}>
           Groww uses an API Key + TOTP Secret pair (Bearer token + seed
@@ -93,7 +93,7 @@ const GrowwHelpContent = ({expanded, onExpandChange}) => {
             </View>
           </>
         )}
-      </ScrollView>
+      </View>
     </View>
   );
 };
