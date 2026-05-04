@@ -239,3 +239,73 @@ Any handler that reads `funds` / `brokerStatus` from React closure immediately a
 - `src/components/AdviceScreenComponents/StockAdvices.js` — `handleTrade`, `handleTradeBasket`, `handleSingleSelectStock` (bespoke flows, fixed [3.9.15]).
 
 **Known remaining call sites with the same latent bug (not yet ported):** `UserStrategySubscribeModal.js:213`, `MPPerformanceScreen.js:640`, `BespokePerformanceScreen.js:548`, `IgnoreTradesScreen.js:1441`. Port the helper pattern if the modal-re-pop symptom recurs from any of those surfaces.
+
+## Kotak NEO migration — rebalance auth-params shape (BACKEND, ccxt-india, 2026-04-27)
+
+The 2026-04-22 Kotak NEO TradeAPI migration switched the connect flow to store **`apiKey` (UUID API access token)**, **`jwtToken` (view/session token)**, **`sid`**, **`serverId`** in the user document — retiring the legacy `consumerKey`/`consumerSecret` pair. Three downstream consumers in ccxt-india were missed during that migration and continued to map `apiKey → consumerKey` and `secretKey → consumerSecret` (where `secretKey` no longer exists → `None`). Result: rebalance Step 3 raised the user-facing alert
+
+> Unable to Rebalance — You must provide a consumer key and a consumer secret to generate access token or provide an access token.
+
+The error string is verbatim from `neo_api_client/brokers/kotak/kotak.py:99-103` — raised when `Kotak(...)` is instantiated with `access_token=None` AND `consumer_key=None`/`consumer_secret=None`.
+
+### Patched in [3.9.35]
+
+| File | What changed |
+|------|--------------|
+| `ccxt-india/apps/app_model_portfolio.py` § `normalize_credentials_for_broker` (Kotak branch) | Emits `apiKey` + `jwtToken` + `sid` + `serverId`; stops emitting `consumerKey`/`consumerSecret`. Feeds every rebalance broker class via `BrokerFactory.get_broker(...)`. |
+| `ccxt-india/rebalancing/brokers.py` § `KotakBroker` | `__init__` reads `apiKey → self.access_token`, `jwtToken (or accessToken fallback) → self.view_token`. `_get_kotak_instance()` + `process_trades()` pass `access_token=` to `Kotak(...)` / `TradingLogicKotak(...)`. Dropped `consumer_key=`/`consumer_secret=` kwargs. |
+| `ccxt-india/rebalancing/order_status_updater/order_book_factory.py` § `KotakBroker` | Same migration. Pre-fix gate raised `Missing required authentication parameters for Kotak` on every status refresh post-NEO; new gate is `if not self.access_token or not self.view_token or not self.sid` (serverId is optional — Kotak() class falls back to `"server1"`). |
+
+### Auth-params shape contract (canonical, post-migration)
+
+Anywhere ccxt-india constructs a Kotak rebalance/holdings/order-status client from a NEO-migrated user, it MUST source these four fields and pass through to `Kotak(...)` as shown:
+
+```python
+access_token = db_creds['apiKey']            # UUID API access token
+view_token   = db_creds['jwtToken']          # view/session token (Auth header)
+sid          = db_creds['sid']
+server_id    = db_creds.get('serverId', '')  # may be empty for some account types
+
+Kotak(access_token=access_token, view_token=view_token, sid=sid, server_id=server_id)
+TradingLogicKotak(access_token=access_token, view_token=view_token, sid=sid, server_id=server_id)
+```
+
+DO NOT pass `consumer_key=`/`consumer_secret=` for NEO-migrated users — those kwargs trigger the SDK's old OAuth `_generate_access_token()` path which expects `developer.kotaksecurities.com/openapi/v1/oauth2/token`, an endpoint the new accounts can't authenticate against.
+
+### Resolved follow-ups ([3.9.37], 2026-04-27)
+
+The four un-migrated call sites originally listed as known follow-ups in `[3.9.35]` are now ported. See `docs/CHANGELOG.md` `[3.9.37]` for the full per-file diff, but in summary:
+
+| File | What was patched |
+|------|------------------|
+| `ccxt-india/common/utils.py:418` (`Mapping.BROKER_AUTH_KEYS["Kotak"]`) | `["consumerKey","consumerSecret","jwtToken","sid","serverId"]` → `["apiKey","jwtToken","sid","serverId"]`. Schema source-of-truth for projection + validation. |
+| `ccxt-india/portfolio/portfolio_all_brokers.py` § Kotak `get_holdings` | Projection + `Kotak(...)` construction migrated to NEO 4-arg shape. `apiKey` decrypted via `CryptoJSWrapper`. |
+| `ccxt-india/portfolio/user/holding_allbroker_user.py` § per-user Kotak `get_holdings` | Same migration. Pre-fix code mislabeled `apiKey` as `consumer_key`. |
+| `ccxt-india/portfolio/limit_order_status_update.py` § `get_order_status_kotak` | Unpack changed from 6-tuple → 4-tuple (`access_token`, `view_token`, `sid`, `server_id`). |
+
+In addition, `[3.9.37]` patched a related decrypt-correctness bug in `ccxt-india/rebalancing/order_status_updater/status_update.py` § `_get_auth_keys` that became load-bearing once `BROKER_AUTH_KEYS["Kotak"]` introduced plaintext fields (`sid`, `serverId`) — narrowed the decrypt set from "everything except `jwtToken` / Angel One" to the four fields actually encrypted at rest (`apiKey`, `secretKey`, `consumerKey`, `consumerSecret`).
+
+## Rebalance trade `variant` field — AMO vs REGULAR (2026-05-01)
+
+Every trade in the rebalance payload sent to `rebalance/process-trade` (ccxt-india) now carries a `variant: "AMO" | "REGULAR"` string, computed at submit time on the frontend:
+
+```js
+variant = (!IsMarketHours() && allowAfterHoursOrders === true) ? "AMO" : "REGULAR"
+```
+
+- `IsMarketHours()` — `src/utils/isMarketHours.js`, 09:15–15:30 IST gate.
+- `allowAfterHoursOrders` — from `appadvisors.allowAfterHoursOrders` / `featureFlags.allowAfterHoursOrders` via `ConfigContext`.
+
+The field is **display-only** (no behavioural change to the placement payload — every supported broker auto-converts after-hours orders to AMO server-side anyway). It feeds the amber **AMO** pill rendered next to the status pill on each result card in `RecommendationSuccessModal`.
+
+ccxt-india does NOT need to echo `variant` — the frontend looks up `variant` from its own outgoing trade list when the response item doesn't carry it (three-tier fallback: response field → outgoing payload match by symbol+tradeId+transactionType → default `"REGULAR"`).
+
+See `docs/APP_ARCHITECTURE.md § 4.5.2 Trade variant field` for the full contract, fallback rules, and followups deferred to a later commit (explicit `orderVariety: "AMO"` in payload, pre-flight market-closed banner).
+
+### Why the connect itself worked despite this
+
+The connect route (`aq_backend_github/Routes/Broker/Kotak.js`) calls ccxt's `/kotak/login/totp` directly, which uses Kotak's new `/login/1.0/tradeApiLogin` endpoint and never goes through `normalize_credentials_for_broker`. That's why the bug-report screenshot showed a green "Kotak Broker Connected" card with cash + phone + PAN populated, but rebalance (which DOES go through the normalizer + `KotakBroker`) failed at Step 3.
+
+### Future Kotak credential-shape changes
+
+Treat any change to `BrokerKeysSchema["Kotak"]`, `normalize_credentials_for_broker` Kotak branch, or the `KotakBroker` constructors in `rebalancing/brokers.py` / `rebalancing/order_status_updater/order_book_factory.py` as a **fan-out change** — same class as the env-var guardrail in `CLAUDE.md` § "Shared env vars across brokers — BLOCKING GUARDRAIL". Grep all four follow-up files above before merging; Python's `dict.get('<key>')` returns `None` silently so there's no compile-time signal that a downstream consumer fell off the migration.

@@ -1008,7 +1008,14 @@ const getAllTrades = async () => {
     }
   };
 
-  const fetchBrokerStatusModal = async () => {
+  const fetchBrokerStatusModal = async (opts = {}) => {
+    // `silent: true` skips the post-fetch migration-modal trigger.
+    // Used by the app-start refresh (line ~1302) where popping
+    // "Reconnected to {broker}" is misleading — the broker may not
+    // actually be connected, may need re-auth, and the user did not
+    // just reconnect. Migration modal should only fire after an
+    // explicit reconnect action by the user. User-reported 2026-04-29.
+    const silent = opts.silent === true;
     if (!userEmail) return;
     try {
       const updatedUser = await getUserDeatils();
@@ -1067,7 +1074,7 @@ const getAllTrades = async () => {
               },
             },
           );
-          if (migrationRes.data?.data?.requiresMigration) {
+          if (migrationRes.data?.data?.requiresMigration && !silent) {
             setMigrationBroker(updatedUser.user_broker);
             // Delay so navigation.goBack() animation (~300ms) fully completes
             // before the bottom sheet slides up. Without this delay the sheet
@@ -1298,8 +1305,12 @@ const getAllTrades = async () => {
       console.log('✅ TradeContext: Config available, fetching user data...');
       getUserDeatils();
       getPlanList();
-      // Refresh broker status on app launch to ensure correct state on new devices
-      fetchBrokerStatusModal();
+      // Refresh broker status on app launch — silent mode so the
+      // migration modal doesn't pop "Reconnected to {broker}" at app
+      // start (misleading; broker may actually need re-auth and user
+      // didn't just reconnect). Migration modal only fires after an
+      // explicit user reconnect action.
+      fetchBrokerStatusModal({silent: true});
     } else {
       console.log(
         '⚠️ TradeContext: Waiting for config data before fetching user data...',

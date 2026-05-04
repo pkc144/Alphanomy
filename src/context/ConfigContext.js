@@ -12,10 +12,36 @@ export const useConfig = () => {
     return useContext(ConfigContext);
 };
 
+// Default variant used when APP_VARIANT is missing or unknown. Was
+// 'rgxresearch' historically — but rgxresearch falls through to
+// sharedUIConfig, whose logo / theme is ZamZam-branded (sharedUIConfig
+// was originally the ZamZam variant config; logo file
+// `src/assets/AppLogo/logo.png` is byte-identical to
+// `src/assets/AppLogo/Zamzam.png`). On AlphaQuark builds we MUST NOT
+// silently degrade to ZamZam branding when the env var fails to
+// resolve (gradle missed the .env, react-native-config not linked,
+// dev build bundling stale config, etc.). 'alphaquark' is a safer
+// default for this codebase since the variant explicitly declares
+// AlphaQuarkLogo. White-label tenants who deploy this app from their
+// own fork should change DEFAULT_VARIANT to their own variant key.
+const DEFAULT_VARIANT = 'alphaquark';
+
 export const ConfigProvider = ({ children }) => {
-    const selectedVariant = Config?.APP_VARIANT || 'rgxresearch'; // Default to "rgxresearch" if not set
-    // Ensure the variant exists in APP_VARIANTS, otherwise use 'rgxresearch'
-    const validVariant = APP_VARIANTS[selectedVariant] ? selectedVariant : 'rgxresearch';
+    const selectedVariant = Config?.APP_VARIANT || DEFAULT_VARIANT;
+    // Ensure the variant exists in APP_VARIANTS; otherwise fall back
+    // to DEFAULT_VARIANT (alphaquark) — never to a variant whose
+    // sharedUIConfig contains foreign branding.
+    const validVariant = APP_VARIANTS[selectedVariant] ? selectedVariant : DEFAULT_VARIANT;
+    if (!Config?.APP_VARIANT) {
+        // Loud warning so a missing env var is visible during dev /
+        // staging builds rather than silently picking the default.
+        // eslint-disable-next-line no-console
+        console.warn(
+            '[ConfigContext] APP_VARIANT not set in .env — defaulting to',
+            DEFAULT_VARIANT,
+            '. If this is a non-AlphaQuark tenant build, set APP_VARIANT explicitly.',
+        );
+    }
     const initialConfig = { ...APP_VARIANTS[validVariant], selectedVariant: validVariant };
     const [config, setConfig] = useState(initialConfig);
     const [loading, setLoading] = useState(true);

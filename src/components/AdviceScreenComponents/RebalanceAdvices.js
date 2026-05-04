@@ -31,16 +31,7 @@ import {classifyFundsResponse} from '../../utils/brokerSessionValidator';
 import Toast from 'react-native-toast-message';
 import BrokerSelectionModal from '../BrokerSelectionModal';
 
-import ICICIUPModal from '../BrokerConnectionModal/icicimodal';
-import UpstoxModal from '../BrokerConnectionModal/upstoxModal';
-import AngleOneBookingModal from '../BrokerConnectionModal/AngleoneBookingModal';
-import ZerodhaConnectModal from '../BrokerConnectionModal/ZerodhaConnectModal';
-import HDFCconnectModal from '../BrokerConnectionModal/HDFCconnectModal';
-import DhanConnectModal from '../BrokerConnectionModal/DhanConnectModal';
-import KotakModal from '../BrokerConnectionModal/KotakModal';
-import IIFLModal from '../iiflmodal';
-import AliceBlueConnect from '../BrokerConnectionModal/AliceBlueConnect';
-import FyersConnect from '../BrokerConnectionModal/FyersConnect';
+import BrokerConnectModalDispatch from '../BrokerConnectionModal/BrokerConnectModalDispatch';
 import {useTrade} from '../../screens/TradeContext';
 import RebalanceModal from './RebalanceModal';
 import RecommendationSuccessModal from '../ModelPortfolioComponents/RecommendationSuccessModal';
@@ -148,6 +139,12 @@ const RebalanceAdvices = React.memo(({userEmail, orderscreen, type}) => {
   const modelNames = modelPortfolioStrategy?.map(item => item?.model_name);
 
   const [OrderPlacementResponse, setOrderPlacementResponse] = useState(null);
+  // Outgoing trade list captured at submit time — used as the fallback
+  // source for `variant` lookups on the rebalance/MP lane (ccxt-india's
+  // rebalance/process-trade does not echo variant back). RebalanceModal
+  // sets this alongside the response. See utils/tradeVariant.js
+  // § resolveResultVariant + docs/APP_ARCHITECTURE.md § 4.5.2.
+  const [lastSubmittedTrades, setLastSubmittedTrades] = useState(null);
 
   const [tradeType, setTradeType] = useState({
     allSell: false,
@@ -317,9 +314,9 @@ const RebalanceAdvices = React.memo(({userEmail, orderscreen, type}) => {
   const handleAcceptRebalanceWithoutBroker = async () => {
     console.log('Continue without broker - saving preference, then showing holdings (Step 2)');
     setStoreModalName(storeModalName);
+    setLoading(true);
 
     try {
-      // Step 1: Save no-broker preference (matching web connectBroker.js)
       await axios.put(
         `${server.ccxtServer.baseUrl}comms/no-broker-required/save`,
         {
@@ -338,14 +335,9 @@ const RebalanceAdvices = React.memo(({userEmail, orderscreen, type}) => {
         },
       );
 
-      // Step 2: Close broker modal, set non-broker flag
-      setBrokerModel(false);
       setSelectNonBroker(true);
-
-      // Step 3: Refresh user details so broker becomes DummyBroker
       await getUserDeatils();
-
-      // Step 4: Fetch current holdings and show MPStatusModal (matching web)
+      setBrokerModel(false);
       await fetchHoldingsAndShowStatus();
     } catch (error) {
       console.error('Continue without broker error:', error.message);
@@ -353,6 +345,8 @@ const RebalanceAdvices = React.memo(({userEmail, orderscreen, type}) => {
         console.error('Response:', error.response.status, error.response.data);
       }
       setBrokerModel(false);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -361,19 +355,18 @@ const RebalanceAdvices = React.memo(({userEmail, orderscreen, type}) => {
   const handleBrokerConnectedContinue = async () => {
     console.log('Broker connected - refreshing user, then showing holdings (Step 2)');
     setStoreModalName(storeModalName);
+    setLoading(true);
 
     try {
-      setBrokerModel(false);
-
-      // Refresh user details to pick up the newly connected broker
       await getUserDeatils();
       await getAllFunds();
-
-      // Fetch holdings and show MPStatusModal
+      setBrokerModel(false);
       await fetchHoldingsAndShowStatus();
     } catch (error) {
       console.error('Broker connected continue error:', error.message);
       setBrokerModel(false);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -979,6 +972,7 @@ const angelOneApiKey = configData?.config?.REACT_APP_ANGEL_ONE_API_KEY;
           setBrokerModel={setBrokerModel}
           setOpenSucessModal={setOpenSucessModal}
           setOrderPlacementResponse={setOrderPlacementResponse}
+          setLastSubmittedTrades={setLastSubmittedTrades}
           modelPortfolioModelId={modelPortfolioModelId}
           setOpenTokenExpireModel={setOpenTokenExpireModel}
           modelPortfolioRepairTrades={modelPortfolioRepairTrades}
@@ -1009,11 +1003,14 @@ const angelOneApiKey = configData?.config?.REACT_APP_ANGEL_ONE_API_KEY;
           setOpenSucessModal={setOpenSucessModal}
           orderPlacementResponse={OrderPlacementResponse}
           currentBroker={broker}
+          // Fallback source for `variant` lookups on the rebalance/MP lane.
+          originalStockDetails={lastSubmittedTrades}
         />
       )}
 
       {showIIFLModal && (
-        <IIFLModal
+        <BrokerConnectModalDispatch
+          brokerName="IIFL"
           isVisible={showIIFLModal}
           onClose={() => setShowIIFLModal(false)}
           setShowBrokerModal={setOpenTokenExpireModel}
@@ -1022,18 +1019,19 @@ const angelOneApiKey = configData?.config?.REACT_APP_ANGEL_ONE_API_KEY;
       )}
 
       {showICICIUPModal && (
-        <ICICIUPModal
+        <BrokerConnectModalDispatch
+          brokerName="ICICI"
           isVisible={showICICIUPModal}
-          showICICIUPModal={showICICIUPModal}
-          setShowICICIUPModal={setShowICICIUPModal}
           onClose={() => setShowICICIUPModal(false)}
+          setShowICICIUPModal={setShowICICIUPModal}
           setShowBrokerModal={setOpenTokenExpireModel}
           fetchBrokerStatusModal={fetchBrokerStatusModal}
         />
       )}
 
       {showupstoxModal && (
-        <UpstoxModal
+        <BrokerConnectModalDispatch
+          brokerName="Upstox"
           isVisible={showupstoxModal}
           onClose={() => setShowupstoxModal(false)}
           setShowupstoxModal={setShowupstoxModal}
@@ -1043,7 +1041,8 @@ const angelOneApiKey = configData?.config?.REACT_APP_ANGEL_ONE_API_KEY;
       )}
 
       {showangleoneModal && (
-        <AngleOneBookingModal
+        <BrokerConnectModalDispatch
+          brokerName="Angel One"
           isVisible={showangleoneModal}
           onClose={() => setShowangleoneModal(false)}
           setShowangleoneModal={setShowangleoneModal}
@@ -1053,7 +1052,8 @@ const angelOneApiKey = configData?.config?.REACT_APP_ANGEL_ONE_API_KEY;
       )}
 
       {showzerodhamodal && (
-        <ZerodhaConnectModal
+        <BrokerConnectModalDispatch
+          brokerName="Zerodha"
           isVisible={showzerodhamodal}
           onClose={() => setShowzerodhaModal(false)}
           setShowzerodhaModal={setShowzerodhaModal}
@@ -1063,7 +1063,8 @@ const angelOneApiKey = configData?.config?.REACT_APP_ANGEL_ONE_API_KEY;
       )}
 
       {showhdfcModal && (
-        <HDFCconnectModal
+        <BrokerConnectModalDispatch
+          brokerName="HDFC"
           isVisible={showhdfcModal}
           onClose={() => setShowhdfcModal(false)}
           setShowhdfcModal={setShowhdfcModal}
@@ -1073,7 +1074,8 @@ const angelOneApiKey = configData?.config?.REACT_APP_ANGEL_ONE_API_KEY;
       )}
 
       {showDhanModal && (
-        <DhanConnectModal
+        <BrokerConnectModalDispatch
+          brokerName="Dhan"
           isVisible={showDhanModal}
           onClose={() => setShowDhanModal(false)}
           setShowDhanModal={setShowDhanModal}
@@ -1083,29 +1085,30 @@ const angelOneApiKey = configData?.config?.REACT_APP_ANGEL_ONE_API_KEY;
       )}
 
       {showAliceblueModal && (
-        <AliceBlueConnect
+        <BrokerConnectModalDispatch
+          brokerName="AliceBlue"
           isVisible={showAliceblueModal}
-          showAliceblueModal={showAliceblueModal}
-          setShowAliceblueModal={setShowAliceblueModal}
           onClose={() => setShowAliceblueModal(false)}
+          setShowAliceblueModal={setShowAliceblueModal}
           setShowBrokerModal={setOpenTokenExpireModel}
           fetchBrokerStatusModal={fetchBrokerStatusModal}
         />
       )}
 
       {showFyersModal && (
-        <FyersConnect
+        <BrokerConnectModalDispatch
+          brokerName="Fyers"
           isVisible={showFyersModal}
-          showFyersModal={showFyersModal}
-          setShowFyersModal={setShowFyersModal}
           onClose={() => setShowFyersModal(false)}
+          setShowFyersModal={setShowFyersModal}
           setShowBrokerModal={setOpenTokenExpireModel}
           fetchBrokerStatusModal={fetchBrokerStatusModal}
         />
       )}
 
       {showKotakModal && (
-        <KotakModal
+        <BrokerConnectModalDispatch
+          brokerName="Kotak"
           isVisible={showKotakModal}
           onClose={() => setShowKotakModal(false)}
           setShowKotakModal={setShowKotakModal}

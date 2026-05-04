@@ -659,6 +659,66 @@ Response parsing in `executeOrder` and `detectEdisFailures` aligns with web (`pr
 
 The TPIN trigger is now aligned: both platforms fire the modal on any rejected SELL, not just ones whose error text matches a keyword list. Trade-off: TPIN may appear on market-hours / insufficient-funds rejections — accepted for reliability against changing broker error phrasings (Upstox, Dhan, Zerodha have all rephrased sell-auth errors at various points).
 
+### 4.5.2 Trade `variant` field — AMO vs REGULAR (2026-05-01)
+
+**Files:** `src/utils/ProcessTrades.js`, `src/components/AdviceScreenComponents/StockAdvices.js`, `src/components/AdviceScreenComponents/RebalanceModal.js`, `src/components/ModelPortfolioComponents/MPReviewTradeModal.js`, `src/components/ModelPortfolioComponents/UserStrategySubscribeModal.js`, `src/components/ModelPortfolioComponents/RecommendationSuccessModal.js`.
+
+**Field contract** (intended to be the first piece of a future SDK trade contract — when bespoke + basket execution migrate from legacy ccxt/Node to the SDK lane the way Phase 3 broker-connect did, this field stays):
+
+| Property | Value |
+|----------|-------|
+| Field name | `variant` |
+| Values | `"AMO"` \| `"REGULAR"` (string literal — leaves room for future `"GTT"`, `"OCO"`, `"BO"`, `"CO"`) |
+| Default fallback when missing | `"REGULAR"` (treat as live order — safer than treating regular as AMO) |
+| Where computed | Frontend at submit time |
+| Where echoed | Node `aq_backend_github/Routes/Broker/ProcessTrades.js` `/api/process-trades/order-place` echoes back from input → output |
+| Where displayed | `RecommendationSuccessModal` (RN) — amber pill next to PLACED/PENDING/REJECTED status pill on every result card whose variant is AMO |
+
+**Detection rule.**
+
+```js
+variant = (!IsMarketHours() && allowAfterHoursOrders === true) ? "AMO" : "REGULAR"
+```
+
+`IsMarketHours()` is the existing 09:15–15:30 IST gate at `src/utils/isMarketHours.js`. `allowAfterHoursOrders` flows from `appadvisors.allowAfterHoursOrders` / `featureFlags.allowAfterHoursOrders` through `ConfigContext`. The same `allowAfterHoursOrders` flag is already used by the review-trade `marketGateOpen` check (`src/components/ReviewTradeModal.js:71-72`, `src/components/AdviceScreenComponents/RebalanceModal.js:1764-1765`) to BLOCK submission when the flag is off — so:
+
+- Tenant `allowAfterHoursOrders === false`: review-trade modal blocks after-hours submission. Variant is irrelevant — user never gets a result card.
+- Tenant `allowAfterHoursOrders === true`: review-trade modal lets the order through. Variant is `AMO` and the success modal renders the amber pill.
+- During market hours (any tenant): variant is `REGULAR`, no pill.
+
+**Submit-time tagging.**
+
+Every trade payload builder threads `variant` into each per-trade object:
+
+- `ProcessTrades.js → buildOrderPayload()` — both regular orders (line 250) and GTT orders.
+- `StockAdvices.js → getOrderPayload(isGtt)` — bespoke trade path doesn't go through `ProcessTrades.js`. `variant` is computed once via `IsMarketHours() + allowAfterHoursOrders` and merged into each `trade` object inside `trades[]` before the request fires.
+- `RebalanceModal.js` — rebalance payload builder for `rebalance/process-trade` (hits ccxt-india directly, NOT Node).
+- `MPReviewTradeModal.js`, `UserStrategySubscribeModal.js` — MP review/subscribe payload builders, also `rebalance/process-trade`.
+
+**Backend echo (Node — bespoke lane only).**
+
+The bespoke trade path goes through Node's `/api/process-trades/order-place`. After ccxt-india's `tradeDetails` array comes back, the existing `processTradeUpdate(trade, matchingTrade, ...)` flow finds the matching input trade by symbol+type+tradeId. We piggy-back on that lookup to copy `matchingTrade.variant || 'REGULAR'` onto each output trade row. **No DB persistence** — the field is request-scoped, used only for the response envelope to RN.
+
+**Frontend fallback (rebalance + MP lane).**
+
+The rebalance/MP lane hits ccxt-india directly (`rebalance/process-trade`). ccxt does NOT echo `variant` (per the "no ccxt-india changes needed" decision). The frontend instead:
+
+1. Reads `variant` directly from the response item if present (Node lane provides this).
+2. Falls back to looking up by symbol+tradeId+transactionType against the **outgoing** trade list it just submitted (which the frontend still has in scope).
+3. Falls back to `"REGULAR"` if neither yields a match.
+
+This three-tier fallback means rebalance/MP get the AMO badge without any ccxt-india change.
+
+**Display.**
+
+`RecommendationSuccessModal.js` renders an amber pill `AMO` next to the existing PLACED/PENDING/REJECTED status pill, only when `variant === "AMO"`. Colors are sourced from `theme.colors.status.warning` (`#F59E0B` text) and `theme.colors.status.warningBg` (`#FEF3C7` background) — both already in `src/theme/colors.js` § `DEFAULT_TOKENS.status`. No new tokens added.
+
+**NOT in this commit (followups).**
+
+- **Payload behavioural change.** This commit is display-only. The frontend does NOT explicitly send `orderVariety: "AMO"` in the place-order payload — every supported broker auto-converts to AMO server-side during after-hours, so the existing `orderVariety: "regular"` works. Sending explicit AMO is a behavioural change (broker accept windows + cancellation policies differ for explicit AMO orders). Tracked as a separate followup with a dual-write soak.
+- **Pre-flight market-closed banner.** A "Market is closed — your order will be parked as AMO and execute at next open" banner on the review-trade modal was discussed but deferred. Users with `allowAfterHoursOrders=false` are already blocked at review; users with the flag ON have explicitly opted in but currently get no pre-flight warning — that's the gap the banner would close, but it's separate scope.
+- **Persisting `variant` in `traderecos` collection.** Not done — the field is purely a request-scoped echo. If a future product surface needs to filter past trades by AMO status, the collection schema would need a deliberate migration.
+
 ### 4.6 Order Status Normalization
 
 **File:** `src/utils/orderStatusUtils.js`
@@ -1121,6 +1181,13 @@ fetchFunds(broker, clientCode, apiKey, jwtToken, ...):
               Returns: { isError, reason }
 ```
 
+**Canonical helper:** `src/FunctionCall/fetchFunds.js` is the single source of truth for the per-broker funds-route map. It handles all 13 brokers (IIFL, ICICI, Upstox, Angel One, Motilal Oswal, Zerodha, HDFC, Kotak, Dhan, Groww, AliceBlue, Fyers, Axis Securities) with the correct URL + request shape for each (e.g. Kotak adds `sid`/`serverId`, Dhan/AliceBlue/Fyers/Axis add `clientId`).
+
+**Inline fund-fetchers — proceed with caution.** A few screens still carry inline per-broker if/else chains predating `fetchFunds`:
+- `src/screens/PortfolioScreen/PortfolioScreen.js` — `getAllFunds()` keeps inline branches for IIFL / ICICI / Upstox / Zerodha / Kotak (these have payload quirks worth preserving — e.g. Zerodha hardcodes the public app key, Kotak passes segment/product/exchange) and delegates everything else to `fetchFunds()`. The earlier catch-all `else` was POSTing to `${baseUrl}funds` (no broker prefix) and 404'd silently for Angel One / HDFC / Dhan / AliceBlue / Fyers / Groww / Motilal / Axis — fixed 2026-04-25 by routing those through `fetchFunds`.
+- `src/screens/Drawer/IgnoreTradesScreen.js` — has inline branches per broker; the Angel One branch had the same `${baseUrl}funds` typo (no `angelone/` prefix) — fixed 2026-04-25.
+- New funds call sites should call `fetchFunds()` directly instead of growing another inline if/else chain. If a broker needs special payload (e.g. Kotak segment), extend `fetchFunds` rather than inlining.
+
 ### 6.4 Broker Capability Matrix
 
 **File:** `src/utils/brokerSupport.js`
@@ -1499,3 +1566,273 @@ See `docs/BROKER_CONNECTION.md` → *Per-customer egress IP contract* for the fu
 `src/screens/TradeContext.js:getUserDeatils` is already `async` and returns the axios promise, so `await` at the DdpiModal call site now properly waits. Containing functions were all already `async`, so no signature changes were needed.
 
 See `docs/BROKER_CONNECTION.md` → *DDPI authorize-for-sell* and `docs/CHANGELOG.md` entry `[3.8.6]` for full rationale.
+
+## Trade execution architectural alignment (Phase A)
+
+> **Status:** In progress (2026-05-01). Phase A precedes Phase B (SDK lift).
+> **Spec:** `docs/SDK_TRADE_EXECUTION_MIGRATION.md § Phase A — architectural alignment`.
+
+### Why Phase A exists
+
+Pre-Phase-A, the app had **two divergent trade-execution lanes** for what is conceptually one operation:
+
+| Flow | Pre-Phase-A endpoint | Hop count |
+|---|---|---|
+| Model Portfolio rebalance (`MPReviewTradeModal.placeOrder`) | `POST ${ccxtServer.baseUrl}rebalance/process-trade` | direct → ccxt |
+| Bespoke single-trade (`StockAdvices.placeOrder`) | `POST ${server.baseUrl}api/process-trades/order-place` | app → Node → ccxt |
+| Bespoke cart (`AddtoCartModal.placeOrder`) | `POST ${server.baseUrl}api/process-trades/order-place` | app → Node → ccxt |
+| Ignore-trades reorder (`IgnoreTradesScreen.placeOrder`) | `POST ${server.baseUrl}api/process-trades/order-place` | app → Node → ccxt |
+| `OrderService.placeOrders` (helper) | `POST ${server.baseUrl}api/process-trades/order-place` | app → Node → ccxt |
+
+The Node hop ran `Routes/Broker/ProcessTrades.js → router.post("/order-place")` — a 200-LOC handler that:
+1. Built per-broker payload via `createPayload()` and POSTed it to ccxt-india's `/<broker>/process-trades`
+2. Ran `processTradeUpdate(...)` per result — top-level `traderecos.findOneAndUpdate` for non-basket trades, `processBasketTradeUpdate(...)` for `basket_advice[]` array updates with `$inc tradedQty`, ImpliedMultiplier accumulation, full-closure detection
+3. If `basketId` was present, called ccxt-india `/<broker>/basket/run` to regen the net-position arrays
+4. Wrapped the response as `{ response: tradeDetails, updatesProcessed, basketResult, testMode }`
+
+Meanwhile MP's direct-ccxt call hit `/rebalance/process-trade` which:
+1. Resolved credentials via `ProcessTradesDbMananger.fetch_trading_credentials(...)` (snake-cased per `BrokerKeys` enum)
+2. Constructed a `Rebalancing(...)` instance, called `await rebalance2.process_trades(trades)` which dispatches per-broker via `BrokerFactory`
+3. Called `_update_databases(...)` — MP-specific writes (`user_net_pf_model`, `subscriberExecutions`, `advice_executed`)
+4. Returned `{ results, status, message, caPendingRecorded, orderErrors, fundsRequired, sessionExpired }`
+
+**Two response envelopes** (`response[]` vs `results[]`), **two auth-resolution code paths**, **two error-humanization code paths**, **two flow signatures for caller consumption** in the app — all for the same conceptual operation. The Node hop existed because of legacy `traderecos` mongo writes; MP didn't need it because it had its own DB writers in ccxt-india.
+
+### Post-Phase-A architecture
+
+Post-Phase-A, both flows go **direct-to-ccxt**, with separate endpoints that share the response envelope:
+
+```
+       App                                        ccxt-india
+  ┌────────────┐                                ┌──────────────────────────┐
+  │ MP Review  │ ── /rebalance/process-trade ──→│ Rebalancing class        │
+  │            │                                │ → BrokerFactory          │
+  │            │                                │ → broker.process_trades()│
+  │            │                                │ → _update_databases()    │
+  ├────────────┤                                ├──────────────────────────┤
+  │ Bespoke    │                                │ /orders/process-trade    │
+  │  StockAd.. │                                │  handler (NEW Phase A):  │
+  │  AddtoCart │ ── /orders/process-trade ─────→│ → ProcessTradesDbMananger│
+  │  Ignore..  │                                │   .fetch_trading_creds   │
+  │  OrderSvc  │                                │ → BrokerFactory          │
+  └────────────┘                                │ → broker.process_trades()│
+                                                │ → ProcessTradesDbMananger│
+                                                │   .update_trade_reco()   │
+                                                │   (top-level + basket    │
+                                                │    array updates)        │
+                                                │ → if basketId: call      │
+                                                │   /<broker>/basket/run   │
+                                                └──────────────────────────┘
+```
+
+Both endpoints internally call `BrokerFactory.create_from_credentials(...)` + `self.broker.process_trades(trades)` (the per-broker stack in `trading_logic/buy_sell_all_brokers.py`). That per-broker substrate is the shared base — _everything_ above it diverges by flow (MP-only DB writes vs bespoke-only DB writes); _nothing_ below it diverges (same broker classes, same per-customer egress IP resolution, same auth normalization).
+
+### `/orders/process-trade` endpoint contract
+
+**Path:** `POST https://ccxtprod.alphaquark.in/orders/process-trade`
+
+**Headers:**
+- `Content-Type: application/json`
+- `X-Advisor-Subdomain: <tenant>` (resolved from `configData.config.REACT_APP_HEADER_NAME`)
+- `aq-encrypted-key: <token>` (from `generateToken(REACT_APP_AQ_KEYS, REACT_APP_AQ_SECRET)` — same as MP)
+
+**Required body fields:**
+- `trades: Trade[]` — array of trade rows (each with `tradingSymbol`, `transactionType`, `quantity`, `tradeId`, `exchange`, `price`, etc.)
+- `user_email: string` — top-level (NOT just inside `trades[*]` — see § "Trade/basket payload `user_email` contract")
+- `user_broker: string` — canonical broker name (e.g. `"Zerodha"`, `"ICICI Direct"`)
+
+**Optional broker-credential fields** (the per-callsite payload assembly inlined the same per-broker switch as legacy):
+- `accessToken` / `jwtToken`
+- `apiKey`, `secretKey`
+- `clientCode`
+- `viewToken`, `sid`, `serverId` (Kotak)
+
+**Optional Phase B-precursor field:**
+- `clientTradeId: string` — app-generated UUID per trade for SDK correlation across the dual-write soak. Echoed back in the response per row.
+
+**Optional cart fields:**
+- `basketId`, `basketName` — present only for cart placements (`AddtoCartModal`). When set, the handler calls ccxt's `/<broker>/basket/run` after placing trades to regen the net-position arrays.
+
+**Response envelope:**
+
+```json
+{
+  "results": [
+    {
+      "symbol": "INFY-EQ",
+      "tradingSymbol": "INFY-EQ",
+      "transactionType": "BUY",
+      "tradeId": "...",
+      "orderStatus": "complete",
+      "orderId": "...",
+      "uniqueOrderId": "...",
+      "filledShares": 10,
+      "averagePrice": 1450.5,
+      "orderStatusMessage": "...",
+      "user_broker": "Zerodha",
+      "clientTradeId": "<echoed>",
+      "session_expired": false
+    }
+  ],
+  "orderErrors": [
+    { "symbol": "...", "status": "REJECTED", "reason": "..." }
+  ],
+  "fundsRequired": 12500.0,
+  "sessionExpired": false,
+  "status": 0
+}
+```
+
+**`results[]`** — one row per submitted trade, status-normalized broker output. Same key set as `/rebalance/process-trade.results[]` so the SDK Phase B contract has ONE response shape across both flows.
+
+**`orderErrors[]`** — populated when at least one trade was rejected by the broker. Pre-humanized rejection reasons (extracted from `orderStatusMessage`). Null when all trades succeeded.
+
+**`fundsRequired`** — number, populated when one or more rejections matched the `Rs. NNN` regex in the rejection message. Null otherwise.
+
+**`sessionExpired`** — boolean, true if the broker session validation failed mid-batch.
+
+### App-side migration (4 callsites)
+
+Each callsite was edited inline — only the `axios.post` URL + body and the `response.data.results` read was changed. Surrounding logic (per-broker payload assembly, success-modal handoff, error-toast paths) is unchanged.
+
+| File | Line (pre-Phase-A) | Pre-Phase-A URL | Post-Phase-A URL |
+|---|---|---|---|
+| `src/components/AdviceScreenComponents/StockAdvices.js` | 837 | `${server.server.baseUrl}api/process-trades/order-place` | `${server.ccxtServer.baseUrl}orders/process-trade` |
+| `src/components/AdviceScreenComponents/AddtoCartModal.js` | 744 | same | same |
+| `src/services/OrderService.js` | 45 | same | same |
+| `src/screens/Drawer/IgnoreTradesScreen.js` | 552 | same | same |
+
+Response-key shift: `response.data.response[]` → `response.data.results[]`. The success-modal handoff prop (`orderPlacementResponse`) carries the same per-row shape, so no downstream code paths needed updates.
+
+### Direct-ccxt fallback (safety net)
+
+Each callsite implements a **fallback to legacy Node** if the direct-ccxt call returns a 5xx or network error. Gated by env `Config.REACT_APP_BESPOKE_DIRECT_CCXT_FALLBACK` (default `'true'`). When the fallback fires, the callsite re-POSTs to the legacy `${server.baseUrl}api/process-trades/order-place` and reads `response.data.response[]` as before. This preserves trade-flow uptime if the new endpoint regresses; flip the env flag to `'false'` after one release of clean direct-ccxt traffic to retire the fallback path.
+
+### Error humanization location
+
+Phase A keeps error humanization at the same logical boundary as MP: ccxt-india writes pre-humanized rejection reasons into `orderErrors[].reason` (extracted by regex from broker's `orderStatusMessage`). The app's success-modal consumes both `results[]` (per-row) and `orderErrors[]` (humanized summary). No app-side string-matching of broker error JSON is needed.
+
+For 5xx / network errors that bypass ccxt's per-broker try/catch (genuinely unreachable backend), the fallback to legacy Node provides a parallel path with its own error humanization. If the fallback also fails, the existing toast handler in each callsite shows the generic "There was an issue placing the trade…" copy.
+
+### `ProcessTrades.js` deletion
+
+`src/utils/ProcessTrades.js` (~700 LOC, 14.7K) was confirmed dead by prior agent investigation: only test fixtures imported it (`src/__tests__/utils/ProcessTrades.test.js`, `src/__tests__/integration/brokerTradeFlow.test.js`), no runtime caller. Phase A removes it. The integration test was rewritten against the new direct-ccxt mock pattern.
+
+### Deprecation timeline for Node `/api/process-trades/order-place`
+
+The legacy Node route is **kept in service for one full release** as the fallback target (see § Direct-ccxt fallback above). Once the next prod release ships and one trading day passes with zero direct-ccxt 5xx in `journalctl -u ccxt_prod.service` (no fallback hits in that window), the env flag flips to `'false'` and the next release after that removes the fallback branch from the four callsites and the Node route is deleted from `aq_backend_github`.
+
+### SDK package types (Phase A precursor for Phase B)
+
+The Phase B spec calls for `Trade` / `TradeResult` / `OrderStatus` types in BOTH RN and Flutter SDK packages. Phase A ships these as **internal-only** types — defined under `alphaquark-mobile-sdk/packages/rn/src/orders/types.ts` and `packages/flutter/lib/src/orders/types.dart` but NOT exported from the public package surface. tidi_new (Flutter) has no caller yet; Alphab2bapp (RN) gains callers in Phase B-1 when SDK widgets ship. Doing this in Phase A means the contract is locked in BEFORE the SDK widgets are built around it.
+
+### Cross-repo files touched
+
+| Repo | Path | Why |
+|---|---|---|
+| Alphab2bapp (this) | `src/components/AdviceScreenComponents/StockAdvices.js` | callsite migration |
+| Alphab2bapp (this) | `src/components/AdviceScreenComponents/AddtoCartModal.js` | callsite migration |
+| Alphab2bapp (this) | `src/services/OrderService.js` | callsite migration |
+| Alphab2bapp (this) | `src/screens/Drawer/IgnoreTradesScreen.js` | callsite migration |
+| Alphab2bapp (this) | `src/utils/ProcessTrades.js` | dead-code deletion |
+| Alphab2bapp (this) | `src/__tests__/utils/ProcessTrades.test.js` | dead-code deletion |
+| Alphab2bapp (this) | `src/__tests__/integration/brokerTradeFlow.test.js` | rewritten against direct-ccxt |
+| ccxt-india (tidi) | `apps/app_orders.py` (NEW) | new `/orders/process-trade` handler |
+| ccxt-india (tidi) | `trading_logic/orders/order_processor.py` (NEW) | bespoke trade DB writer (basket_advice + traderecos) |
+| aq_backend_github (tidi) | `Routes/Broker/ProcessTrades.js` | unchanged in Phase A — kept as fallback target |
+
+See `docs/CHANGELOG.md § PHASE-A-TRADE-EXEC-ALIGN` for the dated changelog entry.
+
+---
+
+## Phase B-1 — SDK proxy layer + hooks/widgets (2026-05-01)
+
+> **Status:** B-1 landing — backend SDK proxy routes + RN/Flutter SDK package hooks/widgets. No app callers yet (those are Phase B-2). Spec: `docs/SDK_TRADE_EXECUTION_MIGRATION.md § Phase B-1 deliverables — concrete`.
+
+### What B-1 ships
+
+Three additive layers, no app-side caller wiring:
+
+1. **Backend SDK proxy routes** at `/sdk/v1/orders/*` on `aq_backend_github` (`Ibt-branch`). Mirror of Phase 3's `/sdk/v1/connections/*` proxy pattern — thin pass-through over the existing legacy stack. JWT-authenticated via `sdkAuthSession({ scope: "orders:read" | "orders:write" })`. Routes:
+   - `POST /sdk/v1/orders/place` — proxies to ccxt-india `POST /orders/process-trade` (Phase A endpoint)
+   - `POST /sdk/v1/orders/:orderId/status` — proxies to ccxt-india `POST /order/status`
+   - `GET /sdk/v1/orders/book` — proxies to ccxt-india `POST /order/book`, applies client-side `status?` / `broker?` filtering and `page`/`limit` pagination
+   - `POST /sdk/v1/orders/:orderId/cancel` — proxies to ccxt-india `POST /order/cancel`
+
+2. **`_selfCallLegacy` extracted to shared helper** at `Routes/sdk/v1/_helpers/selfCallLegacy.js`. Previously inline in `connections.js`. Same JWT-mint + `X-Advisor-Subdomain` header pattern; both `connections.js` and the new `orders/index.js` import from it. No behavior change; pure refactor.
+
+3. **SDK package additions** in `alphaquark-mobile-sdk` (branch `develop`), both RN and Flutter:
+   - **RN** (`packages/rn/src/orders/`):
+     - `hooks/useExecuteTrades.ts` — `execute(trades)` posts to `/sdk/v1/orders/place`, polls `/status` for any `PENDING` results until terminal, exposes `{progress, results, isExecuting, error}`.
+     - `hooks/useOrderBook.ts` — `GET /book` with cursor-style `loadMore` advancing `page`. Returns `{orders, isLoading, error, refresh, loadMore, total, hasMore}`.
+     - `components/TradeReviewSheet.tsx` — pure-UI basket review (no API calls). Trade list, totals, confirm bar.
+     - `components/TradeResultModal.tsx` — per-trade result rows with normalized status pills + AMO chip.
+     - `components/TradeExecutionProgress.tsx` — spinner + "Placing N of M" while polling.
+     - `index.ts` — barrel export. **Hooks + widgets are exported; types stay internal** (per spec § "Open questions — settled" #5; major version bump deferred to B-4).
+   - **Flutter** (`packages/flutter/lib/src/orders/`): mirror of RN — `execute_trades.dart`, `order_book.dart`, plus three widgets under `widgets/`. Re-exported from `alphaquark_mobile_sdk.dart`.
+
+### Auth + scope model
+
+- Phase 3 `sdkAuthSession` middleware is generic; passing `{ scope: "orders:write" }` works because `ALL_SCOPES` in `aq_backend_github/utilities/sessionToken.js:56` already includes `orders:read` + `orders:write` (pre-existing — no enum extension needed).
+- The mint server (`tidi:~/servers/server2/aq-sdk-mint-server/server.js`) is a thin proxy with no per-scope allowlist. **No mint server changes for B-1.** Token issuance for `orders:*` scopes works against the existing mint endpoint as-is.
+
+### Why a thin proxy and not a rewrite
+
+Same reasoning as Phase 3 connect: the per-broker quirks (Motilal session rotation, ICICI string-error envelopes, Kotak baseUrl persistence, Angel One per-customer SmartAPI, Zerodha 302 race) live in `ccxt-india/brokers/<broker>/<broker>.py` and stay there. The SDK boundary sits ABOVE those, not below. The Node SDK route layer adds:
+- JWT-based authentication for SDK consumers (vs aq-encrypted-key for legacy)
+- Future home for normalization helpers (`_normalizeStatus`, `_normalizeError` — landing in B-2/B-3)
+- Versioned `/sdk/v1/*` namespace separable from legacy `/api/*`
+
+### Pagination of `/sdk/v1/orders/book`
+
+Broker order-book is a snapshot — no native pagination upstream from ccxt. The SDK route paginates **client-side** in the proxy layer:
+1. Fetch full order list from ccxt `POST /order/book`
+2. Apply `status?` filter (case-insensitive enum match)
+3. Apply `broker?` filter (when caller wants a single broker rather than the user's primary)
+4. Slice into `page` × `limit` window (default `page=1`, `limit=50`)
+5. Return `{orders, total, page, limit, hasMore}`
+
+This means total-count is exact (post-filter) but each page round-trips a full broker fetch. Acceptable for B-1; if MP soak shows order-book latency is the bottleneck, B-2 can add a 30s Redis cache keyed `(userId, broker, statusFilter)`.
+
+### `userId` resolution
+
+ccxt's `/order/{cancel,status,book}` endpoints take `userId: int`, NOT `user_email`. The SDK route handler resolves user once at route entry:
+- `_resolveUserEmail(req)` from `req.sdkSession.user_email || req.sdkSession.user_ref`
+- `User.findOne({email: userEmail}, {_id: 1})` against `req.tenant.db_name`
+- Pass `userId: String(userDoc._id)` to ccxt
+
+(Place uses `user_email` directly because ccxt's `/orders/process-trade` accepts that key — no extra resolution hop.)
+
+### What B-1 does NOT do
+
+- No app-side caller wiring (Phase B-2). `Alphab2bapp/src/**` and `tidi_new/lib/**` are unchanged.
+- No `REACT_APP_USE_SDK_TRADE_FLOW` flag (Phase B-2).
+- No `trade_dual_write_audit` Mongo collection (Phase B-2).
+- No SDK semver bump — package stays on `1.x` minor; major bump (`2.0.0`) deferred to flag-flip in Phase B-4.
+
+### Cross-repo files touched
+
+| Repo | Branch | Path | Why |
+|---|---|---|---|
+| aq_backend_github (tidi) | Ibt-branch | `Routes/sdk/v1/_helpers/selfCallLegacy.js` (NEW) | extracted shared self-call helper |
+| aq_backend_github (tidi) | Ibt-branch | `Routes/sdk/v1/connections.js` | refactored to import shared helper |
+| aq_backend_github (tidi) | Ibt-branch | `Routes/sdk/v1/orders/index.js` (NEW) | the four SDK proxy routes |
+| aq_backend_github (tidi) | Ibt-branch | `index.js` | mount `/sdk/v1/orders` sub-router |
+| aq_backend_github (tidi) | Ibt-branch | `docs/CHANGELOG.md` | dated entry |
+| alphaquark-mobile-sdk | develop | `packages/rn/src/orders/hooks/useExecuteTrades.ts` (NEW) | RN execute hook |
+| alphaquark-mobile-sdk | develop | `packages/rn/src/orders/hooks/useOrderBook.ts` (NEW) | RN order-book hook |
+| alphaquark-mobile-sdk | develop | `packages/rn/src/orders/components/TradeReviewSheet.tsx` (NEW) | review UI |
+| alphaquark-mobile-sdk | develop | `packages/rn/src/orders/components/TradeResultModal.tsx` (NEW) | result UI |
+| alphaquark-mobile-sdk | develop | `packages/rn/src/orders/components/TradeExecutionProgress.tsx` (NEW) | progress UI |
+| alphaquark-mobile-sdk | develop | `packages/rn/src/orders/index.ts` (NEW) | barrel — exports hooks + widgets, NOT types |
+| alphaquark-mobile-sdk | develop | `packages/rn/src/index.ts` | re-export `from './orders'` |
+| alphaquark-mobile-sdk | develop | `packages/flutter/lib/src/orders/execute_trades.dart` (NEW) | Flutter mirror |
+| alphaquark-mobile-sdk | develop | `packages/flutter/lib/src/orders/order_book.dart` (NEW) | Flutter mirror |
+| alphaquark-mobile-sdk | develop | `packages/flutter/lib/src/orders/widgets/*.dart` (NEW) | Flutter widgets |
+| alphaquark-mobile-sdk | develop | `packages/flutter/lib/src/orders/orders.dart` (NEW) | barrel |
+| alphaquark-mobile-sdk | develop | `packages/flutter/lib/alphaquark_mobile_sdk.dart` | re-export |
+| Alphab2bapp (this) | feature/sdk-plus-config-ui worktree | `docs/APP_ARCHITECTURE.md` (this section) | architecture doc |
+| Alphab2bapp (this) | feature/sdk-plus-config-ui worktree | `docs/SDK_TRADE_EXECUTION_MIGRATION.md` | progress section |
+| Alphab2bapp (this) | feature/sdk-plus-config-ui worktree | `docs/CHANGELOG.md` | dated entry |
+
+See `docs/CHANGELOG.md § PHASE-B-1-SDK-LIFT` for the dated entry.

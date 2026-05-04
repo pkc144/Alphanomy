@@ -277,6 +277,27 @@ const AfterSubscriptionScreen = ({route}) => {
       Number(order.quantity || 0) > 0;
   });
 
+  // Per-symbol actual broker quantity from latest user_net_pf_updated.
+  // Used to detect "phantom" holdings — rows where user_net_pf_model claims
+  // qty=N but the broker reconciliation says qty<N (typical when an old model
+  // snapshot lingers but the broker holds nothing, e.g. test accounts, broker
+  // switch, fund withdrawal). The rebalance engine clamps to broker reality
+  // via min(net, broker) in resultant_of_net_and_holding (rebalancing.py:2160),
+  // so these rows produce BUYs not SELLs even though the user thinks they hold
+  // them. Surfaced inline next to the symbol in the holdings table.
+  const actualQtyBySymbol = (() => {
+    const arr = subscriptionAmount?.user_net_pf_updated;
+    if (!Array.isArray(arr) || arr.length === 0) return {};
+    const latest = [...arr].sort(
+      (a, b) => new Date(b.execDate) - new Date(a.execDate),
+    )[0];
+    const map = {};
+    (latest?.order_results || []).forEach(o => {
+      map[o.symbol] = Number(o.updated_qty ?? o.quantity ?? 0) || 0;
+    });
+    return map;
+  })();
+
   const {getLTPForSymbol} = useWebSocketCurrentPrice(
     validOrderResults,
   );
@@ -414,6 +435,9 @@ const AfterSubscriptionScreen = ({route}) => {
       const hasValidPrice =
         resolvedLtp !== null && !isNaN(resolvedLtp) && resolvedLtp !== 0 &&
         !isNaN(avg) && avg !== 0;
+      const modelQty = Number(stock?.quantity) || 0;
+      const actualQty = actualQtyBySymbol?.[stock?.symbol];
+      const isPhantom = actualQty !== undefined && actualQty < modelQty;
       return {
         symbol: stock.symbol,
         currentPrice: hasValidPrice ? resolvedLtp : 'N/A',
@@ -421,6 +445,8 @@ const AfterSubscriptionScreen = ({route}) => {
         returns: hasValidPrice ? ((resolvedLtp - avg) / avg) * 100 : 'N/A',
         weights: (stock?.quantity / totalUpdatedQty) * 100,
         shares: stock?.quantity,
+        isPhantom,
+        actualQty,
       };
     }) || [];
 
@@ -607,7 +633,25 @@ const AfterSubscriptionScreen = ({route}) => {
                                   const hasWeight = Number.isFinite(item.weights);
                                   return (
                                   <View style={{flexDirection: 'row', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F3F4F6', alignItems: 'center'}}>
-                                    <Text style={{width: 110, fontSize: 12, fontFamily: 'Poppins-Medium', color: '#1F2937'}}>{item.symbol}</Text>
+                                    <View style={{width: 110, flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap'}}>
+                                      <Text style={{fontSize: 12, fontFamily: 'Poppins-Medium', color: '#1F2937'}}>{item.symbol}</Text>
+                                      {item.isPhantom && (
+                                        <Text style={{
+                                          marginLeft: 4,
+                                          fontSize: 9,
+                                          fontFamily: 'Poppins-SemiBold',
+                                          color: '#92400E',
+                                          backgroundColor: '#FEF3C7',
+                                          borderWidth: 1,
+                                          borderColor: '#FDE68A',
+                                          paddingHorizontal: 4,
+                                          paddingVertical: 1,
+                                          borderRadius: 3,
+                                        }}>
+                                          Broker: {item.actualQty}
+                                        </Text>
+                                      )}
+                                    </View>
                                     <Text style={{width: 95, fontSize: 12, fontFamily: 'Poppins-Regular', color: '#374151', textAlign: 'right'}}>
                                       {hasPrice ? `₹${parseFloat(item.currentPrice).toFixed(2)}` : 'N/A'}
                                     </Text>

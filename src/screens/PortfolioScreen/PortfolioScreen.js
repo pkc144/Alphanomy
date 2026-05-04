@@ -32,6 +32,7 @@ import RenderEmptyMessage from './EmptyMessageCard';
 import {useConfig} from '../../context/ConfigContext';
 import {useNavigation} from '@react-navigation/native';
 import useWebSocketCurrentPrice from '../../FunctionCall/useWebSocketCurrentPrice';
+import {fetchFunds} from '../../FunctionCall/fetchFunds';
 import portfolioEvents, {PORTFOLIO_EVENTS} from '../../utils/portfolioEvents';
 import {isOrderRejected, isOrderSuccess, isOrderPending} from '../../utils/orderStatusUtils';
 
@@ -444,31 +445,27 @@ const PortfolioScreen = () => {
           .catch(error => {});
       }
     } else {
-      if (apiKey && jwtToken) {
-        const data = JSON.stringify({
-          apiKey: apiKey,
-          jwtToken: jwtToken,
-        });
-        const config = {
-          method: 'post',
-          url: `${server.ccxtServer.baseUrl}funds`,
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Advisor-Subdomain': configData?.config?.REACT_APP_HEADER_NAME,
-            'aq-encrypted-key': generateToken(
-              Config.REACT_APP_AQ_KEYS,
-              Config.REACT_APP_AQ_SECRET,
-            ),
-          },
-          data: data,
-        };
-        axios
-          .request(config)
-          .then(response => {
-            setFunds(response.data.data);
-          })
-          .catch(error => {});
-      }
+      // Catch-all for brokers without a dedicated branch above
+      // (Angel One, HDFC, Dhan, AliceBlue, Fyers, Groww, Motilal Oswal,
+      // Axis Securities). Previously this hit `${baseUrl}funds` (no broker
+      // prefix) and 404'd silently for every one of them — caught and
+      // swallowed by `.catch(error => {})`. Route through the canonical
+      // `fetchFunds` helper which already maps each broker to the correct
+      // per-broker route and request shape.
+      fetchFunds(
+        broker,
+        clientCode,
+        apiKey,
+        jwtToken,
+        secretKey,
+        sid,
+        serverId,
+        userEmail,
+      )
+        .then(response => {
+          if (response?.data) setFunds(response.data);
+        })
+        .catch(() => {});
     }
   };
 

@@ -11,8 +11,9 @@ const screenWidth = Dimensions.get('window').width;
 import Config from 'react-native-config';
 import { generateToken } from '../../utils/SecurityTokenManager';
 const screenHeight = Dimensions.get('window').height;
-const API_KEY = Config.REACT_APP_YOUTUBE_API_KEY;
-const CHANNEL_ID = Config.REACT_APP_YOUTUBE_CHANNEL_ID;
+// YouTube API Key and Channel ID
+const API_KEY = 'AIzaSyCnsA2NAIZ2XeXDFcGC9BHNO1KUeV7U5Ck';  // Replace with your YouTube API key
+const CHANNEL_ID = 'UCmzr8eYNcUvJjiaRgvruV8A';    // Replace with the desired YouTube channel ID
 
 const  HoldingScoreModal = ({modalVisible,scoreSymbol,setModalVisible}) => {
     const {configData}=useTrade();

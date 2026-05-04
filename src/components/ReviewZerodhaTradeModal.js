@@ -4,6 +4,7 @@ import { useWindowDimensions } from 'react-native';
 import { XIcon, Trash2Icon,CandlestickChartIcon, ChevronRight,ShoppingBag,Minus,Plus } from 'lucide-react-native';
 import Icon1 from 'react-native-vector-icons/Feather';
 import server from '../utils/serverConfig'
+import Config from 'react-native-config';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import axios from 'axios';
 
@@ -63,6 +64,7 @@ const ReviewZerodhaTradeModal = ({
   setCartCount,
   handleSelectStock,
   broker,
+  skipToWebView = false,
 }) => {
   const {configData}=useTrade();
   const config = useConfig();
@@ -295,7 +297,7 @@ console.log('Review Modal in AsyncStorage:', storedCartItems);
 
   const [isWebView,setWebView]=useState(false);
   const webViewRef = useRef(null);
-  const [htmlContentfinal, setHtmlContent] = useState("");
+  const [htmlContentfinal, setHtmlContent] = useState(htmlContent || "");
 
 
   
@@ -550,10 +552,12 @@ console.log('Review Modal in AsyncStorage:', storedCartItems);
 
   useEffect(() => {
     if(htmlContent){
-    
       setHtmlContent(htmlContent);
+      if (skipToWebView) {
+        setWebView(true);
+      }
     }
-  }, [htmlContent]);
+  }, [htmlContent, skipToWebView]);
 
   const generateHtmlForm = async (basket, apiKey) => {
     return `<html>
@@ -763,8 +767,8 @@ console.log('Review Modal in AsyncStorage:', storedCartItems);
 
 
   const handleClose = () => {
-    console.log('here i  am');
     setWebView(false);
+    onClose();
   };
 
 
@@ -980,6 +984,14 @@ if (basketData?.length > 0) {
                   console.error('WebView error:', e.nativeEvent)
                 }
               />
+            </View>
+          ) : skipToWebView ? (
+            <View style={{ height: 300, alignItems: 'center', justifyContent: 'center', backgroundColor: 'white', borderTopRightRadius: 10, borderTopLeftRadius: 10 }}>
+              <ActivityIndicator size="large" color="#0056B7" />
+              <Text style={{ marginTop: 12, fontFamily: 'Satoshi-Medium', color: '#666' }}>Preparing Kite Publisher...</Text>
+              <TouchableOpacity onPress={handleClose} style={{ marginTop: 20 }}>
+                <Text style={{ color: '#0056B7', fontFamily: 'Satoshi-Medium' }}>Cancel</Text>
+              </TouchableOpacity>
             </View>
           ) : (
            <SafeAreaView

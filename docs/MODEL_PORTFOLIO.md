@@ -71,6 +71,7 @@ See [REBALANCING.md](REBALANCING.md) for detailed rebalancing architecture.
 | `src/screens/Drawer/MPPerformanceScreen.js` | Portfolio performance tracking |
 | `src/components/AdviceScreenComponents/RebalanceAdvices.js` | Rebalance trade cards |
 | `src/components/AdviceScreenComponents/RebalanceModal.js` | Rebalance review modal |
+| `src/components/ModelPortfolioComponents/RecommendationSuccessModal.js` | Post-execution Trade Details modal — renders per-order success/failure list, status header summary, Cautionary Listing alert, and Insufficient Funds alert |
 
 ## Trade Types
 
@@ -242,3 +243,32 @@ If `valid === false`, the gate shows a Toast listing the offending symbols and a
 **Bug:** `storeModalName` is never cleared. If the user dismissed the rebalance-initiated broker modal without connecting, then later connected a broker from the Settings → Broker screen (a totally unrelated entry point), `brokerStatus` flipping to `connected` would fire the auto-continue on the stale intent — opening a rebalance the user never asked for.
 
 **Fix:** replaced the boolean `wasBrokerModalOpenForRebalance` with a timestamp ref `rebalanceBrokerModalOpenedAt`. The auto-continue only fires if the intent is less than `REBALANCE_BROKER_INTENT_TTL_MS` (2 min) old. Legitimate auth flows complete well inside this window; stale intent from dismissed modals expires automatically.
+
+## Post-Execution Trade Details Modal (2026-04-30)
+
+**File:** `src/components/ModelPortfolioComponents/RecommendationSuccessModal.js`
+
+Renders the post-execution status of a model-portfolio rebalance batch. Owns:
+
+- **Status header summary** — drives one of: "All Orders Placed Successfully" / "Order Failed" / "Some orders are not placed" / "No Orders Placed". Header subtitle branches on which per-reason banners are showing, so it never claims orders are pending when every order is in a terminal state.
+- **Cautionary Listing alert** (yellow) — fires when any rejected order's `orderStatusMessage` contains both `cautionary` and `listing` (Angel One AB4036 / NSE GSM-equivalent). Lists the affected stocks as pill chips and instructs the user to place those manually via the broker app.
+- **Insufficient Funds alert** (red) — fires when any rejected order's message contains `insufficient fund`, `low fund`, `insufficient margin` (Zerodha/Kotak), or `insufficient balance` (Upstox/Fyers). Parses Angel One's "Available funds - Rs. {x} . You require Rs. {y}" pattern when present, summing Required across all rejected rows. Negative Available is rendered red to highlight margin-debit balances.
+- **Per-order list** — each `renderOrderItem` row shows the broker's `message_aq` / `orderStatusMessage` as the failure reason chip.
+
+**Coexistence rule.** Cautionary and Insufficient Funds banners are independent — both can render at once when a single batch hits both reasons (production case 2026-04-29 Angel One: 7 cautionary + 19 LOW_FUNDS). The status header summary points the user at whichever banners are showing, rather than repeating their content.
+
+**Cross-repo parity.** Mirrors `tidi_new lib/components/home/portfolio/ExecutionStatusPage.dart` (commit `c6c61de` for the LOW_FUNDS banner + status-header fix). The tidi_new version additionally has a Retry Failed Orders button with cautionary/LOW_FUNDS filtering — Alphab2bapp's modal is read-only, so that filter doesn't apply here.
+
+### AMO badge on result cards (2026-05-01)
+
+`RecommendationSuccessModal` renders an amber **AMO** pill next to the existing PLACED/PENDING/REJECTED status pill on every per-order row whose `variant === "AMO"`. The pill uses `theme.colors.status.warning` text on `status.warningBg` background — both already in `src/theme/colors.js § DEFAULT_TOKENS.status` (no new tokens added).
+
+`variant` is computed at submit time and threaded through every payload builder (bespoke `getOrderPayload`, rebalance `RebalanceModal`, MP `MPReviewTradeModal` / `UserStrategySubscribeModal`) using:
+
+```js
+variant = (!IsMarketHours() && allowAfterHoursOrders === true) ? "AMO" : "REGULAR"
+```
+
+The component reads `variant` from each response item with a three-tier fallback (response field → match against the outgoing trade list passed in via `originalStockDetails` prop → default `"REGULAR"`). This means the AMO pill renders correctly even on the rebalance/MP lane where ccxt-india doesn't echo `variant` back (no ccxt-india change was needed for this feature).
+
+Display-only — no change to the place-order payload. See `docs/APP_ARCHITECTURE.md § 4.5.2 Trade variant field` for the full contract.

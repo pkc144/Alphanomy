@@ -32,7 +32,7 @@ import logo from '../../assets/fadedlogo.png';
 
 import {generateToken} from '../../utils/SecurityTokenManager';
 import RebalancePreferenceModal from './RebalancePreferenceModal';
-import RebalanceDetailsModal from '../../components/AdviceScreenComponents/RebalanceDetailsModal';
+import { useComponent } from '../../design/useDesign';
 import RebalanceChangeDetailModal from '../../components/RebalanceChangeDetailModal';
 import PendingOrdersModal from '../../components/ModelPortfolioComponents/PendingOrdersModal';
 import {cancelOrder} from '../../services/BrokerOrderBookAPI';
@@ -97,6 +97,7 @@ const RebalanceCard = ({
 
   // Get dynamic config from API
   const config = useConfig();
+  const RebalanceDetailsModal = useComponent('composites.RebalanceDetailsModal');
   const themeColor = config?.themeColor || '#0056B7';
   const mainColor = config?.mainColor || '#4CAAA0';
   const gradient1 = config?.gradient1 || '#002651';
@@ -169,8 +170,10 @@ const RebalanceCard = ({
       const freshStatus = await refreshBrokerStatus({forceNetwork: true});
       const currentBrokerStatus = freshStatus?.brokerStatus || brokerStatus;
 
-      if (freshStatus?.broker === undefined || currentBrokerStatus !== 'connected') {
-        if (setBrokerModel) {
+      if (currentBrokerStatus !== 'connected') {
+        if (freshStatus?.broker && setOpenTokenExpireModel) {
+          setOpenTokenExpireModel(true);
+        } else if (setBrokerModel) {
           setBrokerModel(true);
         }
         return;
@@ -561,7 +564,9 @@ const RebalanceCard = ({
       if (currentBrokerStatus !== 'connected' || !currentBroker) {
         setShowCheckboxModal(false);
         setCurrentStep(2);
-        if (setBrokerModel) {
+        if (currentBroker && setOpenTokenExpireModel) {
+          setOpenTokenExpireModel(true);
+        } else if (setBrokerModel) {
           setBrokerModel(true);
         }
         setLoading(false);

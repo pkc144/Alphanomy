@@ -37,6 +37,15 @@ import { convertResponse } from '../../utils/tradeUtils';
 import { getAdvisorSubdomain } from '../../utils/variantHelper';
 import moment from 'moment';
 import useModalStore from '../../GlobalUIModals/modalStore';
+import { useConfig } from '../../context/ConfigContext';
+import { computeTradeVariant } from '../../utils/tradeVariant';
+import useSdkClient from '../../sdk/useSdkClient';
+
+const isSdkExecuteAdviceEnabled = () => {
+  const v = String(Config?.REACT_APP_USE_SDK_EXECUTE_ADVICE || '').trim().toLowerCase();
+  return v === 'true' || v === '1';
+};
+
 const MPReviewTradeModal = ({
   visible,
   onCloseReviewTrade,
@@ -66,9 +75,19 @@ const MPReviewTradeModal = ({
   setShowOtherBrokerModel,
   isReturningFromOtherBrokerModal,
   setIsReturningFromOtherBrokerModal,
+  // Optional — sibling setter for the outgoing trade list at submit
+  // time (used by RecommendationSuccessModal to recover the trade
+  // `variant` per row when ccxt-india doesn't echo it). See
+  // utils/tradeVariant.js § resolveResultVariant.
+  setLastSubmittedTrades,
 }) => {
   const {configData} = useTrade();
   const openBrokerModal = useModalStore(state => state.openModal);
+  // For trade `variant` computation at submit. See
+  // docs/APP_ARCHITECTURE.md § 4.5.2 Trade variant field.
+  const { allowAfterHoursOrders } = useConfig() || {};
+  const sdkClient = useSdkClient();
+  const sdkExecuteAdviceEnabled = isSdkExecuteAdviceEnabled() && !!sdkClient;
   console.log('MPBROKER:', broker);
   const {width} = useWindowDimensions();
 
@@ -327,6 +346,11 @@ const MPReviewTradeModal = ({
       return;
     }
 
+    // Trade variant tagged on every per-trade object — see
+    // docs/APP_ARCHITECTURE.md § 4.5.2 Trade variant field. Display-only.
+    const variant = computeTradeVariant(allowAfterHoursOrders);
+    const tradesWithVariant = stockDetails.map(s => ({ ...s, variant }));
+
     const getBasePayload = () => ({
       modelName: strategyDetails?.model_name,
       advisor: strategyDetails?.advisor,
@@ -334,7 +358,7 @@ const MPReviewTradeModal = ({
       unique_id: calculatedPortfolioData?.uniqueId,
       user_broker: broker,
       user_email: userEmail,
-      trades: stockDetails,
+      trades: tradesWithVariant,
     });
 
     const getBrokerSpecificPayload = () => {
@@ -403,7 +427,36 @@ const MPReviewTradeModal = ({
     };
 
     try {
-      const response = await axios.request(config);
+      // SDK executeAdvice dual-path (Phase C) — main broker path.
+      // When the SDK is enabled, try the orchestrator first. On failure,
+      // fall through to legacy. SDK result wrapped to match response shape.
+      let response;
+      if (sdkExecuteAdviceEnabled) {
+        try {
+          const sdkResult = await sdkClient.executeAdvice({
+            kind: 'mpRebalance',
+            clientAdviceId: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            brokerName: broker,
+            modelId: latestRebalance?.model_Id,
+            modelName: strategyDetails?.model_name,
+            uniqueId: calculatedPortfolioData?.uniqueId,
+            trades: payload.trades,
+          });
+          const mappedRows = (sdkResult?.rows || []).map(row => ({
+            ...row,
+            orderStatus: row.status,
+            tradingSymbol: row.symbol,
+          }));
+          response = { data: { results: mappedRows } };
+          console.log('[MPReviewTradeModal] SDK executeAdvice result:', sdkResult?.status, sdkResult?.rows?.length, 'rows');
+        } catch (sdkErr) {
+          console.error('[MPReviewTradeModal] SDK executeAdvice failed, falling back to legacy:', sdkErr?.message);
+          response = null;
+        }
+      }
+      if (!response) {
+        response = await axios.request(config);
+      }
       console.log('[OrderPlacement] API Response full:', JSON.stringify(response.data));
       console.log('[OrderPlacement] Results:', response.data.results);
       const checkData = response?.data?.results;
@@ -462,6 +515,9 @@ const MPReviewTradeModal = ({
 
       const results = checkData;
       setOrderPlacementResponse(results);
+      // Outgoing trade list (variant-tagged) — fallback source for the
+      // success modal's `variant` lookups.
+      setLastSubmittedTrades?.(tradesWithVariant);
 
       // 2. Always call model-portfolio-db-update first (before EDIS checks)
       const updateData = {
@@ -644,6 +700,7 @@ const MPReviewTradeModal = ({
       }
 
       // Fallback: Build synthetic rejected response from stockDetails for the modal
+      const syntheticVariant = computeTradeVariant(allowAfterHoursOrders);
       const syntheticResponse = stockDetails.map(stock => ({
         symbol: stock.tradingSymbol,
         tradingSymbol: stock.tradingSymbol,
@@ -655,8 +712,10 @@ const MPReviewTradeModal = ({
         orderPlacement: 'failed',
         orderStatusMessage: errorMessage,
         message_aq: errorMessage,
+        variant: syntheticVariant,
       }));
       setOrderPlacementResponse(syntheticResponse);
+      setLastSubmittedTrades?.(syntheticResponse);
       setOpenSucessModal(true);
       onCloseReviewTrade();
     }
@@ -1292,7 +1351,10 @@ const MPReviewTradeModal = ({
         console.warn('[FyersPublisher] update-reco failed (non-critical):', recoErr);
       }
 
-      // Place orders via Fyers API through process-trade
+      // Place orders via Fyers API through process-trade.
+      // Variant tagged per-trade — see docs/APP_ARCHITECTURE.md § 4.5.2.
+      const fyersVariant = computeTradeVariant(allowAfterHoursOrders);
+      const fyersTrades = stockDetails.map(s => ({ ...s, variant: fyersVariant }));
       const payload = {
         clientId: clientCode,
         accessToken: jwtToken,
@@ -1303,14 +1365,41 @@ const MPReviewTradeModal = ({
         model_id: latestRebalance?.model_Id,
         unique_id: calculatedPortfolioData?.uniqueId,
         returnDateTime: istDatetime,
-        trades: stockDetails,
+        trades: fyersTrades,
       };
 
-      const response = await axios.post(
-        `${server.ccxtServer.baseUrl}rebalance/process-trade`,
-        payload,
-        { headers: requestHeaders, timeout: 120000 },
-      );
+      // SDK executeAdvice dual-path (Phase C) — Fyers publisher path.
+      let response;
+      if (sdkExecuteAdviceEnabled) {
+        try {
+          const sdkResult = await sdkClient.executeAdvice({
+            kind: 'mpRebalance',
+            clientAdviceId: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            brokerName: 'Fyers',
+            modelId: latestRebalance?.model_Id,
+            modelName: strategyDetails?.model_name,
+            uniqueId: calculatedPortfolioData?.uniqueId,
+            trades: fyersTrades,
+          });
+          const mappedRows = (sdkResult?.rows || []).map(row => ({
+            ...row,
+            orderStatus: row.status,
+            tradingSymbol: row.symbol,
+          }));
+          response = { data: { results: mappedRows } };
+          console.log('[MPReviewTradeModal] SDK executeAdvice (Fyers) result:', sdkResult?.status, sdkResult?.rows?.length, 'rows');
+        } catch (sdkErr) {
+          console.error('[MPReviewTradeModal] SDK executeAdvice (Fyers) failed, falling back to legacy:', sdkErr?.message);
+          response = null;
+        }
+      }
+      if (!response) {
+        response = await axios.post(
+          `${server.ccxtServer.baseUrl}rebalance/process-trade`,
+          payload,
+          { headers: requestHeaders, timeout: 120000 },
+        );
+      }
 
       const checkData = response?.data?.results;
 

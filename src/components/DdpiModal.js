@@ -74,8 +74,11 @@ export default function DdpiModal({
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-Advisor-Subdomain': configData?.advisorTag || '',
-            'aq-encrypted-key': configData?.aqEncryptedKey || '',
+            'X-Advisor-Subdomain': configData?.config?.REACT_APP_HEADER_NAME || configData?.subdomain || getAdvisorSubdomain(),
+            'aq-encrypted-key': generateToken(
+              Config.REACT_APP_AQ_KEYS,
+              Config.REACT_APP_AQ_SECRET,
+            ),
           },
           body: JSON.stringify({
             accessToken: userDetails?.jwtToken,
@@ -95,7 +98,9 @@ export default function DdpiModal({
 
       if (data.status === 0) {
         setAuthUrl(data.auth_url); // Set the authentication URL to open in WebView
-        setShowTpinConfirmation(true);
+        // Do NOT show confirmation overlay yet — user needs to complete
+        // the CDSL TPIN + OTP flow in the WebView first. The overlay
+        // shows when the user closes the WebView (onClose callback).
       } else {
         console.error('Error in response:', data.message);
         // Alert.alert("Error", data.message || "An error occurred.");
@@ -219,13 +224,15 @@ export default function DdpiModal({
             console.log('url zerodha:', event.url);
             if (event.url.includes('callback_url')) {
               setAuthUrl(null);
-              setShowTpinConfirmation(true);
+              // Auto-proceed — CDSL TPIN + OTP completed successfully.
+              // No need for manual "I've authorized" checkbox.
+              handleProceed();
             }
           }}
           onShouldStartLoadWithRequest={request => {
             if (request.url.includes('callback_url')) {
               setAuthUrl(null);
-              setShowTpinConfirmation(true);
+              handleProceed();
               return false;
             }
             return true;
@@ -785,6 +792,76 @@ const styles = StyleSheet.create({
   },
 });
 
+const otherBrokerStyles = StyleSheet.create({
+  ddpiHeroCard: {
+    backgroundColor: '#f0fdf4',
+    borderColor: '#86efac',
+    borderWidth: 1.5,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    width: '100%',
+  },
+  ddpiHeroBadge: {
+    backgroundColor: '#16a34a',
+    borderRadius: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    alignSelf: 'flex-start',
+    marginBottom: 8,
+  },
+  ddpiHeroBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700',
+    fontFamily: 'Poppins',
+    letterSpacing: 0.5,
+  },
+  ddpiHeroTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#15803d',
+    fontFamily: 'Poppins',
+    marginBottom: 6,
+  },
+  ddpiHeroBody: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: '#4b5563',
+    fontFamily: 'Poppins',
+    marginBottom: 12,
+  },
+  ddpiHeroButton: {
+    backgroundColor: '#16a34a',
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  ddpiHeroButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    fontFamily: 'Poppins',
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 14,
+    width: '100%',
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E5E7EB',
+  },
+  dividerText: {
+    marginHorizontal: 10,
+    fontSize: 12,
+    color: '#9CA3AF',
+    fontFamily: 'Poppins',
+  },
+});
+
 export function ActivateNowModel({
   isOpen = false,
   setIsOpen = () => {},
@@ -1041,6 +1118,15 @@ export function AngleOneTpinModal({
   const edisStatus = edisStatusProp || localEdisStatus;
 
   // Auto-fetch EDIS status if not provided as prop (matches production behavior)
+  //
+  // 2026-05-02 enhancement (parity with tidi_new RebalanceReviewPage live
+  // verify-dis check): if SmartAPI verify-edis returns `edis: true` —
+  // meaning the user is ALREADY authorized server-side (DDPI active OR
+  // today's TPIN session valid) — auto-call handleProceed to flip
+  // `is_authorized_for_sell=true` in DB and close the modal. The user
+  // never sees the redundant prompt. Mirrors the Flutter
+  // _checkAngelOneEdisStatus pattern (live-probe before forcing the
+  // EDIS auth page).
   useEffect(() => {
     if (isOpen && !edisStatusProp && userDetails?.jwtToken) {
       const fetchEdisStatus = async () => {
@@ -1057,6 +1143,16 @@ export function AngleOneTpinModal({
           );
           console.log('AngleOne local EDIS fetch:', response.data);
           setLocalEdisStatus(response.data);
+          // Live short-circuit — already authorized server-side, skip
+          // the prompt entirely. handleProceed updates the DB flag +
+          // closes the modal + reopens rebalance.
+          if (response?.data?.edis === true) {
+            console.log('[DdpiModal] verify-edis edis=true → auto-skip prompt');
+            // Defer to next tick so React has settled state from the
+            // setLocalEdisStatus call above before handleProceed mutates
+            // the modal visibility.
+            setTimeout(() => handleProceed(), 0);
+          }
         } catch (error) {
           console.error('Error fetching Angel One EDIS status:', error);
           Toast.show({
@@ -2125,7 +2221,6 @@ export function OtherBrokerModel({
           <ScrollView contentContainerStyle={styles.modalContent}>
             {showHowToAuthorize ? (
               <>
-                {/* YouTube iframe — only rendered when a videoId exists for this broker */}
                 {brokerInstructions[broker]?.videoId ? (
                   <View style={styles.playerWrapper}>
                     <YoutubePlayer
@@ -2137,7 +2232,6 @@ export function OtherBrokerModel({
                   </View>
                 ) : null}
 
-                {/* Broker instructions */}
                 {brokerInstructions[broker]?.title && (
                   <Text style={styles.title}>
                     {brokerInstructions[broker].title}
@@ -2155,40 +2249,44 @@ export function OtherBrokerModel({
                 )}
               </>
             ) : (
-              <View style={styles.header}>
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    alignContent: 'center',
-                    alignItems: 'center',
-                    alignSelf: 'center',
-                    justifyContent: 'flex-end',
-                  }}>
-                  <AlertTriangle size={24} color={'black'} />
-                  <Text style={styles.title}>
-                    Action Required: Stock Authorization to Sell
+              <View style={{width: '100%'}}>
+                <View style={{flexDirection: 'row', alignItems: 'center', alignSelf: 'center', marginBottom: 12}}>
+                  <AlertTriangle size={22} color="#E43D3D" />
+                  <Text style={[styles.title, {marginLeft: 8, fontSize: 18}]}>
+                    Sell Authorization Required
                   </Text>
                 </View>
 
-                <View style={styles.header}>
-                  <Text style={styles.listText}>
-                    Your broker does not allow selling authorization from the app. Please authorize your
-                    stocks manually on your broker before trying to sell orders
-                    from here again. The best way to tackle this is to activate DDPI.
+                <View style={otherBrokerStyles.ddpiHeroCard}>
+                  <View style={otherBrokerStyles.ddpiHeroBadge}>
+                    <Text style={otherBrokerStyles.ddpiHeroBadgeText}>RECOMMENDED</Text>
+                  </View>
+                  <Text style={otherBrokerStyles.ddpiHeroTitle}>
+                    Activate DDPI — Sell Freely, Forever
+                  </Text>
+                  <Text style={otherBrokerStyles.ddpiHeroBody}>
+                    DDPI is a one-time, SEBI-approved authorization that lets you sell stocks without daily TPIN/OTP hassle. Set it up once and never see this screen again.
                   </Text>
                   <TouchableOpacity
-                    onPress={() =>
-                      useModalStore
-                        .getState()
-                        .openModal('DdpiHelp', {broker})
-                    }
-                    style={styles.ddpiNudgeRow}
+                    onPress={() => useModalStore.getState().openModal('DdpiHelp', {broker})}
+                    style={otherBrokerStyles.ddpiHeroButton}
                     activeOpacity={0.7}>
-                    <Text style={styles.ddpiNudgeText}>
-                      {'➜ '}Show me how to activate DDPI on {broker}
+                    <Text style={otherBrokerStyles.ddpiHeroButtonText}>
+                      Activate DDPI on {broker}
                     </Text>
                   </TouchableOpacity>
                 </View>
+
+                <View style={otherBrokerStyles.dividerRow}>
+                  <View style={otherBrokerStyles.dividerLine} />
+                  <Text style={otherBrokerStyles.dividerText}>or authorize for today</Text>
+                  <View style={otherBrokerStyles.dividerLine} />
+                </View>
+
+                <Text style={[styles.listText, {textAlign: 'center', color: '#6B7280'}]}>
+                  If you've already authorized your stocks for selling today via
+                  your broker's app or portal, tick the box below and retry.
+                </Text>
               </View>
             )}
 

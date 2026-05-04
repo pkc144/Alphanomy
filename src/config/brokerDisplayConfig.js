@@ -11,11 +11,11 @@
  */
 
 export const brokerDisplayConfig = [
-  // {
-  //   name: 'AngelOne',
-  //   key: 'Angel One',
-  //   logo: require('../assets/AngleLogo.png'),
-  // },
+  {
+    name: 'AngelOne',
+    key: 'Angel One',
+    logo: require('../assets/AngleLogo.png'),
+  },
   {
     name: 'Zerodha',
     key: 'Zerodha',

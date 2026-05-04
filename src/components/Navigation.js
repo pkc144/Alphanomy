@@ -13,6 +13,11 @@ import {
   Platform,
 } from 'react-native';
 import {NavigationContainer, useNavigation, useNavigationState, useRoute} from '@react-navigation/native';
+import SdkSelfTestScreen from '../sdk/SdkSelfTestScreen';
+import SdkBrokerTestScreen from '../sdk/SdkBrokerTestScreen';
+import {isSdkIntegrationEnabled} from '../sdk/SdkProviderRoot';
+// `Config` is imported below from '../utils/safeConfig' for the rest
+// of this file — re-use that one for SDK env vars.
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import {
@@ -1045,16 +1050,37 @@ const Navigation = ({userEmail, isAuthenticated}) => {
   const [initialRoute, setInitialRoute] = useState('Login');
   useWebSocketInitializer();
 
+  // SDK integration test flag — when true, the app boots straight into
+  // SdkBrokerTest so QA can hit each pilot broker without traversing
+  // login + drawer. Off by default (Splash → Login → Home).
+  const sdkBrokerTestFirst =
+    isSdkIntegrationEnabled() &&
+    String(Config?.REACT_APP_SDK_BROKER_TEST_FIRST || '').toLowerCase() === 'true';
+
   return (
     <NavigationContainer>
       <Stack.Navigator
-        initialRouteName="Splash"
+        initialRouteName={sdkBrokerTestFirst ? 'SdkBrokerTest' : 'Splash'}
         screenOptions={{headerShown: false, animation: 'none'}}>
         <Stack.Screen
           name="Splash"
           component={SplashScreen}
           options={{headerShown: false}}
         />
+        {isSdkIntegrationEnabled() ? (
+          <>
+            <Stack.Screen
+              name="SdkSelfTest"
+              component={SdkSelfTestScreen}
+              options={{headerShown: true, title: 'SDK self-test'}}
+            />
+            <Stack.Screen
+              name="SdkBrokerTest"
+              component={SdkBrokerTestScreen}
+              options={{headerShown: true, title: 'SDK Broker test'}}
+            />
+          </>
+        ) : null}
         <Stack.Screen
           name="Login"
           component={LoginScreen}
