@@ -6,6 +6,46 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ## [unreleased] - 2026-05-07
 
+### Added — Per-row "Mark as Placed" inline editor for MP rebalance failures + DDPI sync
+
+**Problem.** Model-portfolio rebalance result modal (`RecommendationSuccessModal`) had no return path for FAILURE rows. When a broker rejected trades the user couldn't recover from automatically (cautionary listing, restricted scrip, low-funds, broker session expired), the user was told to "open your broker app and place manually" but there was no way to tell the app what was actually placed. Result: MP dashboard's failed-trades repair list kept showing those symbols indefinitely; users had to keep dismissing the same prompts. Bespoke flow already had this via `PUT /api/recommendation { trade_place_status: 'manually_placed' }`; MP flow was missing the equivalent.
+
+Separately, DDPI-active accounts kept seeing the "DDPI Inactive: Proceed with TPIN Mandate" modal because `userDetails.ddpi_enabled` stayed `false` in our DB even though SmartAPI's `verifyDis` returned `errorcode: AG1000` (DDPI active at broker). The DdpiModal auto-skip path was setting `is_authorized_for_sell: true` but never `ddpi_enabled: true` — so the next-day TPIN reset re-triggered the prompt despite DDPI being active server-side.
+
+**Fix — backend (`aq_backend_github/Routes/modalPortfolioOrderPlace.js`):** new endpoint `PUT /api/model-portfolio-db-update/manual-placement`. Body: `{ userEmail, modelId, modelName?, uniqueId?, user_broker, symbol, transactionType?, exchange?, actualQty, actualPrice }`. Behavior:
+- Finds the portfolio + rebalanceHistory entry by `modelId` + `subscribed_by`
+- Locates the matching `adviceEntry` by `symbol` (and `exchange` when supplied)
+- Flips `entry.status = 'executed'` so the trade drops out of the failed-trades repair list and the MP dashboard reflects it as completed
+- Stamps `manually_placed_at`, `actual_quantity`, `actual_price`, `manually_placed_transaction_type` for audit (Mongoose-strict-false friendly — added defensively)
+- Recomputes `subscriberExecutions[user_broker].status` (`executed` if all entries done, else `partial`)
+- Idempotent: re-marking an already-executed entry is a no-op
+
+**Fix — frontend (`src/components/ModelPortfolioComponents/RecommendationSuccessModal.js`):** per-row inline editor for ALL rejection types. New props: `userEmail`, `modelId`, `modelName`, `uniqueId`. New state: `manualEditingIdx`, `manualEditQty`, `manualEditPrice`, `submittingManualIdx`. New handlers: `startManualEdit` (defaults qty = original; price = LTP / rebalance_price), `cancelManualEdit`, `submitManualPlacement` (PUTs the new endpoint, on success mutates `orderResponse[idx]` to flip `orderStatus` from `FAILURE` to `manually_placed`). UI:
+- "Mark as Placed (manual)" button below the rejection-reason banner on every FAILURE row
+- Tap → inline editor with editable qty + price + Cancel/Confirm buttons
+- Confirm → toast "Marked as placed" → row flips to green/Pending card style
+- Gated on `modelId` prop being supplied — only MP flows render the editor; bespoke flow (`AddtoCartModal` callsite) keeps its existing UI since it uses `/api/recommendation` for its own manually_placed path
+
+**Fix — `src/utils/orderStatusUtils.js`:** added `'manually_placed'` and `'manually placed'` to `PENDING_STATUSES` so `isOrderPending` recognizes the flipped row → it counts toward `successCount` in `RecommendationSuccessModal` and renders with the green card style.
+
+**Fix — DDPI sync (`src/components/DdpiModal.js`):** `AngleOneTpinModal.handleProceed` now accepts an optional `ddpiActive` flag. When verifyDis returns `errorcode: 'AG1000'` (DDPI active at broker), the auto-skip path passes `ddpiActive: true`, which adds `ddpi_enabled: true` to the `PUT /api/update-edis-status` payload. Backend (`Routes/UpdateEdisStatus.js`) already supported `ddpi_enabled` in the body — frontend just wasn't passing it. Result: the RebalanceModal sell-auth gate (line 1357-1364) which predicates on `!ddpi_enabled && !is_authorized_for_sell` now stays skipped permanently as long as DDPI is active at the broker, instead of re-firing every day after the daily TPIN reset.
+
+Wired callsites:
+- `src/components/AdviceScreenComponents/RebalanceAdvices.js` — passes `userEmail`, `modelPortfolioModelId`, `storeModalName`, `calculatedPortfolioData?.uniqueId`
+- `src/components/AdviceScreenComponents/RebalanceAdviceContent.js` — same wiring
+
+**Files (this commit):**
+- `src/components/ModelPortfolioComponents/RecommendationSuccessModal.js`
+- `src/components/DdpiModal.js`
+- `src/components/AdviceScreenComponents/RebalanceAdvices.js`
+- `src/components/AdviceScreenComponents/RebalanceAdviceContent.js`
+- `src/utils/orderStatusUtils.js`
+- `../../aq_backend_github/Routes/modalPortfolioOrderPlace.js` (backend, deployed via scp + systemctl restart alphaquark.service)
+- `docs/CHANGELOG.md` (this entry)
+- `docs/SELL_AUTH_ARCHITECTURE.md` (DDPI sync row in § 9 quirks)
+
+---
+
 ### Fixed — Angel One EDIS "Some data is missing in posted Form" (DDPI modal + ccxt verify_dis)
 
 **Problem.** User with previously-active DDPI saw the "DDPI Inactive: Proceed with TPIN Mandate" modal pop up, and on tapping Proceed the CDSL WebView rejected with "Some data is missing in posted Form". DDPI was actually still active on the broker side — the failure was upstream in our verify-edis chain.

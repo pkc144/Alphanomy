@@ -1189,11 +1189,28 @@ export function AngleOneTpinModal({
         // the prompt entirely. handleProceed updates the DB flag +
         // closes the modal + reopens rebalance.
         if (response?.data?.edis === true) {
-          console.log('[DdpiModal] verify-edis edis=true → auto-skip prompt');
+          // 2026-05-07: SmartAPI's verifyDis returning AG1000 means
+          // DDPI is currently active at the broker (per Angel One
+          // SmartAPI docs). Pass `ddpiActive: true` to handleProceed
+          // so it ALSO sets `ddpi_enabled: true` in the DB —
+          // previously only `is_authorized_for_sell` was set, leaving
+          // `ddpi_enabled` stuck at false even though the broker
+          // considered DDPI active. The RebalanceModal sell-auth
+          // gate (line 1357-1364) reads `userDetails.ddpi_enabled`
+          // and `userDetails.is_authorized_for_sell` — until the
+          // latter was set, the gate would re-fire on every Place
+          // Order tap (TPIN session expires daily, but DDPI doesn't).
+          // Setting `ddpi_enabled: true` makes the gate skip
+          // permanently as long as DDPI stays active at the broker.
+          const isDdpiActive =
+            response?.data?.errorcode === 'AG1000' ||
+            (typeof response?.data?.message === 'string' &&
+              /already.+registered.+with.+CDSL/i.test(response.data.message));
+          console.log('[DdpiModal] verify-edis edis=true → auto-skip prompt, ddpiActive=', isDdpiActive);
           // Defer to next tick so React has settled state from the
           // setLocalEdisStatus call above before handleProceed mutates
           // the modal visibility.
-          setTimeout(() => handleProceed(), 0);
+          setTimeout(() => handleProceed(isDdpiActive), 0);
           return;
         }
         // edis=false but no usable form data — most commonly because
@@ -1271,7 +1288,13 @@ export function AngleOneTpinModal({
     setIsOpen(false); // Close the DDPI modal
   };
 
-  const handleProceed = async () => {
+  // 2026-05-07: handleProceed now accepts an optional `ddpiActive`
+  // flag. When true, also flips `ddpi_enabled` in the DB. Used by
+  // the auto-skip path (verifyDis AG1000 = DDPI active at broker).
+  // The TPIN-completion path (WebView returnURL hit) keeps the
+  // default `false` since TPIN doesn't imply DDPI is active —
+  // DDPI is a one-time setup, TPIN is a daily session.
+  const handleProceed = async (ddpiActive = false) => {
     try {
       await axios.put(
         `${server.server.baseUrl}api/update-edis-status`,
@@ -1279,6 +1302,7 @@ export function AngleOneTpinModal({
           uid: userDetails?._id,
           is_authorized_for_sell: true,
           user_broker: userDetails?.user_broker,
+          ...(ddpiActive ? { ddpi_enabled: true } : {}),
         },
         {
           headers: {

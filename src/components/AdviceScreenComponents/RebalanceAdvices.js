@@ -1060,6 +1060,13 @@ const angelOneApiKey = configData?.config?.REACT_APP_ANGEL_ONE_API_KEY;
           currentBroker={broker}
           // Fallback source for `variant` lookups on the rebalance/MP lane.
           originalStockDetails={lastSubmittedTrades}
+          // 2026-05-07: model context required by the per-row "Mark
+          // as Placed" inline editor for FAILURE rows. Backend looks
+          // up the rebalanceHistory entry by modelId + userEmail.
+          userEmail={userEmail}
+          modelId={modelPortfolioModelId}
+          modelName={storeModalName}
+          uniqueId={calculatedPortfolioData?.uniqueId}
         />
       )}
 

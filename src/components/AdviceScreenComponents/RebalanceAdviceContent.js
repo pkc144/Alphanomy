@@ -629,6 +629,12 @@ const RebalanceAdviceContent = React.memo(
             setOpenSucessModal={setOpenSucessModal}
             orderPlacementResponse={OrderPlacementResponse}
             currentBroker={broker}
+            // 2026-05-07: MP context for the per-row "Mark as Placed"
+            // inline editor on FAILURE rows.
+            userEmail={userEmail}
+            modelId={modelPortfolioModelId}
+            modelName={storeModalName}
+            uniqueId={calculatedPortfolioData?.uniqueId}
           />
         )}
 

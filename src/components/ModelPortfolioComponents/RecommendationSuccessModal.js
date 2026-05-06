@@ -12,7 +12,15 @@ import {
   Alert,
   Platform,
   ScrollView,
+  TextInput,
+  ActivityIndicator,
 } from 'react-native';
+import axios from 'axios';
+import Config from 'react-native-config';
+import server from '../../utils/serverConfig';
+import { generateToken } from '../../utils/SecurityTokenManager';
+import { getAdvisorSubdomain } from '../../utils/variantHelper';
+import Toast from 'react-native-toast-message';
 import {
   XIcon,
   ChevronDownIcon,
@@ -53,6 +61,20 @@ const RecommendationSuccessModal = ({
   // Optional — when absent, missing variants default to `"REGULAR"` (no
   // pill rendered). See utils/tradeVariant.js § resolveResultVariant.
   originalStockDetails,
+  // 2026-05-07: model-portfolio context required for the per-row
+  // "Mark as Placed" inline editor on FAILURE rows. The editor lets
+  // the user record a manual broker placement (cautionary listing,
+  // restricted scrip, low-funds rejections — situations where the
+  // automated retry will keep failing and the user has gone to the
+  // broker app/web platform directly). The PUT call to
+  // `/api/model-portfolio-db-update/manual-placement` requires
+  // userEmail + modelId to find the right rebalanceHistory entry.
+  // All four are optional — when missing, the inline editor still
+  // shows but the Confirm button is disabled with a clear message.
+  userEmail,
+  modelId,
+  modelName,
+  uniqueId,
 }) => {
   // Get dynamic colors from config
   const config = useConfig();
@@ -88,6 +110,150 @@ const RecommendationSuccessModal = ({
   }, []);
 
   const [showStocksDetails, setShowStocksDetails] = useState(false);
+
+  // 2026-05-07: per-row "Mark as Placed" inline editor state for
+  // FAILURE rows in the result modal. The user taps the row's
+  // "Mark as Placed" button → enters editing mode → can edit qty
+  // and price (defaults: qty = original, price = LTP/rebalance
+  // price/0) → tap Confirm → PUT
+  // /api/model-portfolio-db-update/manual-placement → on success
+  // we mutate orderResponse[idx] to flip the row's orderStatus
+  // from FAILURE → 'manually_placed' so it renders as success.
+  // - manualEditingIdx: index of the row in editor mode, or null
+  // - manualEditQty: qty input text (string for TextInput)
+  // - manualEditPrice: price input text
+  // - submittingManualIdx: which row's request is in flight
+  const [manualEditingIdx, setManualEditingIdx] = useState(null);
+  const [manualEditQty, setManualEditQty] = useState('');
+  const [manualEditPrice, setManualEditPrice] = useState('');
+  const [submittingManualIdx, setSubmittingManualIdx] = useState(null);
+
+  const startManualEdit = (idx, item) => {
+    const defaultQty = String(item?.quantity ?? item?.qty ?? '');
+    // Price preference: live LTP (item.lastTradedPrice / item.ltp / item.price) →
+    // calculated rebalance_price (set by ccxt at advice generation) → blank.
+    const defaultPrice = String(
+      item?.lastTradedPrice ||
+      item?.ltp ||
+      item?.price ||
+      item?.rebalance_price ||
+      item?.averagePrice ||
+      '',
+    );
+    setManualEditingIdx(idx);
+    setManualEditQty(defaultQty);
+    setManualEditPrice(defaultPrice);
+  };
+
+  const cancelManualEdit = () => {
+    setManualEditingIdx(null);
+    setManualEditQty('');
+    setManualEditPrice('');
+  };
+
+  const submitManualPlacement = async (idx, item) => {
+    if (submittingManualIdx !== null) return; // prevent double-tap
+    if (!userEmail || !modelId) {
+      Toast.show({
+        type: 'error',
+        text1: 'Cannot record placement',
+        text2: 'Model context missing — close and reopen the rebalance.',
+        visibilityTime: 4000,
+      });
+      return;
+    }
+    const qtyNum = Number(manualEditQty);
+    const priceNum = manualEditPrice === '' ? null : Number(manualEditPrice);
+    if (!Number.isFinite(qtyNum) || qtyNum <= 0) {
+      Toast.show({
+        type: 'error',
+        text1: 'Invalid quantity',
+        text2: 'Enter a positive number.',
+      });
+      return;
+    }
+    if (priceNum !== null && (!Number.isFinite(priceNum) || priceNum < 0)) {
+      Toast.show({
+        type: 'error',
+        text1: 'Invalid price',
+        text2: 'Leave blank or enter a non-negative number.',
+      });
+      return;
+    }
+    setSubmittingManualIdx(idx);
+    try {
+      await axios.put(
+        `${server.server.baseUrl}api/model-portfolio-db-update/manual-placement`,
+        {
+          userEmail,
+          modelId,
+          modelName,
+          uniqueId,
+          user_broker: currentBroker,
+          symbol: item?.symbol || item?.tradingSymbol,
+          exchange: item?.exchange,
+          transactionType: item?.transactionType,
+          actualQty: qtyNum,
+          actualPrice: priceNum,
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Advisor-Subdomain':
+              config?.config?.REACT_APP_HEADER_NAME ||
+              config?.subdomain ||
+              getAdvisorSubdomain(),
+            'aq-encrypted-key': generateToken(
+              Config.REACT_APP_AQ_KEYS,
+              Config.REACT_APP_AQ_SECRET,
+            ),
+          },
+        },
+      );
+      // Mutate the row locally — flip from FAILURE to 'manually_placed'
+      // and stamp the actuals so the UI reflects the user's input.
+      // 'manually_placed' is in PENDING_STATUSES per orderStatusUtils
+      // (added 2026-05-07), which means isOrderPending() returns true
+      // → the row now counts toward `successCount` and renders with
+      // the success card style.
+      setOrderResponse((prev) => {
+        if (!Array.isArray(prev)) return prev;
+        const next = prev.slice();
+        if (next[idx]) {
+          next[idx] = {
+            ...next[idx],
+            orderStatus: 'manually_placed',
+            orderPlacement: 'success',
+            quantity: qtyNum,
+            ...(priceNum !== null ? { price: priceNum } : {}),
+            message_aq: 'Manually placed',
+            orderStatusMessage: 'Marked as manually placed.',
+          };
+        }
+        return next;
+      });
+      cancelManualEdit();
+      Toast.show({
+        type: 'success',
+        text1: 'Marked as placed',
+        text2: `${item?.symbol || item?.tradingSymbol} recorded.`,
+        visibilityTime: 3000,
+      });
+    } catch (e) {
+      console.error('[manual-placement] error:', e?.response?.data || e?.message);
+      Toast.show({
+        type: 'error',
+        text1: 'Could not save',
+        text2:
+          e?.response?.data?.message ||
+          e?.message ||
+          'Try again in a moment.',
+        visibilityTime: 4000,
+      });
+    } finally {
+      setSubmittingManualIdx(null);
+    }
+  };
 
   const getFormattedDate = () => {
     const date = new Date();
@@ -366,6 +532,163 @@ const RecommendationSuccessModal = ({
               }}>
                 {failureReason}
               </Text>
+            </View>
+          </View>
+        ) : null}
+
+        {/* 2026-05-07: per-row "Mark as Placed" inline editor.
+         *
+         * Shown for ANY rejection (cautionary listing, restricted
+         * scrip, low-funds, broker session expired, etc.) — when
+         * automated retry can't help, the user goes to the broker
+         * directly, places the trade, comes back here, taps Mark as
+         * Placed, edits actual qty/price (defaults populated from
+         * the original advice), and confirms. Backend records to
+         * adviceEntry.status='executed' + manually_placed_at +
+         * actual_quantity + actual_price (see
+         * Routes/modalPortfolioOrderPlace.js PUT /manual-placement).
+         *
+         * Only renders when the row is REJECTED (not pending or
+         * success) and not already promoted via local state.
+         */}
+        {/* Gate the manual-placement UI on `modelId` — this prop is
+         * only supplied by MP flows (RebalanceAdvices /
+         * RebalanceAdviceContent). The bespoke flow (AddtoCartModal)
+         * doesn't pass it, so the inline editor is hidden there
+         * (bespoke uses its own /api/recommendation manually_placed
+         * pattern in StockAdvices.js).
+         */}
+        {modelId && !isSuccessStatus && manualEditingIdx !== index ? (
+          <TouchableOpacity
+            onPress={() => startManualEdit(index, item)}
+            style={{
+              marginTop: 4,
+              marginBottom: 4,
+              alignSelf: 'flex-start',
+              paddingHorizontal: 10,
+              paddingVertical: 6,
+              borderRadius: 6,
+              borderWidth: 1,
+              borderColor: '#0056B7',
+              backgroundColor: '#EFF6FF',
+            }}>
+            <Text
+              style={{
+                color: '#0056B7',
+                fontSize: 11,
+                fontFamily: 'Poppins-Medium',
+              }}>
+              Mark as Placed (manual)
+            </Text>
+          </TouchableOpacity>
+        ) : null}
+
+        {modelId && !isSuccessStatus && manualEditingIdx === index ? (
+          <View style={{
+            marginTop: 6,
+            padding: 10,
+            backgroundColor: '#F0F9FF',
+            borderWidth: 1,
+            borderColor: '#BFDBFE',
+            borderRadius: 8,
+          }}>
+            <Text style={{
+              color: '#0F172A',
+              fontSize: 11,
+              fontFamily: 'Poppins-Medium',
+              marginBottom: 6,
+            }}>
+              Confirm what you actually placed at the broker:
+            </Text>
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+              <Text style={{ width: 60, color: '#475569', fontSize: 11, fontFamily: 'Poppins-Regular' }}>
+                Quantity
+              </Text>
+              <TextInput
+                value={manualEditQty}
+                onChangeText={setManualEditQty}
+                keyboardType="numeric"
+                editable={submittingManualIdx === null}
+                style={{
+                  flex: 1,
+                  borderWidth: 1,
+                  borderColor: '#CBD5E1',
+                  borderRadius: 6,
+                  paddingHorizontal: 8,
+                  paddingVertical: 6,
+                  fontSize: 12,
+                  fontFamily: 'Poppins-Regular',
+                  backgroundColor: '#FFF',
+                  color: '#0F172A',
+                }}
+                placeholder="e.g. 100"
+                placeholderTextColor="#94A3B8"
+              />
+            </View>
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+              <Text style={{ width: 60, color: '#475569', fontSize: 11, fontFamily: 'Poppins-Regular' }}>
+                Price
+              </Text>
+              <TextInput
+                value={manualEditPrice}
+                onChangeText={setManualEditPrice}
+                keyboardType="numeric"
+                editable={submittingManualIdx === null}
+                style={{
+                  flex: 1,
+                  borderWidth: 1,
+                  borderColor: '#CBD5E1',
+                  borderRadius: 6,
+                  paddingHorizontal: 8,
+                  paddingVertical: 6,
+                  fontSize: 12,
+                  fontFamily: 'Poppins-Regular',
+                  backgroundColor: '#FFF',
+                  color: '#0F172A',
+                }}
+                placeholder="₹ per share (optional)"
+                placeholderTextColor="#94A3B8"
+              />
+            </View>
+
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
+              <TouchableOpacity
+                onPress={cancelManualEdit}
+                disabled={submittingManualIdx !== null}
+                style={{
+                  paddingHorizontal: 12,
+                  paddingVertical: 6,
+                  marginRight: 8,
+                  borderRadius: 6,
+                  borderWidth: 1,
+                  borderColor: '#CBD5E1',
+                  opacity: submittingManualIdx !== null ? 0.5 : 1,
+                }}>
+                <Text style={{ color: '#475569', fontSize: 11, fontFamily: 'Poppins-Medium' }}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => submitManualPlacement(index, item)}
+                disabled={submittingManualIdx !== null}
+                style={{
+                  paddingHorizontal: 14,
+                  paddingVertical: 6,
+                  borderRadius: 6,
+                  backgroundColor: '#0056B7',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  opacity: submittingManualIdx !== null ? 0.7 : 1,
+                }}>
+                {submittingManualIdx === index ? (
+                  <ActivityIndicator size="small" color="#FFF" style={{ marginRight: 6 }} />
+                ) : null}
+                <Text style={{ color: '#FFF', fontSize: 11, fontFamily: 'Poppins-Medium' }}>
+                  {submittingManualIdx === index ? 'Saving…' : 'Confirm Placed'}
+                </Text>
+              </TouchableOpacity>
             </View>
           </View>
         ) : null}
