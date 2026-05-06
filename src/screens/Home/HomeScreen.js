@@ -124,6 +124,7 @@ const HomeScreen = ({ }) => {
     videos,
     planList,
     configData,
+    userDetails,
   } = useTrade();
   // console.log('configData', configData);
 
@@ -138,6 +139,12 @@ const HomeScreen = ({ }) => {
   const auth = getAuth();
   const user = auth.currentUser;
   const userEmail = user?.email;
+  // Resolve a displayable user name (alphanomy variant uses this for the
+  // header greeting). Backend-stored `userDetails.name` is preferred (full
+  // legal name); Firebase `user.displayName` is the fallback (Google /
+  // Apple sign-in surface). Email-derived first-name remains the final
+  // fallback, handled inside the variant presentation.
+  const userName = userDetails?.name || user?.displayName || '';
   const [isLoading, setIsLoading] = useState(true);
   // Phase E prep (2026-05-01): tab + 7-overlay state consolidated behind a
   // single hook with backward-compat boolean shims; modal visibility
@@ -1682,6 +1689,9 @@ const HomeScreen = ({ }) => {
     tickers, pnlSummary,
     // Variant-facing plan summaries.
     heroPlan, bespokePlan,
+    // Variant-facing user name for the greeting (full name preferred over
+    // email-derived first-name fallback).
+    userName,
   };
 
   return <Presentation home={home} />;

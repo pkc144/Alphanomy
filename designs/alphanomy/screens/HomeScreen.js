@@ -18,10 +18,17 @@
  *   - `bespokePlan`    — `useHomePlanSummary` (top bespoke plan from the
  *                        catalog endpoint)
  *
- * Each live source falls back to FALLBACK_* constants below when the
- * data isn't ready yet (boot, no auth, no provider mounted, empty
- * catalog). The two "View All" links wire to the container's existing
- * overlay flags (`setSeeAllMPplan` / `setSeeAllBespokeplan`).
+ * Each live source renders only when populated — no hardcoded placeholder
+ * copy. Empty/null sources hide their section entirely:
+ *   - empty/warming `tickers` → ticker strip omitted
+ *   - null `heroPlan`         → Model Portfolios section omitted
+ *   - null `bespokePlan`      → Top Bespoke Plans section omitted
+ * The P&L hero always renders — a connected broker with no positions and
+ * a missing broker both legitimately read ₹0.00, so suppressing it would
+ * conflate two real states.
+ *
+ * The two "View All" links wire to the container's existing overlay flags
+ * (`setSeeAllMPplan` / `setSeeAllBespokeplan`).
  *
  * Receives the same `home` prop bag as designs/default/screens/HomeScreen.js
  * — additional fields (tickers / pnlSummary / heroPlan / bespokePlan) are
@@ -29,6 +36,7 @@
  */
 
 import React from 'react';
+import { useNavigation } from '@react-navigation/native';
 import {
     View,
     Text,
@@ -40,7 +48,7 @@ import {
     RefreshControl,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
-import { Bell, ArrowUpRight } from 'lucide-react-native';
+import { ArrowUpRight } from 'lucide-react-native';
 import {
     DEFAULT_COLORS as COLORS,
     GRADIENTS,
@@ -49,66 +57,18 @@ import {
     DEFAULT_RADII as RADII,
     DEFAULT_SHADOWS as SHADOWS,
 } from '../tokens';
+import AppHeader from './_AppHeader';
 
-// Fallback ticker rows used when the container hasn't supplied live data
-// yet (e.g. WebSocket warmup, no broker connected). Same shape the
-// container's `useHomeMarketSummary` hook produces.
-const FALLBACK_TICKERS = [
-    { name: 'Nifty 50', value: '23,995.7', change: '▼ 97.00 (0.40%)', dir: 'down' },
-    { name: 'Sensex', value: '76,886.9', change: '▼ 416.72 (0.54%)', dir: 'down' },
-    { name: 'BankNifty', value: '55,400', change: '▼ 0.8%', dir: 'down' },
-];
-
-// Fallback plan rows used when the container hasn't supplied live catalog
-// data yet (boot, no advisor config yet, or empty catalog response). Same
-// shape `useHomePlanSummary` produces.
-const FALLBACK_HERO = {
-    badgeTop: 'TOP',
-    badgeBot: '100',
-    name: 'Alpha Growth Plan',
-    price: '₹ 20.00',
-    priceSuffix: '/mo',
-    freq: 'Monthly',
-    minInvest: '₹50,000',
-    volatility: 'Medium',
-    cagr: '18.4%',
-};
-
-const FALLBACK_BESPOKE = {
-    name: 'Momentum Weekly',
-    priceOrig: '₹ 3,487',
-    priceNow: '₹ 2,999',
-    validity: 'Monthly validity',
-    freq: 'Monthly',
-    saveBadge: 'Save 14%',
-};
-
-const todayLabel = () => {
-    try {
-        const d = new Date();
-        return d.toLocaleDateString('en-GB', {
-            weekday: 'short',
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric',
-        });
-    } catch {
-        return '';
-    }
-};
-
-const initialsFromEmail = (email = '') => {
-    const local = (email || '').split('@')[0] || 'You';
-    const parts = local.split(/[._-]+/).filter(Boolean);
-    if (parts.length >= 2) {return (parts[0][0] + parts[1][0]).toUpperCase();}
-    return (local[0] || 'Y').toUpperCase() + (local[1] || '').toUpperCase();
-};
-
-const greetingFromEmail = (email = '') => {
-    const local = (email || '').split('@')[0] || 'there';
-    const first = local.split(/[._-]+/)[0] || local;
-    return first.charAt(0).toUpperCase() + first.slice(1);
-};
+// All sections render strictly from the `home` prop bag supplied by the
+// container (`src/screens/Home/HomeScreen.js`). When a live data source is
+// empty/null the corresponding section is omitted entirely — no hardcoded
+// placeholder copy. Empty states the user might encounter:
+//   - tickers: WebSocket warmup or no MarketDataContext provider → strip hidden
+//   - heroPlan: catalog endpoint returned no model portfolios → MP card hidden
+//   - bespokePlan: catalog returned no bespoke plans → bespoke card hidden
+//   - pnlSummary: no broker connected → P&L hero shows ₹0.00 (legitimate state,
+//                 not a fallback — a connected broker with zero positions
+//                 looks the same)
 
 const HomeScreenPresentation = ({ home }) => {
     const {
@@ -122,22 +82,26 @@ const HomeScreenPresentation = ({ home }) => {
         pnlSummary,
         heroPlan,
         bespokePlan,
+        userName,
     } = home || {};
 
-    // Live plan rows when present; fallback to design-preview entries.
-    const hero = heroPlan || FALLBACK_HERO;
-    const bespoke = bespokePlan || FALLBACK_BESPOKE;
+    // Header (greeting + ticker strip) is delegated to the shared `<AppHeader>`
+    // helper so all alphanomy screens — Home / Order / ModelPortfolio /
+    // Portfolio — render an identical top bar. Greeting/initials derivation
+    // and ticker rendering live in `_AppHeader.js`; this screen just supplies
+    // the live data via props.
 
-    const greeting = greetingFromEmail(userEmail || config?.advisorRaCode || '');
-    const initials = initialsFromEmail(userEmail || config?.advisorRaCode || '');
-
-    // Live tickers when present + populated; fallback to the design-preview
-    // values during WebSocket warmup so the strip never looks empty.
-    const hasLiveTickers =
-        Array.isArray(tickers) &&
-        tickers.length > 0 &&
-        tickers.some((t) => t?.value && t.value !== '—');
-    const tickerRows = hasLiveTickers ? tickers : FALLBACK_TICKERS;
+    // Plan-card actions (View More + Subscribe on both cards) navigate to the
+    // `Plans` tab — that's where `ModelPortfolioScreen` lives, which already
+    // owns the full subscription / `MPInvestNowModal` / Razorpay flow. We
+    // pass `{ openPlan, kind }` route params so a future MP-screen update can
+    // auto-open the payment modal when arriving from Home (today the user
+    // taps Subscribe again on the plan card; safe MVP).
+    const navigation = useNavigation();
+    const goToPlans = (params) => {
+        if (!navigation || typeof navigation.navigate !== 'function') return;
+        navigation.navigate('Plans', params || undefined);
+    };
 
     // Portfolio summary — when the user has no broker / no holdings the
     // hook returns all zeros, which is the right state to show
@@ -161,67 +125,14 @@ const HomeScreenPresentation = ({ home }) => {
         <SafeAreaView style={styles.safe}>
             <StatusBar barStyle="dark-content" backgroundColor={COLORS.surface.card} />
 
-            {/* ── HEADER (sticky-ish; lives above the scrollview) ── */}
-            <View style={styles.header}>
-                <View style={styles.headRow1}>
-                    <View style={styles.logoWrap}>
-                        <LinearGradient
-                            colors={GRADIENTS.brand}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 1 }}
-                            style={styles.headMark}
-                        >
-                            <View style={styles.headBolt} />
-                        </LinearGradient>
-                        <View>
-                            <Text style={styles.greeting}>Hello, {greeting} 👋</Text>
-                            <Text style={styles.subDate}>{todayLabel()}</Text>
-                        </View>
-                    </View>
-                    <View style={styles.headActions}>
-                        <View style={styles.iconCircle}>
-                            <Bell size={14} color={COLORS.text.secondary} strokeWidth={1.8} />
-                            <View style={styles.notifDot} />
-                        </View>
-                        <LinearGradient
-                            colors={GRADIENTS.brand}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 1 }}
-                            style={styles.avatarCircle}
-                        >
-                            <Text style={styles.avatarText}>{initials}</Text>
-                        </LinearGradient>
-                    </View>
-                </View>
-                <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    style={styles.tickerStrip}
-                    contentContainerStyle={{ gap: 7, paddingRight: SPACING.lg }}
-                >
-                    {tickerRows.map((t) => (
-                        <View key={t.name} style={styles.tickerChip}>
-                            <Text style={styles.tickerName}>{t.name}</Text>
-                            <Text style={styles.tickerVal}>{t.value}</Text>
-                            <Text
-                                style={[
-                                    styles.tickerChg,
-                                    {
-                                        color:
-                                            t.dir === 'up'
-                                                ? COLORS.status.success
-                                                : t.dir === 'down'
-                                                ? COLORS.status.danger
-                                                : COLORS.text.muted,
-                                    },
-                                ]}
-                            >
-                                {t.change}
-                            </Text>
-                        </View>
-                    ))}
-                </ScrollView>
-            </View>
+            {/* Shared alphanomy top bar — same component used by OrderScreen,
+                ModelPortfolioScreen, PortfolioScreen. */}
+            <AppHeader
+                userEmail={userEmail}
+                userName={userName}
+                config={config}
+                tickers={tickers}
+            />
 
             {/* ── BODY ── */}
             <ScrollView
@@ -259,116 +170,146 @@ const HomeScreenPresentation = ({ home }) => {
                     </View>
                 </LinearGradient>
 
-                {/* Model Portfolios section */}
-                <View>
-                    <View style={styles.secHd}>
-                        <View style={{ flex: 1 }}>
-                            <Text style={styles.secTitle}>Model Portfolios</Text>
-                            <Text style={styles.secSub}>Ranked by user feedback</Text>
-                        </View>
-                        <TouchableOpacity onPress={() => setSeeAllMPplan(true)} activeOpacity={0.7}>
-                            <Text style={styles.secLink}>View All</Text>
-                        </TouchableOpacity>
-                    </View>
-
-                    <LinearGradient
-                        colors={GRADIENTS.brand}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        style={styles.planHero}
-                    >
-                        <View style={styles.planHeroOrb} />
-                        <View style={styles.planHeroTopRow}>
-                            <View style={styles.badgeTop}>
-                                <Text style={styles.badgeTopText}>{hero.badgeTop}</Text>
-                                <Text style={styles.badgeTopText}>{hero.badgeBot}</Text>
+                {/* Model Portfolios section — rendered only when the catalog
+                    endpoint has returned at least one MP plan. */}
+                {heroPlan ? (
+                    <View>
+                        <View style={styles.secHd}>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.secTitle}>Model Portfolios</Text>
+                                <Text style={styles.secSub}>Ranked by user feedback</Text>
                             </View>
-                            <Text style={styles.planNameW}>{hero.name}</Text>
-                        </View>
-                        <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-                            <Text style={styles.planPriceW}>{hero.price}</Text>
-                            <Text style={styles.planPriceSuffix}> {hero.priceSuffix}</Text>
-                        </View>
-                        <View style={styles.freqBadgeW}>
-                            <Text style={styles.freqBadgeWText}>{hero.freq}</Text>
-                        </View>
-                        <View style={styles.planMeta}>
-                            <View style={styles.planMetaItem}>
-                                <Text style={styles.planMetaLbl}>Min. Invest</Text>
-                                <Text style={styles.planMetaVal}>{hero.minInvest}</Text>
-                            </View>
-                            <View style={styles.planMetaItem}>
-                                <Text style={styles.planMetaLbl}>Volatility</Text>
-                                <Text style={styles.planMetaVal}>{hero.volatility}</Text>
-                            </View>
-                            <View style={styles.planMetaItem}>
-                                <Text style={styles.planMetaLbl}>CAGR</Text>
-                                <Text style={[styles.planMetaVal, { color: '#CAC7F9' }]}>
-                                    {hero.cagr}
-                                </Text>
-                            </View>
-                        </View>
-                        <View style={styles.planBtnRow}>
-                            <TouchableOpacity style={styles.btnViewW} activeOpacity={0.85}>
-                                <Text style={styles.btnViewWText}>View More</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity style={styles.btnSubOutline} activeOpacity={0.85}>
-                                <Text style={styles.btnSubOutlineText}>Subscribe</Text>
+                            <TouchableOpacity onPress={() => setSeeAllMPplan(true)} activeOpacity={0.7}>
+                                <Text style={styles.secLink}>View All</Text>
                             </TouchableOpacity>
                         </View>
-                    </LinearGradient>
-                </View>
 
-                {/* Top Bespoke Plans section */}
-                <View>
-                    <View style={styles.secHd}>
-                        <View style={{ flex: 1 }}>
-                            <Text style={styles.secTitle}>Top Bespoke Plans</Text>
-                            <Text style={styles.secSub}>Ranked by user feedback</Text>
-                        </View>
-                        <TouchableOpacity onPress={() => setSeeAllBespokeplan(true)} activeOpacity={0.7}>
-                            <Text style={styles.secLink}>View All</Text>
-                        </TouchableOpacity>
-                    </View>
-
-                    <View style={styles.planCard}>
-                        {bespoke.saveBadge ? (
-                            <View style={styles.planSaveBadge}>
-                                <Text style={styles.planSaveBadgeText}>{bespoke.saveBadge}</Text>
+                        <LinearGradient
+                            colors={GRADIENTS.brand}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                            style={styles.planHero}
+                        >
+                            <View style={styles.planHeroOrb} />
+                            <View style={styles.planHeroTopRow}>
+                                <View style={styles.badgeTop}>
+                                    <Text style={styles.badgeTopText}>{heroPlan.badgeTop}</Text>
+                                    <Text style={styles.badgeTopText}>{heroPlan.badgeBot}</Text>
+                                </View>
+                                <Text style={styles.planNameW}>{heroPlan.name}</Text>
                             </View>
-                        ) : null}
-                        <View style={styles.planTopAccent} />
-                        <View style={styles.planTopRow}>
-                            <Text style={styles.planName}>{bespoke.name}</Text>
-                            <View style={{ alignItems: 'flex-end' }}>
-                                {bespoke.priceOrig ? (
-                                    <Text style={styles.planPriceOrig}>{bespoke.priceOrig}</Text>
-                                ) : null}
-                                <Text style={styles.planPriceNow}>{bespoke.priceNow}</Text>
-                                <Text style={styles.planValidity}>{bespoke.validity}</Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                                <Text style={styles.planPriceW}>{heroPlan.price}</Text>
+                                <Text style={styles.planPriceSuffix}> {heroPlan.priceSuffix}</Text>
                             </View>
-                        </View>
-                        <View style={styles.freqBadge}>
-                            <Text style={styles.freqBadgeText}>{bespoke.freq}</Text>
-                        </View>
-                        <View style={styles.planBtnRow}>
-                            <TouchableOpacity style={styles.btnView} activeOpacity={0.85}>
-                                <Text style={styles.btnViewText}>View More</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity activeOpacity={0.9} style={styles.btnSubWrap}>
-                                <LinearGradient
-                                    colors={GRADIENTS.brand}
-                                    start={{ x: 0, y: 0 }}
-                                    end={{ x: 1, y: 1 }}
-                                    style={styles.btnSub}
+                            <View style={styles.freqBadgeW}>
+                                <Text style={styles.freqBadgeWText}>{heroPlan.freq}</Text>
+                            </View>
+                            <View style={styles.planMeta}>
+                                <View style={styles.planMetaItem}>
+                                    <Text style={styles.planMetaLbl}>Min. Invest</Text>
+                                    <Text style={styles.planMetaVal}>{heroPlan.minInvest}</Text>
+                                </View>
+                                <View style={styles.planMetaItem}>
+                                    <Text style={styles.planMetaLbl}>Volatility</Text>
+                                    <Text style={styles.planMetaVal}>{heroPlan.volatility}</Text>
+                                </View>
+                                <View style={styles.planMetaItem}>
+                                    <Text style={styles.planMetaLbl}>CAGR</Text>
+                                    <Text style={[styles.planMetaVal, { color: '#CAC7F9' }]}>
+                                        {heroPlan.cagr}
+                                    </Text>
+                                </View>
+                            </View>
+                            <View style={styles.planBtnRow}>
+                                <TouchableOpacity
+                                    style={styles.btnViewW}
+                                    activeOpacity={0.85}
+                                    onPress={() => goToPlans({ kind: 'mp' })}
                                 >
-                                    <Text style={styles.btnSubText}>Subscribe Now</Text>
-                                    <ArrowUpRight size={14} color={COLORS.text.inverse} strokeWidth={2.2} />
-                                </LinearGradient>
+                                    <Text style={styles.btnViewWText}>View More</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={styles.btnSubOutline}
+                                    activeOpacity={0.85}
+                                    onPress={() =>
+                                        goToPlans({ kind: 'mp', subscribe: true, planName: heroPlan.name })
+                                    }
+                                >
+                                    <Text style={styles.btnSubOutlineText}>Subscribe</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </LinearGradient>
+                    </View>
+                ) : null}
+
+                {/* Top Bespoke Plans section — rendered only when the catalog
+                    endpoint has returned at least one bespoke plan. */}
+                {bespokePlan ? (
+                    <View>
+                        <View style={styles.secHd}>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.secTitle}>Top Bespoke Plans</Text>
+                                <Text style={styles.secSub}>Ranked by user feedback</Text>
+                            </View>
+                            <TouchableOpacity onPress={() => setSeeAllBespokeplan(true)} activeOpacity={0.7}>
+                                <Text style={styles.secLink}>View All</Text>
                             </TouchableOpacity>
                         </View>
+
+                        <View style={styles.planCard}>
+                            {bespokePlan.saveBadge ? (
+                                <View style={styles.planSaveBadge}>
+                                    <Text style={styles.planSaveBadgeText}>{bespokePlan.saveBadge}</Text>
+                                </View>
+                            ) : null}
+                            <View style={styles.planTopAccent} />
+                            <View style={styles.planTopRow}>
+                                <Text style={styles.planName}>{bespokePlan.name}</Text>
+                                <View style={{ alignItems: 'flex-end' }}>
+                                    {bespokePlan.priceOrig ? (
+                                        <Text style={styles.planPriceOrig}>{bespokePlan.priceOrig}</Text>
+                                    ) : null}
+                                    <Text style={styles.planPriceNow}>{bespokePlan.priceNow}</Text>
+                                    <Text style={styles.planValidity}>{bespokePlan.validity}</Text>
+                                </View>
+                            </View>
+                            <View style={styles.freqBadge}>
+                                <Text style={styles.freqBadgeText}>{bespokePlan.freq}</Text>
+                            </View>
+                            <View style={styles.planBtnRow}>
+                                <TouchableOpacity
+                                    style={styles.btnView}
+                                    activeOpacity={0.85}
+                                    onPress={() => goToPlans({ kind: 'bespoke' })}
+                                >
+                                    <Text style={styles.btnViewText}>View More</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    activeOpacity={0.9}
+                                    style={styles.btnSubWrap}
+                                    onPress={() =>
+                                        goToPlans({
+                                            kind: 'bespoke',
+                                            subscribe: true,
+                                            planName: bespokePlan.name,
+                                        })
+                                    }
+                                >
+                                    <LinearGradient
+                                        colors={GRADIENTS.brand}
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 1, y: 1 }}
+                                        style={styles.btnSub}
+                                    >
+                                        <Text style={styles.btnSubText}>Subscribe Now</Text>
+                                        <ArrowUpRight size={14} color={COLORS.text.inverse} strokeWidth={2.2} />
+                                    </LinearGradient>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
                     </View>
-                </View>
+                ) : null}
             </ScrollView>
         </SafeAreaView>
     );
@@ -379,103 +320,7 @@ const styles = StyleSheet.create({
     flex: { flex: 1 },
     body: { padding: SPACING.lg - 2, gap: SPACING.lg - 2, paddingBottom: SPACING.huge },
 
-    // ── HEADER ──
-    header: {
-        backgroundColor: COLORS.surface.card,
-        paddingHorizontal: SPACING.lg + 2,
-        paddingTop: SPACING.xs,
-        paddingBottom: SPACING.md,
-        borderBottomWidth: 1,
-        borderBottomColor: 'rgba(18,70,240,0.06)',
-    },
-    headRow1: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingTop: SPACING.xs,
-        paddingBottom: SPACING.sm + 2,
-    },
-    logoWrap: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm + 2 },
-    headMark: {
-        width: 36,
-        height: 36,
-        borderRadius: 11,
-        alignItems: 'center',
-        justifyContent: 'center',
-        ...SHADOWS.cta,
-        shadowOpacity: 0.30,
-    },
-    headBolt: {
-        width: 11,
-        height: 16,
-        backgroundColor: '#FFFFFF',
-        transform: [{ skewY: '-12deg' }],
-        borderRadius: 2,
-    },
-    greeting: { ...TYPOGRAPHY.bodyEmphasis, fontSize: 15, color: COLORS.text.primary },
-    subDate: { ...TYPOGRAPHY.caption, fontSize: 10, color: COLORS.text.muted, marginTop: 1 },
-
-    headActions: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
-    iconCircle: {
-        width: 35,
-        height: 35,
-        borderRadius: 18,
-        backgroundColor: COLORS.surface.subtle,
-        borderWidth: 1,
-        borderColor: COLORS.border.default,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    notifDot: {
-        position: 'absolute',
-        top: 7,
-        right: 7,
-        width: 7,
-        height: 7,
-        borderRadius: 4,
-        backgroundColor: COLORS.status.danger,
-        borderWidth: 1.5,
-        borderColor: COLORS.surface.card,
-    },
-    avatarCircle: {
-        width: 35,
-        height: 35,
-        borderRadius: 18,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    avatarText: {
-        ...TYPOGRAPHY.bodyEmphasis,
-        fontSize: 11.5,
-        color: COLORS.text.inverse,
-        letterSpacing: 0.5,
-        fontWeight: '800',
-    },
-
-    tickerStrip: { paddingBottom: 2 },
-    tickerChip: {
-        backgroundColor: COLORS.surface.subtle,
-        borderWidth: 1,
-        borderColor: COLORS.border.default,
-        borderRadius: 11,
-        paddingHorizontal: SPACING.md,
-        paddingVertical: 7,
-    },
-    tickerName: {
-        fontSize: 9,
-        fontWeight: '600',
-        color: COLORS.text.secondary,
-        letterSpacing: 0.4,
-        textTransform: 'uppercase',
-    },
-    tickerVal: {
-        fontSize: 12.5,
-        fontWeight: '700',
-        color: COLORS.text.primary,
-        marginVertical: 2,
-        letterSpacing: -0.2,
-    },
-    tickerChg: { fontSize: 9, fontWeight: '700' },
+    // Header styles live in `_AppHeader.js` — this screen only owns body content.
 
     // ── P&L HERO ──
     plHero: {

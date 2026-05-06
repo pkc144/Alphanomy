@@ -80,6 +80,7 @@ const FALLBACK_PLANS = {
 
 const ModelPortfolioScreenAlphanomy = ({ viewModel, actions, home }) => {
     const userEmail = home?.userEmail || viewModel?.userEmail || '';
+    const userName = home?.userName || viewModel?.userName || '';
     const config = home?.config || viewModel?.config;
     const tickers = home?.tickers || viewModel?.tickers;
     // Live plan rows from container; fall back to design-preview entries
@@ -96,7 +97,12 @@ const ModelPortfolioScreenAlphanomy = ({ viewModel, actions, home }) => {
 
     return (
         <SafeAreaView style={styles.safe}>
-            <AppHeader userEmail={userEmail} config={config} tickers={tickers} />
+            <AppHeader
+                userEmail={userEmail}
+                userName={userName}
+                config={config}
+                tickers={tickers}
+            />
 
             <ScrollView
                 style={styles.flex}

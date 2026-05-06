@@ -187,6 +187,7 @@ const PortfolioScreenAlphanomy = ({ portfolio }) => {
 
         // Variant extras (graceful fallback if absent)
         userEmail,
+        userName,
         config,
         tickers,
 
@@ -212,7 +213,12 @@ const PortfolioScreenAlphanomy = ({ portfolio }) => {
     return (
         <GestureHandlerRootView style={{ flex: 1 }}>
             <SafeAreaView style={styles.safe}>
-                <AppHeader userEmail={userEmail} config={config} tickers={tickers} />
+                <AppHeader
+                    userEmail={userEmail}
+                    userName={userName}
+                    config={config}
+                    tickers={tickers}
+                />
 
                 <View {...panResponder.panHandlers} style={styles.body}>
                     <PortfolioHero

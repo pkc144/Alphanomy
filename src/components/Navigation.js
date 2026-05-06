@@ -51,6 +51,8 @@ import {
   Home,
   ChevronRight,
   AlignEndHorizontal,
+  Clipboard,
+  User,
 } from 'lucide-react-native';
 import HomeScreen from '../screens/Home/HomeScreen';
 import PhoneNumberScreen from '../screens/Authentication/PhoneNumberScreen';
@@ -178,19 +180,22 @@ const {
   tabIconColor,
 } = APP_VARIANTS[validVariant];
 const CustomTabBarIcon = ({name, focused}) => {
+  // Bottom-nav icons mirror the alphanomy-improved.html mockup's app
+  // chrome: house / file / briefcase / clipboard / user. The legacy
+  // mapping (Notebook / BookmarkPlus / Newspaper) predates the rebrand.
   let IconComponent;
   if (name === 'Home') {
     IconComponent = Home;
   } else if (name === 'More') {
-    IconComponent = BookmarkPlus;
+    IconComponent = User;
   } else if (name === 'Orders') {
-    IconComponent = Notebook;
+    IconComponent = FileText;
   } else if (name === 'Portfolio') {
     IconComponent = Briefcase;
   } else if (name === 'News') {
     IconComponent = Newspaper;
   } else if (name === 'Plans') {
-    IconComponent = Newspaper;
+    IconComponent = Clipboard;
   }
   return (
     <View

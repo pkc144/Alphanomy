@@ -25,6 +25,7 @@ import {fetchFunds} from '../../FunctionCall/fetchFunds';
 import portfolioEvents, {PORTFOLIO_EVENTS} from '../../utils/portfolioEvents';
 import {isOrderRejected, isOrderSuccess, isOrderPending} from '../../utils/orderStatusUtils';
 import {useComponent} from '../../design/useDesign';
+import useHomeMarketSummary from '../Home/hooks/useHomeMarketSummary';
 import styles from './PortfolioScreen.styles';
 
 const PortfolioScreen = () => {
@@ -52,6 +53,9 @@ const PortfolioScreen = () => {
   const auth = getAuth();
   const user = auth.currentUser;
   const userEmail = user?.email;
+  // Variant-facing user name + tickers for the alphanomy `_AppHeader`.
+  const userName = userDetails?.name || user?.displayName || '';
+  const { tickers } = useHomeMarketSummary();
 
   const [brokerStatus, setBrokerStatus] = useState(
     userDetails ? userDetails.connect_broker_status : null,
@@ -1500,7 +1504,9 @@ const PortfolioScreen = () => {
 
     // Variant-facing additions (alphanomy reads these; default ignores them).
     userEmail,
+    userName,
     config,
+    tickers,
 
     // Modal
     modalVisible, scoreSymbol, setModalVisible,

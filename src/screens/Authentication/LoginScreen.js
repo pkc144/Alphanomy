@@ -59,13 +59,11 @@ const LoginScreen = () => {
     const [isPasswordVisible, setIsPasswordVisible] = useState(false);
     const navigation = useNavigation();
 
-    const WEB_CLIENT_ID =
-        config?.googleWebClientId ||
-        '892331696104-e26pu9iotqrjk1o6jq4ifd4e95fasil1.apps.googleusercontent.com';
-
     React.useEffect(() => {
-        GoogleSignin.configure({ webClientId: WEB_CLIENT_ID });
-    }, [WEB_CLIENT_ID]);
+        if (config?.googleWebClientId) {
+            GoogleSignin.configure({ webClientId: config.googleWebClientId });
+        }
+    }, [config?.googleWebClientId]);
 
     const storeLoginTime = async () => {
         try {

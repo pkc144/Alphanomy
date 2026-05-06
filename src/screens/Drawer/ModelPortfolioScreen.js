@@ -55,6 +55,9 @@ const ModelPortfolioScreen = ({type = '', onDataLoaded}) => {
   // component (rules-of-hooks). Default presentation ignores `tickers`.
   const { tickers } = useHomeMarketSummary();
 
+  // Variant-facing user name for the alphanomy `_AppHeader` greeting.
+  const userName = userDetails?.name || user?.displayName || '';
+
   // Variant-facing alphanomy plan rows — derived from the same catalog
   // state the legacy MP card list reads (`allStrategy`, `allBespoke`).
   // Default presentation ignores `alphanomyPlans`.
@@ -570,6 +573,7 @@ const ModelPortfolioScreen = ({type = '', onDataLoaded}) => {
         // Additive — default presentation ignores these.
         tickers,
         userEmail,
+        userName,
         config,
         alphanomyPlans,
       }}

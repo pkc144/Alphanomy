@@ -85,13 +85,31 @@ const AppHeader = ({ userEmail = '', userName = '', config, tickers }) => {
         tickers.some((t) => t?.value && t.value !== '—');
     const data = hasLiveData ? tickers : SAMPLE_TICKERS;
 
-    // Bell tap → notification screen. `useNavigation()` returns null when
-    // the header is rendered outside a NavigationContainer (e.g. tests,
-    // Storybook), so we guard the call.
+    // Bell tap → notification screen, avatar tap → profile/settings screen
+    // (registered as `More` in Navigation.js). `useNavigation()` returns null
+    // when the header is rendered outside a NavigationContainer (e.g. tests,
+    // Storybook), so both handlers guard the call.
     const navigation = useNavigation();
+    const canNavigate =
+        navigation && typeof navigation.navigate === 'function';
     const onBellPress = () => {
-        if (navigation && typeof navigation.navigate === 'function') {
-            navigation.navigate('NotificationListScreen');
+        if (canNavigate) navigation.navigate('NotificationListScreen');
+    };
+    const onAvatarPress = () => {
+        if (!canNavigate) return;
+        // `Navigation.js` registers TWO routes named "More":
+        //   1. Tab.Screen "More" (line 430) — an empty `View` placeholder; the
+        //      tab's `tabPress` listener intercepts taps and re-navigates to
+        //      the parent stack's "More" screen.
+        //   2. Stack.Screen "More" (line 1219) — the real AccountSettingsScreen.
+        // When called from inside the tab navigator, `navigation.navigate('More')`
+        // resolves to the closer Tab placeholder (which renders nothing). We
+        // need the parent stack's route, so reach for it via `getParent()`.
+        const parent = navigation.getParent?.();
+        if (parent && typeof parent.navigate === 'function') {
+            parent.navigate('More');
+        } else {
+            navigation.navigate('More');
         }
     };
 
@@ -122,14 +140,20 @@ const AppHeader = ({ userEmail = '', userName = '', config, tickers }) => {
                         <Bell size={18} color={COLORS.text.secondary} strokeWidth={1.8} />
                         <View style={styles.notifDot} />
                     </TouchableOpacity>
-                    <LinearGradient
-                        colors={GRADIENTS.brand}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        style={styles.avatar}
+                    <TouchableOpacity
+                        activeOpacity={0.85}
+                        onPress={onAvatarPress}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
-                        <Text style={styles.avatarText}>{initials}</Text>
-                    </LinearGradient>
+                        <LinearGradient
+                            colors={GRADIENTS.brand}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                            style={styles.avatar}
+                        >
+                            <Text style={styles.avatarText}>{initials}</Text>
+                        </LinearGradient>
+                    </TouchableOpacity>
                 </View>
             </View>
             <ScrollView

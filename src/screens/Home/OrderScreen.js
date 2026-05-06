@@ -36,7 +36,7 @@ import { useComponent } from '../../design/useDesign';
 import useHomeMarketSummary from './hooks/useHomeMarketSummary';
 
 export default function OrderScreen() {
-    const { configData } = useTrade();
+    const { configData, userDetails: userDetailsTradeCtx } = useTrade();
     const config = useConfig();
     const openModal = useModalStore((state) => state.openModal);
 
@@ -113,6 +113,11 @@ export default function OrderScreen() {
     // Variant-facing live tickers (alphanomy reads these for `_AppHeader`).
     // userEmail is already in scope above (line 44).
     const { tickers } = useHomeMarketSummary();
+    // Variant-facing user name for the greeting (full name preferred over
+    // email-derived first-name fallback). See AccountSettingsScreen
+    // container for the same useTrade().userDetails source.
+    const userName =
+        userDetailsTradeCtx?.name || auth.currentUser?.displayName || '';
 
     const viewModel = useMemo(
         () => ({
@@ -125,9 +130,10 @@ export default function OrderScreen() {
             // Additive — default presentation ignores these.
             tickers,
             userEmail,
+            userName,
             config,
         }),
-        [allOrders, loading, config, tickers, userEmail],
+        [allOrders, loading, config, tickers, userEmail, userName],
     );
 
     const actions = useMemo(() => ({ openDdpiHelp }), [openDdpiHelp]);

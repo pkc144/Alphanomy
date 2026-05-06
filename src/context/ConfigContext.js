@@ -125,8 +125,13 @@ export const ConfigProvider = ({ children }) => {
 
                         // ============================================================================
                         // AUTHENTICATION
+                        // Static (Config.js) wins over backend for googleWebClientId because the
+                        // `appadvisors` doc on prod still returns the legacy alphaquark web client
+                        // (892331696104-…). Until that backend record is updated to the alphanomy
+                        // web client (713385591555-uj9v6fdjnceg9dr5ts0gb0l5523uhqr2.…), the local
+                        // static must take precedence to avoid Google Sign-In DEVELOPER_ERROR.
                         // ============================================================================
-                        googleWebClientId: apiData.googleWebClientId || initialConfig.googleWebClientId,
+                        googleWebClientId: initialConfig.googleWebClientId || apiData.googleWebClientId,
 
                         // ============================================================================
                         // DIGIO CONFIGURATION

@@ -80,6 +80,7 @@ const OrderScreen = ({ viewModel, actions, home }) => {
     // own viewModel. Pull email/config from a few likely places to render
     // the header sensibly.
     const userEmail = home?.userEmail || viewModel?.userEmail || '';
+    const userName = home?.userName || viewModel?.userName || '';
     const config = home?.config || viewModel?.config;
     const tickers = home?.tickers || viewModel?.tickers;
 
@@ -109,7 +110,12 @@ const OrderScreen = ({ viewModel, actions, home }) => {
 
     return (
         <SafeAreaView style={styles.safe}>
-            <AppHeader userEmail={userEmail} config={config} tickers={tickers} />
+            <AppHeader
+                userEmail={userEmail}
+                userName={userName}
+                config={config}
+                tickers={tickers}
+            />
 
             <View style={styles.body}>
                 {/* Pill tabs */}
