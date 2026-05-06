@@ -78,10 +78,15 @@ async function mintSession(userRef) {
   if (subdomain) {
     headers['X-Advisor-Subdomain'] = subdomain;
   }
-  const res = await fetch(MINT_URL, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
+  const controller = new AbortController();
+  const mintTimeout = setTimeout(() => controller.abort(), 10000);
+  let res;
+  try {
+    res = await fetch(MINT_URL, {
+      method: 'POST',
+      headers,
+      signal: controller.signal,
+      body: JSON.stringify({
       user_ref: userRef,
       // Scope set must match `aq_backend_github/utilities/
       // sessionToken.js` `ALL_SCOPES`. Today's whitelist is:
@@ -132,8 +137,11 @@ async function mintSession(userRef) {
         'sell_auth:write',
         'funds:read',
       ],
-    }),
-  });
+      }),
+    });
+  } finally {
+    clearTimeout(mintTimeout);
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`mintSession failed: ${res.status} ${text}`);

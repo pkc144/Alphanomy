@@ -6,6 +6,31 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ## [unreleased] - 2026-05-06
 
+### Fixed — WebSocket server: stale Nifty / BankNifty / FinNifty values (tidi `websocket-alphaquark`) — ported from b2b edf0679
+
+**Problem.** The `/ws/indices` WebSocket broadcast sent stale values for `NIFTY_50` (~35 h old, yesterday's price), `NIFTY_BANK`, and `NIFTY_FIN_SERVICE`. Values oscillated between correct and incorrect because both fresh (`NIFTY`) and stale (`NIFTY 50`) keys were broadcast simultaneously — the mobile app intermittently consumed the stale key.
+
+**Root cause.** `INDICES_CONFIG` in `app.py` listed `"NIFTY 50"`, `"NIFTY BANK"`, and `"NIFTY FIN SERVICE"` as Redis symbols to read for their respective instruments. AngelOne's scripmaster maps these alias names to tokens `99926000`, `99926009`, `99926037` — tokens with the `999xxxxx` prefix that never receive live ticks from the exchange feed. The real ticks arrive on tokens `26000` (→ `ltp:NSE:NIFTY`), `26009` (→ `ltp:NSE:BANKNIFTY`), `26037` (→ `ltp:NSE:FINNIFTY`). Similarly, `_INDEX_INSTRUMENTS` (the startup resubscription list) included the alias names, subscribing useless tokens and omitting `FINNIFTY` (token 26037) entirely.
+
+**Fix (tidi `/home/ubuntu/servers/server2/websocket/app.py`):**
+- `INDICES_CONFIG`: changed `symbol` field for alias instruments to read from live Redis keys:
+  - `NIFTY_50` → reads `ltp:NSE:NIFTY` (was `ltp:NSE:NIFTY 50` — stale)
+  - `NIFTY_BANK` → reads `ltp:NSE:BANKNIFTY` (was `ltp:NSE:NIFTY BANK` — stale)
+  - `NIFTY_FIN_SERVICE` → reads `ltp:NSE:FINNIFTY` (was `ltp:NSE:NIFTY FIN SERVICE` — stale)
+  - `instrument` names unchanged (client receives same JSON shape)
+- `_INDEX_INSTRUMENTS`: removed alias names; added `FINNIFTY` so all three real index tokens are subscribed on startup
+- `websocket-alphaquark.service` restarted; health check shows `connected: true, reconnecting: false`
+
+### Fixed — SDK mint session: 10s timeout via AbortController
+
+**Problem.** `mintSession` in `src/sdk/SdkProviderRoot.js` could hang indefinitely when the mint endpoint was slow or unreachable, blocking SDK boot.
+
+**Fix.** Wrapped the `fetch(MINT_URL, ...)` call in an `AbortController` with a 10-second timeout. The `setTimeout` is cleared in a `finally` block so successful responses don't leak the timer. On timeout the fetch rejects with `AbortError` and bubbles up through the existing error path.
+
+**File:** `src/sdk/SdkProviderRoot.js`.
+
+---
+
 ### Fixed — Kotak V1→V2 API migration (backend-only, ccxt-india) — ported from b2b 6a31f4f
 
 **Problem.** ALL Kotak API calls (orders, funds, holdings) returned HTTP 502 with empty body. 0/26 orders succeeded. Rate-limit tuning and sId routing had no effect.
