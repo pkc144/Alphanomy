@@ -6,6 +6,31 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ## [unreleased] - 2026-05-06
 
+### Phase J follow-up — NotificationListScreen + bell wiring (HTML § 08)
+
+User asked for a notification screen matching `alphanomy-improved.html § "08 · Notifications"` and for the bell icon on the home/header to open it. Until today the bell was a static View with no `onPress` and the routed `NotificationListScreen` rendered an empty list with legacy chrome.
+
+**Files changed (5)**:
+- `src/components/NotificationListScreen.js` — collapsed from 116 lines (inline legacy chrome) to ~40 (thin design-resolver). Resolves `useComponent('screens.NotificationListScreen')` and forwards `viewModel = { notifications: [], isLoading }` + `actions = { onBack, onMarkAllRead, onNotificationPress }`.
+- `designs/default/screens/NotificationListScreen.js` (new, ~110 lines) — pixel-faithful re-render of the legacy chrome (back-chevron + "Notification Screen" title + simple FlatList + empty state). No visual diff for non-alphanomy variants.
+- `designs/alphanomy/screens/NotificationListScreen.js` (new, ~280 lines) — port of HTML § 08. Sticky header (back chevron + "Notifications" + brand-blue "Mark all read" link, greys when no unread). Body grouped by `section` (Today / Yesterday / arbitrary). Each row: 38×38 colored icon tile via `KIND_MAP` (`order`/`advisory`/`reminder`/`message`/`alert` → blue/green/amber/purple/red, matching the HTML `si-*` palette), title + description body, timestamp on the right. Unread rows get `#F0F4FF` background + 3px brand-blue left rail. Ships a `FALLBACK_ITEMS` list (Order Executed / Advisory Alert / Market Closure / Advisor Message / Stop-Loss Triggered) so the design preview renders before any real feed is wired.
+- `designs/alphanomy/screens/_AppHeader.js` — bell `<View>` → `<TouchableOpacity>` with `onPress={() => navigation.navigate('NotificationListScreen')}` (guarded by `useNavigation()` null-check). Tapping the bell on Home / Orders / Plans / More now opens the notifications screen.
+- `designs/default/index.js` + `designs/alphanomy/index.js` — registered `screens.NotificationListScreen` in both maps. Default is the contract floor.
+
+`Stack.Screen name="NotificationListScreen"` was already registered in `Navigation.js:1133-1137` — no Navigation.js change needed.
+
+**What's not in this commit**:
+- No real notification feed. Container ships `notifications: []`; alphanomy variant falls back to the sample list. Default renders its empty state. Wiring push notifications / a `/api/notifications` endpoint stays open.
+- `onMarkAllRead` is a noop. Alphanomy button is interactive but the handler does nothing until the container provides a real implementation.
+- Default variant's `CustomToolbar` bell wiring was untouched — only alphanomy's `_AppHeader` got the navigate handler.
+
+**Docs updated** (per the BLOCKING design-system rule):
+- `docs/DESIGN_COMPONENT_AUDIT.md § NotificationListScreen` — new ✅ Migrated row + variant-override footnote.
+- `docs/DESIGN_SYSTEM_ARCHITECTURE.md § Migration order` — Phase J follow-up note; surface count → 63+.
+- `docs/DESIGN_MIGRATION_PROGRESS.md § 2026-05-06` — full work-log entry with file-by-file diff explanations + open items.
+
+---
+
 ### Bugfix — alphanomy LoginScreen wrapper-removal (preemptive)
 
 User asked to apply the same wrapper fix from the SignupScreen bug below to `designs/alphanomy/screens/LoginScreen.js` — same defect pattern (`<TouchableWithoutFeedback onPress={dismissKeyboard}>` wrapping `<ScrollView>` causing TextInput focus race on Android), just hadn't been hit in production yet.

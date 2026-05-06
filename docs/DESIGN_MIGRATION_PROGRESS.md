@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-05-06 — Phase J follow-up: NotificationListScreen + bell wiring (HTML § 08)
+
+- **Phase**: J follow-up.
+- **Why**: user asked to "make one notification screen ... see HTML § 08 ... and when someone clicks on notification icon on home screen it should open this screen". The bell icon on every alphanomy bottom-tab header (Home / Orders / Plans / More) was a static View with no `onPress` — tapping it did nothing.
+- **Surfaces touched**:
+  - `src/components/NotificationListScreen.js` — collapsed from 116 lines (legacy chrome inline) to ~40 lines (thin design-resolver). Calls `useComponent('screens.NotificationListScreen')` and forwards `viewModel = { notifications: [], isLoading: false }` + `actions = { onBack, onMarkAllRead, onNotificationPress }`.
+  - `designs/default/screens/NotificationListScreen.js` (new, ~110 lines) — preserves the legacy chrome verbatim (back-chevron + "Notification Screen" title + simple FlatList + empty state). No visual diff for non-alphanomy variants.
+  - `designs/alphanomy/screens/NotificationListScreen.js` (new, ~280 lines) — port of `alphanomy-improved.html § "08 · Notifications"`. Sticky header (back chevron + "Notifications" title + brand-blue "Mark all read" link, greyed when no unread). Body grouped by `section` field. Each row: 38×38 colored icon tile via `KIND_MAP` (`order`/`advisory`/`reminder`/`message`/`alert` → blue/green/amber/purple/red, matching the HTML's `si-blue` / `si-green` / `si-amber` / `si-purple` / `si-red` palette), title + description body, timestamp on the right. Unread rows: pale-blue `#F0F4FF` background + 3px brand-blue left rail (matches HTML's `.notif-item.unread::before`). Ships a `FALLBACK_ITEMS` sample list (Order Executed / Advisory Alert / Market Closure / Advisor Message / Stop-Loss Triggered) so the design preview renders before any real notifications feed exists.
+  - `designs/alphanomy/screens/_AppHeader.js` — converted the bell `<View style={styles.iconCircle}>` into a `<TouchableOpacity onPress={() => navigation.navigate('NotificationListScreen')}>`. Reads `useNavigation()` and guards the call (returns null outside a NavigationContainer — e.g. tests / Storybook). The `notifDot` red badge is preserved.
+  - `designs/default/index.js` + `designs/alphanomy/index.js` — registered the new `screens.NotificationListScreen` key in both. Default is the contract floor.
+- **Routing**: `Stack.Screen name="NotificationListScreen"` was already registered in `src/components/Navigation.js:1133-1137` pointing at `src/components/NotificationListScreen.js` — no Navigation.js change needed. The thin container now resolves the design rather than rendering the legacy chrome inline.
+- **Verdict change** (`DESIGN_COMPONENT_AUDIT.md § NotificationListScreen`): added as new ✅ Migrated row.
+- **Risks discharged / NOT in this commit**:
+  - **No real notification feed** — container ships `notifications: []`. Alphanomy variant falls back to `FALLBACK_ITEMS` so the design preview matches the HTML mockup; default variant renders its empty state. Wiring a real feed (push notifications / `/api/notifications` endpoint / unread-count from backend) is an open task — when it lands, populate `viewModel.notifications` and the variant fallback stops being shown automatically.
+  - **No "mark all read" backend** — `onMarkAllRead: () => {}` is a noop. The alphanomy variant button is wired to call it (so visual interactivity is present), but until the container exposes a real handler, it does nothing. Same shape; container update only.
+  - **Bell wiring is alphanomy-only**. The default variant's bottom-tab headers (`CustomToolbar`) already had their own bell handling (legacy path, untouched in this commit). Only the alphanomy `_AppHeader` was wired to `NotificationListScreen` — that's the variant the user is on.
+- **Visual QA status**: ⏳ pending on-device emulator capture. Ship-ready visual is provable by token / palette match against the HTML mockup; the standard Pixel_6_API35 capture mirrors the prior alphanomy slice's QA flow.
+
+---
+
 ## 2026-05-06 — Bugfix: alphanomy LoginScreen — preemptive wrapper-removal (mirrors SignupScreen fix)
 
 - **Why**: same defect pattern as SignupScreen (entry below). The user explicitly asked us to apply the SignupScreen fix to LoginScreen rather than wait to hit it in production.

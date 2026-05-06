@@ -26,6 +26,7 @@ import OrderScreen from './screens/OrderScreen';
 import ModelPortfolioScreen from './screens/ModelPortfolioScreen';
 import AccountSettingsScreen from './screens/AccountSettingsScreen';
 import PortfolioScreen from './screens/PortfolioScreen';
+import NotificationListScreen from './screens/NotificationListScreen';
 
 const variant = {
     name: 'alphanomy',
@@ -38,6 +39,7 @@ const variant = {
         'screens.ModelPortfolioScreen': ModelPortfolioScreen,
         'screens.AccountSettingsScreen': AccountSettingsScreen,
         'screens.PortfolioScreen': PortfolioScreen,
+        'screens.NotificationListScreen': NotificationListScreen,
     },
     // SDK widget defaults fall through to designs/default/sdk/ — no overrides
     // shipped in this slice.

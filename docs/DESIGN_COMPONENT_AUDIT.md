@@ -204,6 +204,28 @@ ViewModel sketches captured in the audit-task pass (2026-05-01). The `viewModel`
 - **Risks discharged:** WebSocket subscription + `OrderPlacedReferesh` EventEmitter cleanup stay in container (unchanged). 10+ broker-conditional position-fetch branches stay in container (unchanged). The 620-line StyleSheet was extracted as-is — no semantic edits, the legacy default presentation is a faithful re-render. Repair-trade flow (MP-pending) is untouched: `processedData` + `<ModelPFCard>` come from container scope; the design files only render those rows.
 - **Open follow-ups:** none for this commit. Future phases may pre-format `formatCurrency(...)` in the viewModel (currently called inside both presentations) to allow variants without `react-native-linear-gradient`/`Poppins`/`Satoshi` fonts to override formatting; not needed today since all current variants share the same money/locale stack.
 
+### NotificationListScreen ✅ Migrated (Phase J follow-up, 2026-05-06)
+
+- **File**: `src/components/NotificationListScreen.js` (~40 lines, container).
+- **Verdict**: ✅ migrated (default + alphanomy presentations registered as `screens.NotificationListScreen`). The legacy 116-line component was reduced to a thin container that resolves `useComponent('screens.NotificationListScreen')` and forwards a viewModel.
+- **Phase**: J follow-up (2026-05-06).
+- **Default presentation** (`designs/default/screens/NotificationListScreen.js`): preserves the legacy chrome — back-chevron + "Notification Screen" title + simple FlatList of rows + empty state. Reads `notifications` from viewModel; behavior identical to pre-migration.
+- **Alphanomy presentation** (`designs/alphanomy/screens/NotificationListScreen.js`): port of HTML § "08 · Notifications". Sticky header with back chevron + "Notifications" title + brand-blue "Mark all read" link (greys out when no unread items). Body is a ScrollView grouped by `section` field (e.g. "Today" / "Yesterday"); each row has a 38×38 colored icon tile (KIND_MAP for `order` / `advisory` / `reminder` / `message` / `alert` → blue / green / amber / purple / red — matches HTML's `si-*` palette), title + description body, time on the right; `unread: true` rows get the pale-blue background and 3px brand-blue left rail. Ships a `FALLBACK_ITEMS` list matching the HTML mockup so the design preview renders before any real notifications feed is wired.
+- **Contract**:
+  ```js
+  viewModel = {
+    notifications: [{ id, section?, kind, title, message, time, unread }],
+    isLoading?: boolean,
+  }
+  actions = {
+    onBack: () => void,
+    onMarkAllRead?: () => void,        // alphanomy variant only
+    onNotificationPress?: (item) => void,
+  }
+  ```
+- **Bell wiring**: `designs/alphanomy/screens/_AppHeader.js` bell tile is a `<TouchableOpacity onPress={() => navigation.navigate('NotificationListScreen')}>` — same route name `Stack.Screen` already registers in `Navigation.js:1133-1137`. Tapping the bell on Home / Orders / Plans / More variants opens this screen.
+- **Open follow-ups**: container ships `notifications: []` (no real feed yet). When push notifications / a notifications API endpoint exist, populate the array with `{ id, section, kind, title, message, time, unread }` — alphanomy variant's `FALLBACK_ITEMS` will stop being shown automatically. Default variant has no fallback, so an empty array still renders the empty-state message.
+
 ### Authentication screens
 
 | Screen | File | Verdict | Phase | viewModel highlights |
@@ -224,16 +246,19 @@ ViewModel sketches captured in the audit-task pass (2026-05-01). The `viewModel`
 > redesign): `screens.LoginScreen`, `screens.SignupScreen`,
 > `screens.HomeScreen`, `screens.OrderScreen`,
 > `screens.ModelPortfolioScreen`, `screens.AccountSettingsScreen`,
-> `screens.PortfolioScreen` (added 2026-05-06).
+> `screens.PortfolioScreen` (added 2026-05-06),
+> `screens.NotificationListScreen` (added 2026-05-06).
 > viewModel / actions contracts are identical to the default
 > presentations; switching variants does not change audit row verdicts.
 > HomeScreen / ModelPortfolioScreen / OrderScreen are *design previews* —
 > they use sample data matching the HTML mockup; live data binding
 > (`allTabData` / `viewModel.routes` / live order rows) is deferred.
 > PortfolioScreen alphanomy override is **live-data wired** end-to-end
-> (reuses the container's renderer closures unchanged). Onboarding +
-> Notifications (both new in HTML mockup) still have no variant override —
-> they need new default keys + containers first. See
+> (reuses the container's renderer closures unchanged). NotificationListScreen
+> alphanomy override is a *design preview* — it ships a `FALLBACK_ITEMS`
+> list matching HTML § 08; container currently passes `notifications: []`
+> until a real feed is wired. Onboarding still has no variant override —
+> it needs a new default key + container first. See
 > `DESIGN_MIGRATION_PROGRESS.md § 2026-05-06`.
 
 ### Account Settings screen
