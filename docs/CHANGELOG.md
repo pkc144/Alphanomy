@@ -6,6 +6,20 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ## [unreleased] - 2026-05-06
 
+### Bugfix — alphanomy Profile + ChangeAdvisor bell taps were still hitting the legacy notifications screen
+
+User reported "I am getting old notification page only" after the NotificationListScreen migration shipped. The `_AppHeader` bell (Home / Orders / Plans / More headers) was correctly navigating to `NotificationListScreen`, but the **Profile-tab bell** and **ChangeAdvisor bell** — both rendered by the alphanomy variant — still called `onNavigateNotifications` callbacks that hardcoded `navigation.navigate('PushNotificationScreen')`, the legacy 1800-line production screen.
+
+**Fix** (containers only, presentations unchanged):
+- `src/screens/Home/AccountSettingsScreen.js` — redirected `actions.onNavigateNotifications` from `'PushNotificationScreen'` to `'NotificationListScreen'` so the alphanomy Profile bell opens the new HTML § 08 design.
+- `src/screens/AccountSettingScreen/ChangeAdvisor.js` — same redirect for `actions.onOpenNotifications`.
+
+`src/components/CustomToolbar.js` was left untouched — its bell still routes to `PushNotificationScreen`, but CustomToolbar is gated to the default variant only (`Navigation.js:361`), so the alphanomy fork never renders it. The legacy `PushNotificationScreen` route stays registered in Navigation.js for deep-link / push-tap reachability.
+
+**Open follow-up**: real notifications data (currently only in `PushNotificationScreen`'s 1800-line container) still needs to flow through `NotificationListScreen`'s viewModel — either migrate the data layer or replace the alphanomy variant's `FALLBACK_ITEMS` with a hook reading the same backend feed. Tracked in `docs/DESIGN_MIGRATION_PROGRESS.md`.
+
+---
+
 ### Phase J follow-up — NotificationListScreen + bell wiring (HTML § 08)
 
 User asked for a notification screen matching `alphanomy-improved.html § "08 · Notifications"` and for the bell icon on the home/header to open it. Until today the bell was a static View with no `onPress` and the routed `NotificationListScreen` rendered an empty list with legacy chrome.

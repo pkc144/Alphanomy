@@ -166,7 +166,15 @@ const AccountSettingsScreen = ({ navigation }) => {
             }}
             actions={{
                 onGoBack: () => navigation?.goBack(),
-                onNavigateNotifications: () => navigation?.navigate('PushNotificationScreen'),
+                // Routes to the new design-system NotificationListScreen
+                // (HTML § "08 · Notifications" port, registered via
+                // designs/{default,alphanomy}/index.js as
+                // `screens.NotificationListScreen`). The legacy
+                // `PushNotificationScreen` route is still wired in
+                // Navigation.js but no in-app bell points at it on the
+                // alphanomy fork — see docs/DESIGN_MIGRATION_PROGRESS.md
+                // § 2026-05-06 NotificationListScreen wiring.
+                onNavigateNotifications: () => navigation?.navigate('NotificationListScreen'),
             }}
         />
     );

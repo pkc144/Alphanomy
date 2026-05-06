@@ -4,6 +4,18 @@
 
 ---
 
+## 2026-05-06 — Bugfix: redirect alphanomy Profile + ChangeAdvisor bell taps to NotificationListScreen
+
+- **Reported**: user said "I am getting old notification page only" after the NotificationListScreen migration shipped. Repro: tapping the bell on the alphanomy Profile (More tab) screen still routed to the legacy 1800-line `src/screens/Home/PushNotificationScreen.js`, not the newly-migrated `NotificationListScreen`. Same on `ChangeAdvisor`.
+- **Root cause**: I migrated the `screens.NotificationListScreen` design-system key and wired the `_AppHeader` bell to navigate to `'NotificationListScreen'`, but the existing `actions.onNavigateNotifications` callbacks in two CONTAINERS still hardcoded `navigation.navigate('PushNotificationScreen')` — the legacy route. The alphanomy Profile screen calls `onNavigateNotifications` from its bell tile, so on the alphanomy fork the bell on Profile was opening the legacy production screen rather than the new HTML § 08 design.
+  - `src/screens/Home/AccountSettingsScreen.js:169` — `onNavigateNotifications: () => navigation?.navigate('PushNotificationScreen')`.
+  - `src/screens/AccountSettingScreen/ChangeAdvisor.js:195` — `onOpenNotifications: () => navigation.navigate('PushNotificationScreen')`.
+- **Fix**: redirected both callbacks to `'NotificationListScreen'`. Added inline comments explaining the reroute and pointing at this progress entry. The legacy `PushNotificationScreen` route is still registered in `Navigation.js:1174-1177` (untouched) so it remains reachable via deep-link / push tap, but no in-app bell points at it on the alphanomy fork.
+- **NOT changed**: `src/components/CustomToolbar.js:247` still navigates to `PushNotificationScreen`. CustomToolbar is gated to the default variant (`Navigation.js:361 const showLegacyToolbar = !Config?.DESIGN_VARIANT || Config.DESIGN_VARIANT === 'default'`), so the alphanomy fork doesn't render it. Leaving the default toolbar's bell untouched preserves the default variant's existing routing.
+- **Open follow-up**: long-term, the real notifications data (currently only available inside `PushNotificationScreen`'s 1800-line container — Firebase + axios + RebalanceNotificationComponent) needs to flow through `NotificationListScreen`'s viewModel. Either migrate `PushNotificationScreen`'s data layer to the container at `src/components/NotificationListScreen.js`, or replace the alphanomy variant's `FALLBACK_ITEMS` with a hook that reads the same backend feed. Tracked separately — for now the alphanomy variant shows the sample list matching the HTML mockup.
+
+---
+
 ## 2026-05-06 — Phase J follow-up: NotificationListScreen + bell wiring (HTML § 08)
 
 - **Phase**: J follow-up.
