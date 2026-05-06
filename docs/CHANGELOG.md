@@ -6,6 +6,24 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ## [unreleased] - 2026-05-06
 
+### Fixed — MPReviewTradeModal: Place Order spinner stuck forever (Axis Securities, Dhan, all brokers) — ported from b2b 250eee6
+
+**Problem.** Clicking "Place Order" in the MP rebalance review modal caused the button to spin indefinitely. No HTTP request was ever sent to the backend (`/rebalance/process-trade`). Confirmed via nginx access logs on Alphab2bapp: zero `okhttp`/React Native requests for that endpoint while the Flutter (tidi) app hit it successfully.
+
+**Root cause.** `placeOrder()` called `setLoading(true)` at line 317, but the `try { }` block only started at line 429 — 112 lines of synchronous setup code (exchange validation, Dhan EDIS pre-check, `computeTradeVariant`, payload/config construction, `enrollStatusCheckQueue` definition) ran entirely outside the try-catch. Any unhandled exception in that setup window → unhandled promise rejection → `setLoading(false)` in the catch was never called → spinner stuck forever. Additionally the edit that moved `try {` left an orphaned plain `{` at line 430 (the old `try {` was changed to `{`), which caused a `SyntaxError: Unexpected token 'catch'` at line 649.
+
+**Fix:**
+1. Moved `try {` to immediately after `setLoading(true)` so all setup code and the axios call are inside the try-catch. The catch block's first statement is `setLoading(false)`, which now fires for any exception.
+2. Removed the orphaned inner `{` at line 430 (syntax error — `} catch` cannot follow a plain block).
+3. Added `latestRebalance?.model_Id` optional chaining (defensive — `latestRebalance` starts as `null` and is populated asynchronously).
+
+**Files changed:**
+- `src/components/ModelPortfolioComponents/MPReviewTradeModal.js` — `try {` moved to line 319 (was 429), orphaned `{` removed, optional chaining on `latestRebalance?.model_Id`
+
+**Port note**: ignored the upstream `metro.config.js` SDK-path edit (Alphanomy uses sibling layout `../alphaquark-mobile-sdk`, not `../../`) and the `android/gradle.properties` JDK-path tweak (gitignored on Alphanomy; per-developer setting).
+
+---
+
 ### Bugfix — alphanomy Profile "Edit" pill was a dead button
 
 User reported tapping the "Edit" pill on the alphanomy Profile (More tab) gradient profile card did nothing. The presentation rendered the pill as a `<TouchableOpacity>` but with no `onPress` handler — purely cosmetic.

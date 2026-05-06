@@ -1,6 +1,6 @@
 # Rebalancing Architecture
 
-> **Last updated**: 2026-04-07
+> **Last updated**: 2026-05-06
 
 ## Overview
 
@@ -50,6 +50,7 @@ Order results displayed → portfolio refreshed
 |------|---------|
 | `src/components/AdviceScreenComponents/RebalanceAdvices.js` | Rebalance card list, initiates rebalance flow |
 | `src/components/AdviceScreenComponents/RebalanceModal.js` | Rebalance review modal, broker payload building |
+| `src/components/ModelPortfolioComponents/MPReviewTradeModal.js` | MP rebalance review modal — Place Order execution (see § Known pitfalls) |
 | `src/utils/rebalanceHelpers.js` | Pure helper functions (payload building, error detection, decryption) |
 | `src/utils/ProcessTrades.js` | Trade execution across all brokers |
 | `src/services/BrokerOrderBookAPI.js` | Order book fetching |
@@ -305,6 +306,14 @@ See `docs/APP_ARCHITECTURE.md § 4.5.2 Trade variant field` for the full contrac
 ### Why the connect itself worked despite this
 
 The connect route (`aq_backend_github/Routes/Broker/Kotak.js`) calls ccxt's `/kotak/login/totp` directly, which uses Kotak's new `/login/1.0/tradeApiLogin` endpoint and never goes through `normalize_credentials_for_broker`. That's why the bug-report screenshot showed a green "Kotak Broker Connected" card with cash + phone + PAN populated, but rebalance (which DOES go through the normalizer + `KotakBroker`) failed at Step 3.
+
+## Known pitfalls — MPReviewTradeModal.js `placeOrder` error-handling (2026-05-06)
+
+`MPReviewTradeModal.js:placeOrder` is an `async` function called without `await` or `.catch()` from the Place Order button's `onPress`. Any unhandled exception inside `placeOrder` that occurs before `setLoading(true)`, or any exception that escapes the try-catch, becomes a silent promise rejection — `setLoading(false)` never fires, the spinner sticks forever, and no HTTP request reaches the server.
+
+**Guard rule**: the `try {` block MUST immediately follow `setLoading(true)`. Do not add synchronous setup code between `setLoading(true)` and `try {`; if new pre-flight logic is needed, add it inside the existing try block. The catch block's FIRST statement must remain `setLoading(false)`.
+
+This was the root cause of the "Place Order stuck forever" regression confirmed on Axis Securities and Dhan (2026-05-06). Nginx logs showed zero `okhttp` requests for `/rebalance/process-trade` — the request never left the device. Fixed by moving `try {` from line 429 to line 319 (immediately after `setLoading(true)`). See `docs/CHANGELOG.md — 2026-05-06` for the full commit description.
 
 ### Future Kotak credential-shape changes
 
