@@ -4,6 +4,38 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ---
 
+## [unreleased] - 2026-05-07
+
+### Fixed — Angel One EDIS "Some data is missing in posted Form" (DDPI modal + ccxt verify_dis)
+
+**Problem.** User with previously-active DDPI saw the "DDPI Inactive: Proceed with TPIN Mandate" modal pop up, and on tapping Proceed the CDSL WebView rejected with "Some data is missing in posted Form". DDPI was actually still active on the broker side — the failure was upstream in our verify-edis chain.
+
+**Root cause — three bugs compounded.**
+
+1. **Frontend hammering.** `AngleOneTpinModal` in `src/components/DdpiModal.js` re-fired `/angelone/verify-edis` on every parent re-render because the useEffect dep was the `userDetails` object reference (which flips on most renders). Production logs (`ccxt_prod.service` 18:38–18:43 UTC) showed 30+ verify-edis calls in 5 minutes from a single client.
+2. **SmartAPI rate-limit cascade.** Angel One rate-limits both `getHolding` and `verifyDis` at ~1 req/sec. Hammered calls returned 403 "Access denied because of exceeding access rate". ccxt's `_request` raises `RATE_LIMITED` exception. When `getHolding` was the rate-limited call, `verify_dis()` propagated as 500. When `verifyDis` returned cleanly but holdings were briefly empty/in-flight, `verify_dis()` fell into `create_error_response('no holdings found for user.')` and returned `200 { edis: false, data: {} }`.
+3. **Truthy-empty UI gate.** `DdpiModal.js:1286` had `disabled={loading || !edisStatus?.data}` — but `!{}` is `false` in JS, so when the backend returned the empty-data error response, the Proceed button stayed enabled. User tapped, `buildFormHtml({})` produced a CDSL form with empty `DPId` / `ReqId` / `TransDtls`, and CDSL rejected.
+
+**Fix (frontend, `src/components/DdpiModal.js`):**
+- `useEffect` deps narrowed to primitive `jwtToken` + `userEmail` instead of the `userDetails` object reference.
+- New `verifyFiredRef = useRef(false)` guards the call: fires once per modal open, reset on close.
+- New `hasUsableEdisData` helper checks `data.DPId && data.ReqId && data.TransDtls`. Button enable + form-build path both use it.
+- On `data: {}` empty-success path: surface a clear toast — "Angel One temporarily busy. Wait 20 seconds and retry." — and clear the guard so re-opening the modal triggers a fresh verify call.
+- On rate-limit error path: detect "rate limit" / "exceeding access" / "RATE_LIMITED" in the upstream error, show "Angel One rate-limited" toast.
+- Imports: added `useRef` to the React import.
+
+**Fix (backend, `ccxt-india/brokers/angelone/angelone.py verify_dis`):** retry once with 1.5s backoff on rate-limit for both `getHolding` and `verifyDis`. If both retries fail, surface a clean `create_error_response('Angel One temporarily rate-limited verifyDis. Please wait 20s and retry.')` instead of a 500.
+
+**Files (in this commit):**
+- `src/components/DdpiModal.js` (frontend de-dup + button gate + rate-limit toasts)
+- `../../ccxt-india/brokers/angelone/angelone.py` (backend retry-on-rate-limit)
+- `docs/SELL_AUTH_ARCHITECTURE.md` (new quirks-table row 2026-05-07)
+- `docs/CHANGELOG.md` (this entry)
+
+**Lesson.** Empty object `{}` is truthy in JS — never use `!data` to gate UI when the data field is an object. Check the specific fields you actually need (`DPId && ReqId && TransDtls`). Same lesson applies to all sell-auth surfaces.
+
+---
+
 ## [unreleased] - 2026-05-06
 
 ### Skipped — b2b 91f5f44 (SDK path revert) does not apply to Alphanomy

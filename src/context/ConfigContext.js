@@ -46,6 +46,37 @@ export const ConfigProvider = ({ children }) => {
     const [config, setConfig] = useState(initialConfig);
     const [loading, setLoading] = useState(true);
 
+    // 2026-05-07: hydrate the theme/branding from AsyncStorage on
+    // mount BEFORE the API fetch runs. This way if the API call fails
+    // on a relaunch (intermittent network, server slow, DNS hiccup),
+    // the UI still renders with the last-known-good production theme
+    // from cache instead of falling back to the bare static
+    // APP_VARIANTS defaults — those defaults are intentionally
+    // generic (`gradient1/2: '#F0F0F0'`, `placeholderText: '#FFFFFF'`)
+    // and produce a near-blank washed-out home screen for any
+    // production tenant whose theme has been loaded before.
+    //
+    // The fresh API response in fetchConfig below still wins the
+    // moment it lands; this only affects the first-paint window.
+    useEffect(() => {
+        const hydrateFromCache = async () => {
+            try {
+                const cachedJson = await AsyncStorage.getItem('@app:configThemeCache');
+                if (!cachedJson) return;
+                const cached = JSON.parse(cachedJson);
+                // Only adopt cache for the SAME variant to avoid
+                // showing tenant A's theme briefly to tenant B's
+                // build (e.g. dev switching between APP_VARIANTs).
+                if (cached?.selectedVariant && cached.selectedVariant !== validVariant) return;
+                console.log('[ConfigContext] hydrated theme from AsyncStorage cache');
+                setConfig(prev => ({ ...prev, ...cached }));
+            } catch (e) {
+                console.warn('[ConfigContext] hydrateFromCache error:', e?.message);
+            }
+        };
+        hydrateFromCache();
+    }, [validVariant]);
+
     useEffect(() => {
         const fetchConfig = async () => {
             try {

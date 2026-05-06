@@ -72,7 +72,11 @@ const RecommendationSuccessModal = ({
     return (executed / total) * 100 + '%';
   };
 
-  console.log("Order Response ----------", orderPlacementResponse);
+  // 2026-05-07: removed `console.log("Order Response ----------",
+  // orderPlacementResponse)` — this fired on every render and the
+  // SDK result array contains 18+ lines per dump, which contributed
+  // to a JS-thread starvation / ANR when the parent re-rendered
+  // continuously after order placement. Bridge logs are not free.
   const { hideAddToCartModal, successclosemodel, setsuccessclosemodel } =
     useModal();
 
@@ -94,7 +98,10 @@ const RecommendationSuccessModal = ({
     setShowStocksDetails(!showStocksDetails);
   };
 
-  console.log('Order Response : ---', orderPlacementResponse);
+  // 2026-05-07: removed second `console.log('Order Response : ---',
+  // orderPlacementResponse)` — same ANR-contributing pattern as the
+  // one above. If you need to debug result rows, do it from the
+  // RebalanceModal SDK callsite, not here on every re-render.
 
   const successCount = orderResponse?.filter(
     item => isOrderSuccess(item?.orderStatus) || isOrderPending(item?.orderStatus),
@@ -224,7 +231,8 @@ const RecommendationSuccessModal = ({
     return `${sign}₹${body}${fracStr}`;
   };
 
-  console.log('Log----', failureCount, successCount);
+  // 2026-05-07: removed `console.log('Log----', failureCount, successCount)`
+  // — same render-time logging anti-pattern; not useful in prod.
 
   const renderOrderItem = ({ item, index }) => {
     const isSuccessStatus =
@@ -397,8 +405,36 @@ const RecommendationSuccessModal = ({
             </View>
           </LinearGradient>
 
-          {/* Content Section - Scrollable */}
-          <View style={styles.contentContainer}>
+          {/* Content Section - Scrollable
+           *
+           * 2026-05-07: replaced the fixed-content View + small
+           * inner FlatList layout with a single FlatList that
+           * scrolls the banner content + order rows together via
+           * ListHeaderComponent. Previously the static banner
+           * (success/failure status icon + cautionary-listing alert
+           * + "what to do" steps + summary + "Placed On / Status /
+           * N of N Executed" row) ate ~70% of the screen and left
+           * the order rows squeezed below the fold with no way to
+           * scroll the banner out of the way. Reported case (Angel
+           * One MP rebalance, 2 of 3 cautionary-list rejections):
+           * user could only see the cautionary banner; YESBANK row
+           * was below the fold.
+           */}
+          <FlatList
+            data={orderResponse}
+            renderItem={renderOrderItem}
+            keyExtractor={(item, index) => index.toString()}
+            style={styles.ordersList}
+            // 2026-05-07: do NOT pass `contentContainerStyle={styles.contentContainer}` —
+            // that style has `flex: 1`, designed for a <View>. On a FlatList's
+            // contentContainerStyle, `flex: 1` clamps the scrollable content
+            // to viewport height, which disables scroll entirely. We want the
+            // content to be its natural height (sum of header banner +
+            // all rows) and the outer FlatList to flex into available space.
+            contentContainerStyle={styles.ordersListContent}
+            showsVerticalScrollIndicator={false}
+            ListHeaderComponent={
+              <View>
             {/* Success/Failure Status */}
             {successCount === totalCount && successCount !== 0 && (
               <View style={styles.statusContainer}>
@@ -734,15 +770,10 @@ const RecommendationSuccessModal = ({
               </View>
             </View>
 
-            {/* Orders List */}
-            <FlatList
-              data={orderResponse}
-              renderItem={renderOrderItem}
-              keyExtractor={(item, index) => index.toString()}
-              style={styles.ordersList}
-              showsVerticalScrollIndicator={false}
-            />
-          </View>
+            {/* end of ListHeaderComponent banner content */}
+              </View>
+            }
+          />
         </View>
 
         {/* Bottom safe area for iOS home indicator */}
@@ -1010,6 +1041,13 @@ const styles = StyleSheet.create({
 
   ordersList: {
     flex: 1,
+  },
+  // 2026-05-07: contentContainerStyle for the FlatList. Bottom
+  // padding gives breathing room so the last row isn't flush
+  // against the safe-area edge. NO `flex: 1` — that would clamp
+  // content to viewport height and disable scrolling.
+  ordersListContent: {
+    paddingBottom: 24,
   },
 
   bottomSafeArea: {

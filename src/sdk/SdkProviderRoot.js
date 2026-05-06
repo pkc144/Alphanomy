@@ -13,7 +13,7 @@
  * error string so the developer knows what's missing.
  */
 import React, {useMemo} from 'react';
-import {AqSdkClient, AqSdkProvider} from '@alphaquark/mobile-sdk';
+import {AqSdkClient, AqSdkProvider, ExecuteAdviceOverlay} from '@alphaquark/mobile-sdk';
 import Config from 'react-native-config';
 
 import {getAdvisorSubdomain} from '../utils/variantHelper';
@@ -169,9 +169,20 @@ export default function SdkProviderRoot({userEmail, children}) {
   );
   const effectiveUserRef = userEmail || SDK_TEST_USER_REF || null;
 
+  // 2026-05-07: <ExecuteAdviceOverlay /> MUST be rendered inside the
+  // provider tree. The SDK's `AqSdkClient.executeAdvice()` calls into
+  // the overlay's module-level `_showReview` / `_showResult` /
+  // `_setProgress` bridges to drive its review modal + progress + result
+  // UI. If the overlay component is not mounted, those bridges are no-
+  // ops (`_setState` is null), `_showReview` returns a Promise that
+  // never resolves, and the calling screen's spinner hangs forever.
+  // SDK_INTEGRATION_GUIDE.md § 2 explicitly requires this mount —
+  // omitting it was the silent root cause of the post-tap-Place-Order
+  // permanent spinner observed 2026-05-06/07.
   return (
     <AqSdkProvider client={client} userRef={effectiveUserRef}>
       {children}
+      <ExecuteAdviceOverlay />
     </AqSdkProvider>
   );
 }
