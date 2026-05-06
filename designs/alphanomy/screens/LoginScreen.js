@@ -21,7 +21,6 @@ import {
     StatusBar,
     KeyboardAvoidingView,
     Platform,
-    TouchableWithoutFeedback,
     TouchableOpacity,
     TextInput,
     Image,
@@ -128,13 +127,23 @@ const LoginScreen = ({ viewModel, actions }) => {
                 behavior={Platform.OS === 'ios' ? 'padding' : undefined}
                 style={styles.flex}
             >
-                <TouchableWithoutFeedback onPress={dismissKeyboard}>
-                    <ScrollView
-                        style={styles.flex}
-                        contentContainerStyle={styles.scroll}
-                        keyboardShouldPersistTaps="handled"
-                        showsVerticalScrollIndicator={false}
-                    >
+                {/*
+                  Note (2026-05-06): the TouchableWithoutFeedback wrapper
+                  used to surround this ScrollView and call
+                  `dismissKeyboard` (which calls `Keyboard.dismiss()`) on
+                  every body tap. On Android that races with TextInput
+                  focus and prevents the inputs from accepting keystrokes
+                  reliably — same defect we hit on SignupScreen.
+                  Replaced with `keyboardDismissMode="on-drag"` so users
+                  dismiss the keyboard by scrolling instead.
+                */}
+                <ScrollView
+                    style={styles.flex}
+                    contentContainerStyle={styles.scroll}
+                    keyboardShouldPersistTaps="handled"
+                    keyboardDismissMode="on-drag"
+                    showsVerticalScrollIndicator={false}
+                >
                         {/* ── HERO ── */}
                         <LinearGradient
                             colors={GRADIENTS.brand}
@@ -309,8 +318,7 @@ const LoginScreen = ({ viewModel, actions }) => {
                                 </TouchableOpacity>
                             </View>
                         </View>
-                    </ScrollView>
-                </TouchableWithoutFeedback>
+                </ScrollView>
             </KeyboardAvoidingView>
             <Toast />
         </SafeAreaView>

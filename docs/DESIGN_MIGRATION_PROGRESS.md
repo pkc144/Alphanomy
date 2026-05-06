@@ -4,6 +4,20 @@
 
 ---
 
+## 2026-05-06 — Bugfix: alphanomy LoginScreen — preemptive wrapper-removal (mirrors SignupScreen fix)
+
+- **Why**: same defect pattern as SignupScreen (entry below). The user explicitly asked us to apply the SignupScreen fix to LoginScreen rather than wait to hit it in production.
+- **Root cause** (alphanomy `screens.LoginScreen`): identical to SignupScreen — `<TouchableWithoutFeedback onPress={dismissKeyboard}>` wrapping the `<ScrollView>`. The container's `dismissKeyboard` calls `Keyboard.dismiss()` + `setErrorShow(false)`; on Android the wrapper's press event races the TextInput focus event, so keystrokes can fail to land or the keyboard flickers.
+- **Fix**:
+  - Removed the `<TouchableWithoutFeedback>` wrapper from `designs/alphanomy/screens/LoginScreen.js`.
+  - `<ScrollView>` keeps `keyboardShouldPersistTaps="handled"` and gains `keyboardDismissMode="on-drag"`.
+  - Removed the now-unused `TouchableWithoutFeedback` import.
+- **What was NOT changed**: the container (`src/screens/Authentication/LoginScreen.js`) is unchanged. `dismissKeyboard` is still wired into the `actions` bag and is a stable noop when nothing calls it — no behavioural drift. The CTA buttons (Sign In / Google / Apple) were already only `disabled={isLoading}` so no equivalent of the SignupScreen "dead-button" fix is needed here.
+- **Open follow-up cleared**: the SignupScreen entry below noted "apply the same wrapper-removal fix to alphanomy LoginScreen proactively" — done in this commit.
+- **Still open**: the same wrapper pattern exists on `designs/default/screens/SignupScreen.js` and `designs/default/screens/LoginScreen.js`. Default isn't the alphanomy fork's active variant so the user-facing impact is zero today, but we should sweep both default presentations in a follow-up commit once we have time to verify no other tenant relies on the wrapper for some reason.
+
+---
+
 ## 2026-05-06 — Bugfix: alphanomy SignupScreen — inputs unresponsive on Android
 
 - **Reported**: user could not fill the Name / Email / Password fields on the alphanomy SignupScreen variant — typing didn't register reliably and the Create Account button felt dead.
@@ -14,7 +28,7 @@
   - Changed the Create Account button to `disabled={isLoading}` only (was `disabled={isLoading || !isChecked}`). The visual disabled style still applies when the checkbox is unchecked (`(!isChecked || isLoading) && styles.primaryBtnDisabled`), but presses now fall through to `handleSignup` which toasts the Terms requirement.
   - Removed the now-unused `TouchableWithoutFeedback` import.
 - **What was NOT changed**: the container (`src/screens/Authentication/SignupScreen.js`) is unchanged. `dismissError` still does the right thing when called explicitly (e.g. by the error banner's tap-to-dismiss). The default presentation still uses the same wrapper pattern internally — it has the same fragility but the default variant is not the user's active variant, and changing default would be a wider regression risk; left as-is for a future commit.
-- **Open follow-up**: apply the same wrapper-removal fix to alphanomy `LoginScreen.js` proactively (same defect pattern, same risk). Track in next variant-fix commit.
+- **Follow-up status**: ✅ closed by the LoginScreen entry above (2026-05-06).
 
 ---
 

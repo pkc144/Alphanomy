@@ -6,6 +6,21 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ## [unreleased] - 2026-05-06
 
+### Bugfix — alphanomy LoginScreen wrapper-removal (preemptive)
+
+User asked to apply the same wrapper fix from the SignupScreen bug below to `designs/alphanomy/screens/LoginScreen.js` — same defect pattern (`<TouchableWithoutFeedback onPress={dismissKeyboard}>` wrapping `<ScrollView>` causing TextInput focus race on Android), just hadn't been hit in production yet.
+
+**Fix** (presentation only, container unchanged):
+- Dropped the `<TouchableWithoutFeedback>` wrapper from `designs/alphanomy/screens/LoginScreen.js`.
+- `<ScrollView>` keeps `keyboardShouldPersistTaps="handled"` and gains `keyboardDismissMode="on-drag"`.
+- Removed the now-unused `TouchableWithoutFeedback` import.
+
+LoginScreen's CTAs (Sign In / Google / Apple) were already only `disabled={isLoading}`, so no equivalent of the SignupScreen "dead-button" fix is needed here. Default presentations (`designs/default/screens/{Login,Signup}Screen.js`) still carry the same wrapper pattern but aren't the active variant — sweep deferred to a separate commit.
+
+**Docs**: closes the open follow-up logged in the SignupScreen bugfix entry below; both alphanomy auth screens now match.
+
+---
+
 ### Bugfix — alphanomy SignupScreen inputs unresponsive on Android
 
 User reported that filling Name / Email / Password on the alphanomy SignupScreen wasn't working — typing didn't register reliably and the Create Account button felt dead. Two defects, one commit:
