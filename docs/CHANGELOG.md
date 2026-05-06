@@ -4,6 +4,36 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ---
 
+## [unreleased] - 2026-05-06
+
+### Phase J — PortfolioScreen container/presentation split + alphanomy variant
+
+The bottom-tab Portfolio screen joins the swappable design system. Until today it was the last bottom-tab still rendering with its legacy navy `PortfolioCard` hero + grey Bespoke/Model Portfolios toggle on the alphanomy fork; Home / Orders / Plans / More had all already swapped to alphanomy chrome.
+
+**Files changed (5)**:
+- `src/screens/PortfolioScreen/PortfolioScreen.js` — converted from a 2.4k-line monolith into a ~1.5k-line container. Removed: the local 620-line `StyleSheet.create({...})` block, the inline `return (...)` JSX. Kept (intentionally): every `useEffect`, every broker-conditional position fetch (10+ branches: IIFL / ICICI / Upstox / Angel / Zerodha / Kotak / HDFC / Dhan / AliceBlue / Fyers / Groww / Motilal), every WebSocket subscribe / EventEmitter listener / `portfolioEvents` wiring, the `panResponder` gesture handler, and the three FlatList row renderers (`renderAllHoldings`, `renderPositions`, `renderModalPFCard`). End of component now builds a flat `portfolio` prop bag (~25 keys) and renders `useComponent('screens.PortfolioScreen')`. The renderer closures are passed through the bag, so the WebSocket-driven `<HoldingDynamicText>` / `<PortfolioPositionText>` cells keep resolving against container scope — no contract change to `useTrade` / `MultiBrokerContext`.
+- `src/screens/PortfolioScreen/PortfolioScreen.styles.js` (new, +620 lines) — extracted verbatim from the legacy container's `StyleSheet.create` block. Lifted as-is, no semantic edits.
+- `designs/default/screens/PortfolioScreen.js` (new, +330 lines) — pixel-faithful re-render of the legacy chrome. Imports the extracted styles, `PortfolioCard`, `RenderEmptyMessage`, `HoldingScoreModal` from their existing locations. Only data source changes (now via prop bag); pixel parity provable by diff.
+- `designs/alphanomy/screens/PortfolioScreen.js` (new, +520 lines) — alphanomy-improved.html § "05 · Portfolio" port. Shared `_AppHeader` (greeting + ticker strip), gradient `pl-hero` P&L card with grid-line texture + glow circles + floating "Total Returns" badge (mint #3DFFA0 for gains, coral #FFA8A8 for losses), pill-tabs (Model Portfolios vs All Holdings) with brand-gradient active fill (`LinearGradient`), under-tabs (Holdings vs Positions), restyled plan picker dropdown + Modal, alphanomy `EmptyCard` blocks with gradient "Connect Broker" CTA. Lists reuse the renderer closures — individual rows look identical to default; only the chrome is re-skinned.
+- `designs/default/index.js` + `designs/alphanomy/index.js` — registered `screens.PortfolioScreen` in both. Default is the contract floor; alphanomy ships an override.
+
+**Why this matters**: closes the visual-consistency gap on the alphanomy fork — every bottom-tab now has the same gradient hero + soft-lavender chrome. `DESIGN_VARIANT=default` is unchanged (verbatim extraction).
+
+**What stayed in the container (intentionally — none of this belongs in `designs/`)**:
+- WebSocket subscription + `OrderPlacedReferesh` / `cartUpdated` / `portfolioEvents` cleanup paths.
+- 10+ broker-specific position-fetch branches in `getAllPositionsData`.
+- Repair-trade flow (`processedData` build with `latest` + `repair` markers).
+- `HoldingScoreModal` mount, `panResponder` gesture handler.
+
+**Risks discharged**: pixel parity for default verifiable by JSX diff (the new `designs/default/screens/PortfolioScreen.js` is the legacy `return (...)` block lifted unchanged). Behaviour parity for both variants verified by ESLint (no new warnings; the 11 `react-hooks/exhaustive-deps` warnings on the container are pre-existing on legacy `useEffect` blocks I didn't touch). On-device QA capture is **pending** — see `DESIGN_MIGRATION_PROGRESS.md § 2026-05-06` for the open visual-QA action.
+
+**Docs updated this commit** (per the BLOCKING design-system rule):
+- `docs/DESIGN_COMPONENT_AUDIT.md § PortfolioScreen` — verdict promoted from `needs-logic-extraction` to ✅ **Migrated (Phase J)**, full prop-bag contract documented, follow-up list trimmed.
+- `docs/DESIGN_SYSTEM_ARCHITECTURE.md § Migration order` — added Phase J row; total surface count updated to 62+.
+- `docs/DESIGN_MIGRATION_PROGRESS.md` — full work-log entry with file-by-file diff explanations and the visual-QA pending action.
+
+---
+
 ## [unreleased] - 2026-05-04
 
 ### `alphanomy` design variant — foundation slice + LoginScreen

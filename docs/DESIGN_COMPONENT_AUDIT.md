@@ -176,29 +176,33 @@ ViewModel sketches captured in the audit-task pass (2026-05-01). The `viewModel`
 - **Proposed actions:** `switchTab(id)`, `openSearch` / `closeSearch` / `updateSearchQuery` / `selectSearchSuggestion` / `addToWatchlist`, `deleteStock` / `confirmDeleteStock` / `cancelDeleteStock`, `moveStock(from, to)` / `editStockTab` / `confirmEditStock`, `goBack`, `toggleFullScreen`, `dismissAlert` / `dismissToast`.
 - **Risks:** AsyncStorage persistence in two `useEffect` blocks — container owns. WebSocket subscription is via `WebSocketManager` singleton (shared service) — read-only `useLTPStore` hook in `WatchlistRow` is safe to keep in presentation. Symbol search axios stays in container. Toast feedback is scattered — unify into one `{ message, type, visible }` state.
 
-### PortfolioScreen
+### PortfolioScreen ✅ Migrated (Phase J, 2026-05-06)
 
-- **File:** `src/screens/PortfolioScreen/PortfolioScreen.js` (~600+ lines)
-- **Verdict:** `needs-logic-extraction`
-- **Phase:** F or G
-- **Data deps:** `useTrade()` (`userDetails`, `getAllBrokerSpecificHoldings`, `BrokerHoldingsData`, `allHoldingsData`, `getAllHoldings`, `configData`), `useConfig`, `useNavigation`, 11+ `useState` declarations, 3+ `useEffect` blocks (WebSocket subscribe, model-portfolio strategy fetch, EventEmitter `OrderPlacedReferesh` listener), inline axios `axios.get` for MP strategies + `axios.request` for rebalance repair, Firebase `getAuth()`, `WebSocketManager` singleton, `formatCurrency` utility.
-- **Render outputs:** Safe-area + gesture-handler-root wrapper, PortfolioCard (P&L + invested + returns), sticky tab switcher (Bespoke / Model Portfolio) via PortFolioCard2, Holdings `FlatList` with refresh control, conditional empty state, `HoldingScoreModal` bottom-sheet, 10+ broker-specific position-fetch branches (IIFL/ICICI/Upstox/Zerodha/Kotak/HDFC/Dhan/AliceBlue/Fyers/Groww/Motilal), live-price dynamic-text components.
-- **Proposed viewModel:**
+- **File:** `src/screens/PortfolioScreen/PortfolioScreen.js` (now ~1.5k lines, was ~2.4k pre-extraction).
+- **Verdict:** `needs-logic-extraction` → ✅ migrated (default + alphanomy presentations registered as `screens.PortfolioScreen`).
+- **Phase:** J (2026-05-06).
+- **Migration shape (Phase E.3-style prop bag):** the container builds a flat `portfolio` prop bag and renders `useComponent('screens.PortfolioScreen')`. The bag includes the three list-row renderers (`renderAllHoldings`, `renderPositions`, `renderModalPFCard`) as closures over container scope, so the WebSocket-driven `<HoldingDynamicText>` / `<PortfolioPositionText>` cells and the 10+ broker-specific position-fetch branches stay anchored to the container's `useEffect` chains — no contract change to `useTrade` / `useWebSocketCurrentPrice` / `MultiBrokerContext`.
+- **Default presentation:** `designs/default/screens/PortfolioScreen.js` — pixel-faithful re-render of the legacy chrome (`PortfolioCard` hero + Bespoke/Model Portfolios toggle + plan picker modal + Holdings/Positions tabs + lists with `RenderEmptyMessage`). Imports the extracted `src/screens/PortfolioScreen/PortfolioScreen.styles.js` (lifted unchanged from the legacy `StyleSheet.create` block) so non-alphanomy variants render identically to the pre-migration build.
+- **Alphanomy presentation:** `designs/alphanomy/screens/PortfolioScreen.js` — alphanomy-improved.html § "05 · Portfolio" chrome: shared `_AppHeader` (greeting + ticker strip), gradient `pl-hero` P&L card with grid-lines + glow circles + "Total Returns" floating badge, pill-tabs (Model Portfolios vs All Holdings), under-tabs (Holdings vs Positions), restyled plan picker, alphanomy empty-state cards with gradient "Connect Broker" CTA. Reuses the same renderer closures so list rows look identical to default.
+- **Final prop-bag contract (~25 keys):**
   ```js
   {
-    user: { email, brokerStatus: 'connected' | 'pending' | null, connectedBroker },
-    holdings: [{ symbol, quantity, buyPrice, currentPrice, pl, plPercent, status }],
-    summary: { totalInvested, totalCurrent, totalPL, totalPLPercent },
-    availableFunds,
-    subscribedModels: [{ modelName, advisor, repairTrades: [...] }],
-    selectedTab: 0 | 1,
-    isRefreshing,
-    isLoadingScores,
-    scoreModal: { visible, symbol },
+    selectedInnerTab, setSelectedInnerTab,        // Bespoke vs Model Portfolios
+    tabIndex, setTabIndex,                        // Holdings vs Positions
+    Loading, effectiveHoldingsData,               // P&L hero
+    profitAndLoss, pnlPercentage, pnlposneg,
+    modelPortfolioStrategy, processedData,        // catalogs
+    BrokerHoldingsData, PositionsData, planHoldings, planHoldingsLoading,
+    showPlanPicker, setShowPlanPicker, selectedPlan, setSelectedPlan, broker,
+    refreshing, onRefresh, panResponder,
+    renderAllHoldings, renderPositions, renderModalPFCard,
+    mainColor, navigation, modelPortfolioEnabled,
+    userEmail, config,                            // additive — alphanomy-only
+    modalVisible, scoreSymbol, setModalVisible,   // HoldingScoreModal
   }
   ```
-- **Proposed actions:** `onRefresh`, `onTabChange`, `onHoldingPress(symbol)`, `onViewScore(symbol)` / `onCloseScoreModal`, `onExecuteRepairTrade(trade)`.
-- **Risks:** WebSocket subscription + EventEmitter listener cleanup must move with container. 10+ broker conditionals locked to container. Inline `formatCurrency` calls — pre-format in viewModel so presentation receives strings. Repair-trade flow brushes against MP-freeze; verify the **execution** path stays in container (or in MP-frozen surface) rather than in `designs/`.
+- **Risks discharged:** WebSocket subscription + `OrderPlacedReferesh` EventEmitter cleanup stay in container (unchanged). 10+ broker-conditional position-fetch branches stay in container (unchanged). The 620-line StyleSheet was extracted as-is — no semantic edits, the legacy default presentation is a faithful re-render. Repair-trade flow (MP-pending) is untouched: `processedData` + `<ModelPFCard>` come from container scope; the design files only render those rows.
+- **Open follow-ups:** none for this commit. Future phases may pre-format `formatCurrency(...)` in the viewModel (currently called inside both presentations) to allow variants without `react-native-linear-gradient`/`Poppins`/`Satoshi` fonts to override formatting; not needed today since all current variants share the same money/locale stack.
 
 ### Authentication screens
 
@@ -219,17 +223,18 @@ ViewModel sketches captured in the audit-task pass (2026-05-01). The `viewModel`
 > presentations under `designs/alphanomy/screens/` (alphanomy 2026
 > redesign): `screens.LoginScreen`, `screens.SignupScreen`,
 > `screens.HomeScreen`, `screens.OrderScreen`,
-> `screens.ModelPortfolioScreen`, `screens.AccountSettingsScreen`.
+> `screens.ModelPortfolioScreen`, `screens.AccountSettingsScreen`,
+> `screens.PortfolioScreen` (added 2026-05-06).
 > viewModel / actions contracts are identical to the default
 > presentations; switching variants does not change audit row verdicts.
 > HomeScreen / ModelPortfolioScreen / OrderScreen are *design previews* —
 > they use sample data matching the HTML mockup; live data binding
 > (`allTabData` / `viewModel.routes` / live order rows) is deferred.
-> Onboarding, Notifications (both new in HTML mockup), and Portfolio
-> screens have no variant override — Onboarding/Notifications need new
-> default keys + containers first; Portfolio (`PortfolioScreen`) is not
-> yet migrated to the design system. See
-> `DESIGN_MIGRATION_PROGRESS.md § 2026-05-04`.
+> PortfolioScreen alphanomy override is **live-data wired** end-to-end
+> (reuses the container's renderer closures unchanged). Onboarding +
+> Notifications (both new in HTML mockup) still have no variant override —
+> they need new default keys + containers first. See
+> `DESIGN_MIGRATION_PROGRESS.md § 2026-05-06`.
 
 ### Account Settings screen
 

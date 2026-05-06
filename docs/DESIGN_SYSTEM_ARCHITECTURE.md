@@ -91,6 +91,20 @@ Backend overrides (already supported for colors via `appadvisors.colorTokens`) e
 
 Components SHOULD prefer the composite hook `useTokens()` going forward; the existing `useColors()` continues to work unchanged for color-only consumers.
 
+#### `useTokens()` resolution (variant-aware as of 2026-05-04)
+
+`useTokens()` is variant-aware. It reads the active variant's `build*` builders from `DesignContext.tokens` and uses them in place of the default builders imported from `src/theme/`. Resolution per call:
+
+1. **Variant DEFAULT_* trees** — the active variant's static defaults (e.g. `designs/alphanomy/tokens/DEFAULT_COLORS`) are the base. Variants that don't ship a particular builder (e.g. only override colors) silently fall through to the default builder for that token group.
+2. **Legacy advisor-config branding** — applied INSIDE the variant's `buildColors` (each variant ships its own `applyLegacyBranding` mirroring `src/theme/colors.js`). Per-tenant `mainColor / gradient1 / …` from `appadvisors` overrides the variant's defaults the same way they override default's.
+3. **Nested `*Tokens` overrides** — `appadvisors.colorTokens` deep-merges last; same shape rules as before.
+
+The hook silently falls back to default builders when called outside `<DesignProvider>` (test snapshots, isolated previews) — production code is always inside the provider. The variant is frozen at provider mount via `useRef`, so the variant reference inside `useTokens()` is referentially stable across renders.
+
+`useColors()` remains the legacy color-only hook and is NOT variant-aware — it imports default's `buildColors` directly. Migrate to `useTokens()` if a component needs the variant's palette.
+
+**Implication for Alphanomy fork (`APP_VARIANT=alphaquark` + `DESIGN_VARIANT=alphanomy`)**: when an alphaquark advisor record is loaded from backend with branding fields set (`mainColor`, `gradient1`, `gradient2`), step 2 will overlay those values on top of the alphanomy variant's defaults. To see pure alphanomy colors across migrated screens, either (a) clear the advisor's legacy branding fields, (b) set `appadvisors.colorTokens` to the alphanomy palette explicitly, or (c) have screens import variant tokens directly (the LoginScreen pattern — useful when the advisor config isn't loaded yet, e.g. pre-auth).
+
 ### Primitives
 
 A fixed catalog. The names are part of the design contract — adding a new primitive is a doc change first.
@@ -289,8 +303,9 @@ Strictly sequential. Each phase ships, soaks, and is reviewed before the next st
 8. **Phase H — Modals (non-SDK-bound).** The long tail.
 9. **Phase I — MP screens. ✅ Shipped 2026-05-03.** ModelPortfolioScreen (1115 LOC), MPPerformanceScreen (2220 LOC), MPCard, ModelPFCard, CustomTabbarMPPerformance, EmptyStateMP — all container/presentation split. MPInvestNowModal (5364 LOC) — container/presentation split with payment gateway code in container.
    - **NOT in `designs/`** (SDK-replaced): `MPReviewTradeModal` (2151 LOC), `RebalanceModal` (2650 LOC), `RebalanceAdviceContent` — these are replaced by SDK orchestrator widgets (`tradeReviewSheet`, `tradeResultModal`, `tradeExecutionProgress`, `sellAuthGate`). Customizable via `designs/<variant>/sdk/` instead. See `docs/SDK_DESIGN_PASSTHROUGH.md § 9`.
+10. **Phase J — Bottom-tab Portfolio. ✅ Shipped 2026-05-06.** `PortfolioScreen` (~2.4k LOC pre-extraction → ~1.5k container + 620-line styles file + 330-line default presentation + 520-line alphanomy variant). Container/presentation split with the Phase E.3 prop-bag pattern: container builds a flat `portfolio` bag (~25 keys including the three FlatList row renderers as closures over container scope) and renders `useComponent('screens.PortfolioScreen')`. Default presentation is a verbatim re-render of the legacy chrome (`PortfolioCard` hero + Bespoke/Model Portfolios toggle + plan picker modal + Holdings/Positions tabs + lists with `RenderEmptyMessage`). Alphanomy override ports the alphanomy-improved.html § "05 · Portfolio" mockup: shared `_AppHeader`, gradient `pl-hero` P&L card with floating "Total Returns" badge, pill-tabs with brand-gradient active fill, under-tabs, restyled plan picker, alphanomy empty-state cards. Renderer closures are reused unchanged so individual list rows look identical across variants — only the chrome is re-skinned.
 
-**All phases (A–I) are now complete.** The design system covers 61+ surfaces. Any new surface follows the same pattern: container at `src/`, presentation at `designs/default/`, registered in `designs/default/index.js`.
+**All phases (A–J) are now complete.** The design system covers 62+ surfaces. Any new surface follows the same pattern: container at `src/`, presentation at `designs/default/`, registered in `designs/default/index.js`.
 
 Each phase is the smallest atomic unit that ships value and can be reverted cleanly. Don't bundle them.
 
@@ -333,5 +348,6 @@ Same rule as Phase 3: this doc is the design source of truth, the audit is the p
 - Changing the SDK boundary (surfaces in/out of `designs/`)
 - Changing the container/presentation contract
 - Promoting or freezing a screen group (e.g. lifting the MP freeze)
+- Changing how `useTokens()` resolves variant builders (the § Tokens "useTokens() resolution" sub-section)
 
 Cosmetic-only changes (token defaults, internal primitive layout) need an audit row update + progress log entry, not necessarily an architecture-doc change.

@@ -4,6 +4,37 @@
 
 ---
 
+## 2026-05-06 — Phase J: PortfolioScreen container/presentation split + alphanomy variant
+
+- **Phase**: J (new — bottom-tab Portfolio screen).
+- **Why now**: PortfolioScreen was the last bottom-tab still rendered with its legacy chrome on the alphanomy fork — Home / Orders / Plans / More all swapped to alphanomy in the previous slice, but the Portfolio tab kept the original navy `PortfolioCard` hero with the Bespoke / Model Portfolios toggle and grey-on-white tabs. The user asked to "make this dynamically inside design" so it slots into the same registry / variant override pattern.
+- **Surfaces touched**:
+  - `src/screens/PortfolioScreen/PortfolioScreen.styles.js` (new, ~620 lines) — extracted the 620-line `StyleSheet.create({...})` block from the legacy container verbatim. Lifted as-is (no semantic edits) so the default presentation re-renders pixel-identically.
+  - `src/screens/PortfolioScreen/PortfolioScreen.js` (-~940 lines net) — converted from a 2.4k-line monolith into a ~1.5k-line container. Removed: the local `StyleSheet.create` block (now in `.styles.js`), the local `return (...)` JSX tree (now in the design file). Kept: every `useEffect`, every broker-conditional position-fetch branch, every WebSocket subscribe / EventEmitter listener / portfolio-events wiring, the `panResponder` gesture handler, and the three FlatList row renderers (`renderAllHoldings` / `renderPositions` / `renderModalPFCard`). End-of-component now builds a flat `portfolio` prop bag (~25 keys) and renders `useComponent('screens.PortfolioScreen')`. The renderer closures are passed through the bag so the WebSocket-driven `<HoldingDynamicText>` / `<PortfolioPositionText>` cells keep resolving against container scope — no contract change to `useTrade` / `MultiBrokerContext`.
+  - `designs/default/screens/PortfolioScreen.js` (new, ~330 lines) — pixel-faithful re-render of the legacy chrome. Imports the extracted styles + `PortfolioCard` + `RenderEmptyMessage` + `HoldingScoreModal` from their existing locations. Same JSX tree the container had inline pre-extraction; only the data source changed (now via the prop bag). No visual diff intended — verified by line-for-line equivalence with the pre-edit `return (...)` block.
+  - `designs/alphanomy/screens/PortfolioScreen.js` (new, ~520 lines) — alphanomy-improved.html § "05 · Portfolio" port: shared `_AppHeader` (greeting + ticker strip — same helper Home / Orders / Plans / More variants use), gradient `pl-hero` P&L card with grid-line texture + glow circles + "Total Returns" floating badge (positive=mint #3DFFA0, negative=coral #FFA8A8), pill-tabs for Model Portfolios vs All Holdings (active fill = brand gradient via `LinearGradient` matching HTML's `active-grad`), an under-tabs row for Holdings vs Positions (mirrors the legacy `tabIndex` toggler), a restyled plan picker dropdown + Modal, and alphanomy `EmptyCard` blocks with gradient "Connect Broker" CTA. Lists reuse the renderer closures from the prop bag so individual rows look identical to default — only the chrome around them is re-skinned.
+  - `designs/default/index.js` — added `import PortfolioScreen from './screens/PortfolioScreen'` (Phase J group) and `'screens.PortfolioScreen': PortfolioScreen` in the components map. The default registry is the contract floor; this is the new key.
+  - `designs/alphanomy/index.js` — added `import PortfolioScreen from './screens/PortfolioScreen'` and `'screens.PortfolioScreen': PortfolioScreen` to the variant override map. With `DESIGN_VARIANT=alphanomy` in `.env` (already set), the bottom-tab Portfolio renders the alphanomy chrome; with the variable unset, default renders unchanged.
+- **Verdict change** (`DESIGN_COMPONENT_AUDIT.md § PortfolioScreen`): `needs-logic-extraction` → ✅ **Migrated (Phase J)**. The audit row's open-follow-ups list reduced to just the optional `formatCurrency` pre-formatting nice-to-have; nothing blocks subsequent design work.
+- **Risks discharged / NOT in this commit**:
+  - **WebSocket + EventEmitter cleanup paths** — untouched. Container still owns every cleanup branch (`OrderPlacedReferesh`, `cartUpdated`, `portfolioEvents`, WebSocket subscribe in `useEffect`), so production behavior is identical.
+  - **10+ broker-conditional position fetchers** (`getAllPositionsData`) — untouched. Container still owns the IIFL/ICICI/Upstox/Angel/Zerodha/Kotak/HDFC/Dhan/AliceBlue/Fyers/Groww/Motilal branches; the `setpositionsData` writes flow through to `PositionsData` which lands in the prop bag.
+  - **Repair-trade flow** — untouched. `processedData` (with `latest`, `repair` markers) and the `<ModelPFCard>` row come from container scope; the design files only render whatever rows the renderer closure produces.
+  - **MP-pending policy** — explicitly deferred. The Phase I MP screens (`screens.ModelPortfolioScreen`, `screens.MPPerformanceScreen`, `screens.MPInvestNowModal`) and the `<ModelPFCard>` composite already migrated under their own audit rows. PortfolioScreen consumes `<ModelPFCard>` but doesn't re-design it — same separation of concerns.
+- **Visual QA status**: ⏳ pending on-device emulator capture (default + alphanomy). The default presentation is a verbatim JSX extraction so pixel parity is provable by diff; the alphanomy presentation needs the standard Pixel_6_API35 capture once Metro is started. **Open-action**: capture on-device screenshots and append to this entry, mirroring the Visual QA blocks in the 2026-05-04 alphanomy entries.
+- **Files changed** (5):
+  - `src/screens/PortfolioScreen/PortfolioScreen.js` (-940 net, container slimmed + prop-bag wired)
+  - `src/screens/PortfolioScreen/PortfolioScreen.styles.js` (new, +620)
+  - `designs/default/screens/PortfolioScreen.js` (new, +330)
+  - `designs/alphanomy/screens/PortfolioScreen.js` (new, +520)
+  - `designs/default/index.js` + `designs/alphanomy/index.js` (registry hookups, +5 lines each)
+- **Docs updated this commit** (per the BLOCKING design-system rule):
+  - `docs/DESIGN_COMPONENT_AUDIT.md § PortfolioScreen` — verdict promoted to Migrated, full prop-bag contract documented; variant-override note updated to call out the new key.
+  - `docs/DESIGN_MIGRATION_PROGRESS.md` — this entry.
+  - `docs/CHANGELOG.md` — Phase J row.
+
+---
+
 ## 2026-05-04 — `alphanomy` variant: + OrderScreen, ModelPortfolioScreen, AccountSettingsScreen
 
 - **Phase**: post-I (continuation of the alphanomy variant slice).
