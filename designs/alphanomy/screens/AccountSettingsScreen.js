@@ -71,6 +71,7 @@ const AccountSettingsScreen = ({ viewModel, actions }) => {
     const {
         onGoBack = () => {},
         onNavigateNotifications = () => {},
+        onEditProfile = () => {},
     } = actions || {};
 
     const versionLine = appVersion || 'Alphanomy';
@@ -125,7 +126,11 @@ const AccountSettingsScreen = ({ viewModel, actions }) => {
                             {userEmail || 'Add your email'}
                         </Text>
                     </View>
-                    <TouchableOpacity style={styles.editBtn} activeOpacity={0.7}>
+                    <TouchableOpacity
+                        style={styles.editBtn}
+                        activeOpacity={0.7}
+                        onPress={onEditProfile}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                         <Text style={styles.editBtnText}>Edit</Text>
                     </TouchableOpacity>
                 </LinearGradient>

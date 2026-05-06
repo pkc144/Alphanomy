@@ -7,7 +7,7 @@
  * Renders presentation resolved from `screens.AccountSettingsScreen`.
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useConfig } from '../../context/ConfigContext';
 import APP_VARIANTS from '../../utils/Config';
 import {
@@ -25,9 +25,15 @@ import DeviceInfo from 'react-native-device-info';
 import Config from '../../utils/safeConfig';
 import { useTrade } from '../TradeContext';
 import { useComponent } from '../../design/useDesign';
+import ProfileModal from '../../components/ProfileModal';
 
 const AccountSettingsScreen = ({ navigation }) => {
-    const { userDetails } = useTrade();
+    const { userDetails, getUserDeatils } = useTrade();
+    // Profile-edit modal: opened from the alphanomy presentation's "Edit"
+    // pill on the gradient profile card. Same `<ProfileModal>` the legacy
+    // Drawer renders — its body handles the form, save, and toast; we just
+    // mount it here so the alphanomy variant has somewhere to open it from.
+    const [showProfileModal, setShowProfileModal] = useState(false);
     const config = useConfig();
     const selectedVariant = Config?.APP_VARIANT || 'rgxresearch';
     const validVariant = APP_VARIANTS[selectedVariant] ? selectedVariant : 'rgxresearch';
@@ -149,34 +155,47 @@ const AccountSettingsScreen = ({ navigation }) => {
     const appVersion = `${whiteLabelText} v${versionName} · Build ${buildNumber}`;
 
     return (
-        <Presentation
-            viewModel={{
-                userName: userDetails?.name,
-                userEmail: userDetails?.email,
-                imageUrl,
-                userInitials: getInitials(userDetails?.name),
-                menuItems,
-                gradientStart,
-                gradientEnd,
-                showBackgroundLogo,
-                backgroundLogo,
-                // Additive — default presentation ignores these.
-                appVersion,
-                whiteLabelText,
-            }}
-            actions={{
-                onGoBack: () => navigation?.goBack(),
-                // Routes to the new design-system NotificationListScreen
-                // (HTML § "08 · Notifications" port, registered via
-                // designs/{default,alphanomy}/index.js as
-                // `screens.NotificationListScreen`). The legacy
-                // `PushNotificationScreen` route is still wired in
-                // Navigation.js but no in-app bell points at it on the
-                // alphanomy fork — see docs/DESIGN_MIGRATION_PROGRESS.md
-                // § 2026-05-06 NotificationListScreen wiring.
-                onNavigateNotifications: () => navigation?.navigate('NotificationListScreen'),
-            }}
-        />
+        <>
+            <Presentation
+                viewModel={{
+                    userName: userDetails?.name,
+                    userEmail: userDetails?.email,
+                    imageUrl,
+                    userInitials: getInitials(userDetails?.name),
+                    menuItems,
+                    gradientStart,
+                    gradientEnd,
+                    showBackgroundLogo,
+                    backgroundLogo,
+                    // Additive — default presentation ignores these.
+                    appVersion,
+                    whiteLabelText,
+                }}
+                actions={{
+                    onGoBack: () => navigation?.goBack(),
+                    // Routes to the new design-system NotificationListScreen
+                    // (HTML § "08 · Notifications" port, registered via
+                    // designs/{default,alphanomy}/index.js as
+                    // `screens.NotificationListScreen`). The legacy
+                    // `PushNotificationScreen` route is still wired in
+                    // Navigation.js but no in-app bell points at it on the
+                    // alphanomy fork — see docs/DESIGN_MIGRATION_PROGRESS.md
+                    // § 2026-05-06 NotificationListScreen wiring.
+                    onNavigateNotifications: () => navigation?.navigate('NotificationListScreen'),
+                    // Profile-edit pill on the alphanomy gradient card.
+                    // Default presentation doesn't surface an Edit affordance
+                    // and ignores this action.
+                    onEditProfile: () => setShowProfileModal(true),
+                }}
+            />
+            <ProfileModal
+                showModal={showProfileModal}
+                setShowModal={setShowProfileModal}
+                setModalHelp={() => {}}
+                userEmail={userDetails?.email}
+                getUserDeatils={getUserDeatils}
+            />
+        </>
     );
 };
 

@@ -4,6 +4,17 @@
 
 ---
 
+## 2026-05-06 — Bugfix: alphanomy Profile "Edit" pill was a dead button
+
+- **Reported**: user tapped the gradient profile card's Edit pill on the alphanomy Profile (More tab) and nothing happened.
+- **Root cause**: the alphanomy presentation rendered the Edit pill as `<TouchableOpacity style={styles.editBtn} activeOpacity={0.7}>` with no `onPress` handler. The ports of the HTML mockup focused on visuals; the interaction wiring was deferred and never picked up.
+- **Fix** (presentation + container, both updated):
+  - `src/screens/Home/AccountSettingsScreen.js` — added a `showProfileModal` state, pulled `getUserDeatils` from `useTrade()`, mounted the existing `<ProfileModal>` (same modal the legacy Drawer at `Navigation.js:963` renders) alongside the resolved presentation, exposed `actions.onEditProfile = () => setShowProfileModal(true)`. ProfileModal handles the form, save, and post-save refresh internally — we just give it somewhere to be opened from on the alphanomy fork.
+  - `designs/alphanomy/screens/AccountSettingsScreen.js` — destructured `onEditProfile` from `actions`, wired it onto the Edit pill's `onPress`, added a `hitSlop` for easier tapping.
+- **What was NOT changed**: `<ProfileModal>` body is unchanged; the legacy Drawer's render of the same modal still works. The default presentation doesn't surface an Edit affordance and silently ignores the new action.
+
+---
+
 ## 2026-05-06 — Live notification data wired through NotificationListScreen
 
 - **Why**: closing the open follow-up logged when `screens.NotificationListScreen` shipped. Until today the alphanomy variant rendered the `FALLBACK_ITEMS` sample list permanently because the container forwarded `notifications: []`.

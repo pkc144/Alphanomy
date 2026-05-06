@@ -6,6 +6,18 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ## [unreleased] - 2026-05-06
 
+### Bugfix — alphanomy Profile "Edit" pill was a dead button
+
+User reported tapping the "Edit" pill on the alphanomy Profile (More tab) gradient profile card did nothing. The presentation rendered the pill as a `<TouchableOpacity>` but with no `onPress` handler — purely cosmetic.
+
+**Fix**:
+- `src/screens/Home/AccountSettingsScreen.js` (container) — added a `showProfileModal` state, mounted `<ProfileModal>` (the same modal `Navigation.js` renders inside the legacy Drawer) alongside the resolved presentation, and exposed an `onEditProfile: () => setShowProfileModal(true)` action. Pulls `getUserDeatils` from `useTrade()` and forwards it as the modal's refresh callback so a successful save triggers a re-fetch of the user record.
+- `designs/alphanomy/screens/AccountSettingsScreen.js` — destructured `onEditProfile` from `actions` and wired it as the `onPress` of the Edit pill (with a `hitSlop` for easier tapping).
+
+The default presentation doesn't surface an Edit affordance, so it ignores the new action — no behavioural change there.
+
+---
+
 ### Live notification data wired through NotificationListScreen
 
 The alphanomy NotificationListScreen now renders the user's real notifications instead of the design-mockup `FALLBACK_ITEMS`. Closes the open follow-up logged when the screen first shipped.
