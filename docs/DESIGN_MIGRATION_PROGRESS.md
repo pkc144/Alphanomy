@@ -4,6 +4,20 @@
 
 ---
 
+## 2026-05-06 — Bugfix: alphanomy SignupScreen — inputs unresponsive on Android
+
+- **Reported**: user could not fill the Name / Email / Password fields on the alphanomy SignupScreen variant — typing didn't register reliably and the Create Account button felt dead.
+- **Root cause** (alphanomy `screens.SignupScreen`): the form was wrapped in `<TouchableWithoutFeedback onPress={dismissError}>` directly around the `<ScrollView>`. The container's `dismissError` action calls both `setErrorShow(false)` AND `Keyboard.dismiss()`. On Android, the `TouchableWithoutFeedback`'s press event races the underlying `TextInput`'s focus event when the user taps an input — `Keyboard.dismiss()` fires before the TextInput finishes focusing, so the keyboard flashes open and immediately closes (or never gets through), and keystrokes don't land in the input. The same wrapper exists on the alphanomy `LoginScreen` calling `dismissKeyboard` (identical body); LoginScreen has historically had the same fragility but the user hadn't yet tried filling the signup form. Same defect, different exposure.
+- **Secondary issue**: the Create Account button was hard-disabled (`disabled={isLoading || !isChecked}`) when the Terms checkbox was unchecked. The container's `handleSignup` already toasts "Please agree to the Terms & Conditions" when `!isChecked`, but the disabled button blocked that path entirely — users got no feedback explaining why the button did nothing.
+- **Fix**:
+  - Removed the `<TouchableWithoutFeedback>` wrapper from `designs/alphanomy/screens/SignupScreen.js`. The `<ScrollView>` retains `keyboardShouldPersistTaps="handled"` and gains `keyboardDismissMode="on-drag"` so users dismiss the keyboard by scrolling — no race against TextInput focus.
+  - Changed the Create Account button to `disabled={isLoading}` only (was `disabled={isLoading || !isChecked}`). The visual disabled style still applies when the checkbox is unchecked (`(!isChecked || isLoading) && styles.primaryBtnDisabled`), but presses now fall through to `handleSignup` which toasts the Terms requirement.
+  - Removed the now-unused `TouchableWithoutFeedback` import.
+- **What was NOT changed**: the container (`src/screens/Authentication/SignupScreen.js`) is unchanged. `dismissError` still does the right thing when called explicitly (e.g. by the error banner's tap-to-dismiss). The default presentation still uses the same wrapper pattern internally — it has the same fragility but the default variant is not the user's active variant, and changing default would be a wider regression risk; left as-is for a future commit.
+- **Open follow-up**: apply the same wrapper-removal fix to alphanomy `LoginScreen.js` proactively (same defect pattern, same risk). Track in next variant-fix commit.
+
+---
+
 ## 2026-05-06 — Phase J: PortfolioScreen container/presentation split + alphanomy variant
 
 - **Phase**: J (new — bottom-tab Portfolio screen).

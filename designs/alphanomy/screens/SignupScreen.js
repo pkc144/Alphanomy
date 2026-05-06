@@ -19,7 +19,6 @@ import {
     StatusBar,
     KeyboardAvoidingView,
     Platform,
-    TouchableWithoutFeedback,
     TouchableOpacity,
     TextInput,
     ScrollView,
@@ -88,13 +87,23 @@ const SignupScreen = ({ viewModel, actions }) => {
                 behavior={Platform.OS === 'ios' ? 'padding' : undefined}
                 style={styles.flex}
             >
-                <TouchableWithoutFeedback onPress={dismissError}>
-                    <ScrollView
-                        style={styles.flex}
-                        contentContainerStyle={styles.scroll}
-                        keyboardShouldPersistTaps="handled"
-                        showsVerticalScrollIndicator={false}
-                    >
+                {/*
+                  Note (2026-05-06): the TouchableWithoutFeedback wrapper
+                  used to surround this ScrollView and call `dismissError`
+                  (which also calls `Keyboard.dismiss()`) on every body
+                  tap. On Android that races with TextInput focus and
+                  prevents the inputs from accepting keystrokes reliably.
+                  Replaced with `keyboardDismissMode="on-drag"` so users
+                  dismiss the keyboard by scrolling instead — the inputs
+                  no longer fight the wrapper for the touch event.
+                */}
+                <ScrollView
+                    style={styles.flex}
+                    contentContainerStyle={styles.scroll}
+                    keyboardShouldPersistTaps="handled"
+                    keyboardDismissMode="on-drag"
+                    showsVerticalScrollIndicator={false}
+                >
                         {/* ── HERO (purple→blue, reversed from LoginScreen) ── */}
                         <LinearGradient
                             colors={GRADIENTS.brandReverse}
@@ -261,11 +270,20 @@ const SignupScreen = ({ viewModel, actions }) => {
                                 </View>
                             ) : null}
 
-                            {/* Primary CTA — purple→blue gradient mirroring the hero */}
+                            {/*
+                              Primary CTA — purple→blue gradient mirroring
+                              the hero. Only `isLoading` hard-disables the
+                              button; when the terms checkbox is unchecked
+                              we still let the press through so the
+                              container's `handleSignup` can fire its
+                              "Please agree to the Terms & Conditions"
+                              toast (otherwise the button just feels
+                              broken to users who haven't ticked the box).
+                            */}
                             <TouchableOpacity
                                 activeOpacity={0.9}
                                 onPress={onSignup}
-                                disabled={isLoading || !isChecked}
+                                disabled={isLoading}
                                 style={[
                                     styles.primaryBtnWrap,
                                     (!isChecked || isLoading) && styles.primaryBtnDisabled,
@@ -291,8 +309,7 @@ const SignupScreen = ({ viewModel, actions }) => {
                                 </TouchableOpacity>
                             </View>
                         </View>
-                    </ScrollView>
-                </TouchableWithoutFeedback>
+                </ScrollView>
             </KeyboardAvoidingView>
             <Toast />
         </SafeAreaView>

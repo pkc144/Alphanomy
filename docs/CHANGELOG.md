@@ -6,6 +6,20 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ## [unreleased] - 2026-05-06
 
+### Bugfix — alphanomy SignupScreen inputs unresponsive on Android
+
+User reported that filling Name / Email / Password on the alphanomy SignupScreen wasn't working — typing didn't register reliably and the Create Account button felt dead. Two defects, one commit:
+
+1. **Wrapper race** — `designs/alphanomy/screens/SignupScreen.js` wrapped its `<ScrollView>` in `<TouchableWithoutFeedback onPress={dismissError}>`. The container's `dismissError` calls `Keyboard.dismiss()` in addition to `setErrorShow(false)`, so on Android every TextInput tap raced with `Keyboard.dismiss()` — the keyboard flashed open and immediately closed, and keystrokes didn't land. **Fix**: dropped the `<TouchableWithoutFeedback>` wrapper; the `<ScrollView>` keeps `keyboardShouldPersistTaps="handled"` and gains `keyboardDismissMode="on-drag"`. Removed the now-unused `TouchableWithoutFeedback` import.
+2. **Dead Create Account button** — the CTA was hard-disabled (`disabled={isLoading || !isChecked}`) when the Terms checkbox was unticked. The container's `handleSignup` already toasts "Please agree to the Terms & Conditions" in that case, but the disabled button blocked the press entirely. **Fix**: button is now `disabled={isLoading}` only; the visual disabled style still applies when the checkbox is off, but presses fall through to `handleSignup` so users see the toast feedback explaining why the button isn't ready.
+
+Container (`src/screens/Authentication/SignupScreen.js`) unchanged — both fixes are presentation-only. Default presentation is unchanged in this commit; same wrapper pattern exists there but default isn't the user's active variant. Open follow-up to proactively apply the same wrapper fix to `designs/alphanomy/screens/LoginScreen.js` (same defect pattern, just not yet hit).
+
+**Docs updated** (per the BLOCKING design-system rule):
+- `docs/DESIGN_MIGRATION_PROGRESS.md` — bugfix entry with root-cause analysis and the open LoginScreen follow-up.
+
+---
+
 ### Phase J — PortfolioScreen container/presentation split + alphanomy variant
 
 The bottom-tab Portfolio screen joins the swappable design system. Until today it was the last bottom-tab still rendering with its legacy navy `PortfolioCard` hero + grey Bespoke/Model Portfolios toggle on the alphanomy fork; Home / Orders / Plans / More had all already swapped to alphanomy chrome.
