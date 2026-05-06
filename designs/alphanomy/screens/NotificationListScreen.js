@@ -23,7 +23,7 @@
  * container exposes a real `notifications` array.
  */
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import {
     View,
     Text,
@@ -32,6 +32,8 @@ import {
     ScrollView,
     TouchableOpacity,
     StatusBar,
+    RefreshControl,
+    ActivityIndicator,
 } from 'react-native';
 import {
     ChevronLeft,
@@ -178,13 +180,35 @@ const SectionHeader = ({ label }) => (
 
 const NotificationListScreen = ({ viewModel, actions }) => {
     const containerItems = viewModel?.notifications;
-    const items =
-        Array.isArray(containerItems) && containerItems.length > 0
-            ? containerItems
-            : FALLBACK_ITEMS;
+    const isLoading = !!viewModel?.isLoading;
+    // Show the design-mockup fallback only on the very first paint when the
+    // container is empty AND not actively loading. Once a real fetch is in
+    // flight (or a refresh has resolved with zero rows) the empty state is
+    // honest about the user having no notifications. Memoized so the
+    // groupBySection useMemo below has a stable input across renders.
+    const items = useMemo(() => {
+        const isContainerEmpty =
+            !Array.isArray(containerItems) || containerItems.length === 0;
+        if (isContainerEmpty && !isLoading) {return FALLBACK_ITEMS;}
+        return containerItems || [];
+    }, [containerItems, isLoading]);
+    const isShowingFallback = items === FALLBACK_ITEMS;
+
     const onBack = actions?.onBack || (() => {});
     const onMarkAllRead = actions?.onMarkAllRead || (() => {});
     const onNotificationPress = actions?.onNotificationPress;
+    const onRefresh = actions?.onRefresh;
+
+    const [refreshing, setRefreshing] = useState(false);
+    const handleRefresh = useCallback(async () => {
+        if (typeof onRefresh !== 'function') {return;}
+        setRefreshing(true);
+        try {
+            await onRefresh();
+        } finally {
+            setRefreshing(false);
+        }
+    }, [onRefresh]);
 
     const groups = useMemo(() => groupBySection(items), [items]);
     const hasUnread = items.some((it) => it.unread);
@@ -199,21 +223,38 @@ const NotificationListScreen = ({ viewModel, actions }) => {
                     <ChevronLeft size={22} color={COLORS.text.primary} strokeWidth={2} />
                 </TouchableOpacity>
                 <Text style={styles.title}>Notifications</Text>
-                <TouchableOpacity onPress={onMarkAllRead} disabled={!hasUnread}>
+                <TouchableOpacity
+                    onPress={onMarkAllRead}
+                    disabled={!hasUnread || isShowingFallback}>
                     <Text
                         style={[
                             styles.markAllRead,
-                            !hasUnread && styles.markAllReadDisabled,
+                            (!hasUnread || isShowingFallback) && styles.markAllReadDisabled,
                         ]}>
                         Mark all read
                     </Text>
                 </TouchableOpacity>
             </View>
 
+            {isLoading && items.length === 0 ? (
+                <View style={styles.loadingWrap}>
+                    <ActivityIndicator size="small" color={COLORS.brand.primary} />
+                </View>
+            ) : null}
+
             <ScrollView
                 style={styles.scroll}
                 contentContainerStyle={styles.scrollContent}
-                showsVerticalScrollIndicator={false}>
+                showsVerticalScrollIndicator={false}
+                refreshControl={
+                    typeof onRefresh === 'function' ? (
+                        <RefreshControl
+                            refreshing={refreshing}
+                            onRefresh={handleRefresh}
+                            tintColor={COLORS.brand.primary}
+                        />
+                    ) : undefined
+                }>
                 {groups.map((g, gi) => (
                     <View key={`${g.section}-${gi}`}>
                         <SectionHeader label={g.section} />
@@ -266,6 +307,12 @@ const styles = StyleSheet.create({
 
     scroll: { flex: 1 },
     scrollContent: { paddingBottom: SPACING.huge },
+
+    loadingWrap: {
+        alignItems: 'center',
+        paddingVertical: SPACING.md + 4,
+        backgroundColor: COLORS.surface.base,
+    },
 
     sectionHeader: {
         paddingHorizontal: SPACING.md + 2,

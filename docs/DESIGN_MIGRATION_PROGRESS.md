@@ -4,6 +4,32 @@
 
 ---
 
+## 2026-05-06 — Live notification data wired through NotificationListScreen
+
+- **Why**: closing the open follow-up logged when `screens.NotificationListScreen` shipped. Until today the alphanomy variant rendered the `FALLBACK_ITEMS` sample list permanently because the container forwarded `notifications: []`.
+- **New file**: `src/screens/Home/hooks/useNotificationFeed.js` (~270 lines).
+  - Reads from `TradeContext` (`allNotifications`, `getAllNotifcations`, `isNotificationLoading`, `userEmail`, `configData`) — the same hook surface `src/screens/Home/PushNotificationScreen.js` (1800-line legacy production screen) consumes. No new backend endpoint introduced; the same `GET /api/sendnotification/get-user-notifications/{userEmail}` feed powers both screens.
+  - Normalizes the three legacy notification shapes that PushNotificationScreen's `sortNotificationsByDate` handles, into the flat `{ id, section, kind, title, message, time, unread, _raw }` rows the design system expects:
+    - **inApp** — each `notification.inAppNotifications[i]` becomes a separate row.
+    - **rebalance** — `notification.modelName` set, single row, `kind = 'advisory'`.
+    - **stock** — `notification.symbolPrice[]` non-empty, single row, `kind = 'order'`.
+  - Section labels: `Today` / `Yesterday` / `Earlier` (sorted in that order, newest first within each section).
+  - `kind` classifier: keyword scan of the row title + body picks one of `order` / `advisory` / `reminder` / `message` / `alert` — maps directly to the alphanomy variant's `KIND_MAP` icon palette.
+  - Time formatting: relative (`just now`, `Xm ago`, `Xh ago`) for today; `Yesterday`; otherwise short month-day (`Apr 27`).
+  - `markRead(rowOrId)` — recovers the raw mongo `_id` from a built row (`inapp-<id>-N` / `rebalance-<id>` / `stock-<id>`) and calls `PUT /api/sendnotification/mark-notification-read-by-id` with the same body PushNotificationScreen uses.
+  - `markAllRead()` — fans out per-id PUTs in parallel (deduplicates by raw mongo id so an inApp parent with multiple sub-rows is only PUT once), then refreshes. No bulk endpoint exists today; comment in the hook documents where to swap when one lands.
+- **Container update** (`src/components/NotificationListScreen.js`): now calls `useNotificationFeed()` and forwards `viewModel = { notifications, isLoading }` + `actions = { onBack, onRefresh, onMarkAllRead, onNotificationPress }`. `onNotificationPress` marks the row read (no detail-view yet — same parity the alphanomy fallback offered).
+- **Presentation updates**:
+  - `designs/alphanomy/screens/NotificationListScreen.js` — wired pull-to-refresh via `RefreshControl` on the `<ScrollView>`, `<ActivityIndicator>` for the initial-load empty state, and the `Mark all read` button is now a no-op when only `FALLBACK_ITEMS` are showing (so users can't accidentally fire mark-as-read PUTs against fake mongo ids). The `FALLBACK_ITEMS` ships only when the container's `notifications` is empty AND `isLoading === false` — i.e. there's nothing in flight, so the design preview is shown at boot / for unauthenticated demo. Memoized via `useMemo` so the grouping memo's input is stable.
+  - `designs/default/screens/NotificationListScreen.js` — wired the same `RefreshControl` (when the container exposes `onRefresh`).
+- **What was NOT changed**:
+  - The legacy `src/screens/Home/PushNotificationScreen.js` — left as-is. Route still registered at `Navigation.js:1174-1177` for deep-link / push-tap reachability, but no in-app bell on the alphanomy fork points at it.
+  - `TradeContext.getAllNotifcations` — same body, same endpoint. Sharing the same hook surface means PushNotificationScreen and NotificationListScreen both reflect any read-state mutation either makes.
+  - Detail-view modal (per-notification tap → modal/full screen). PushNotificationScreen has a 700-line modal with stock-detail, rebalance-detail, etc. — not ported in this commit. `onNotificationPress` currently just marks the row read.
+- **Test plan / Visual QA**: ⏳ pending on-device emulator capture. With a live Firebase session the alphanomy variant should render the user's real notifications in the alphanomy chrome (sections / icon tiles / unread rail / mark-all-read fan-out) — fallback only shown for unauthenticated boot.
+
+---
+
 ## 2026-05-06 — Bugfix: redirect alphanomy Profile + ChangeAdvisor bell taps to NotificationListScreen
 
 - **Reported**: user said "I am getting old notification page only" after the NotificationListScreen migration shipped. Repro: tapping the bell on the alphanomy Profile (More tab) screen still routed to the legacy 1800-line `src/screens/Home/PushNotificationScreen.js`, not the newly-migrated `NotificationListScreen`. Same on `ChangeAdvisor`.

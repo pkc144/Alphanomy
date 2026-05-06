@@ -19,7 +19,7 @@
  *   }
  */
 
-import React from 'react';
+import React, { useCallback, useState } from 'react';
 import {
     View,
     Text,
@@ -28,6 +28,7 @@ import {
     FlatList,
     TouchableOpacity,
     SafeAreaView,
+    RefreshControl,
 } from 'react-native';
 import { ChevronLeft } from 'lucide-react-native';
 
@@ -35,7 +36,18 @@ const Alpha100 = require('../../../src/assets/alpha-100.png');
 
 const NotificationListScreen = ({ viewModel, actions }) => {
     const { notifications = [] } = viewModel || {};
-    const { onBack = () => {} } = actions || {};
+    const { onBack = () => {}, onRefresh } = actions || {};
+
+    const [refreshing, setRefreshing] = useState(false);
+    const handleRefresh = useCallback(async () => {
+        if (typeof onRefresh !== 'function') {return;}
+        setRefreshing(true);
+        try {
+            await onRefresh();
+        } finally {
+            setRefreshing(false);
+        }
+    }, [onRefresh]);
 
     const renderItem = ({ item }) => (
         <SafeAreaView style={styles.notificationItem}>
@@ -71,6 +83,14 @@ const NotificationListScreen = ({ viewModel, actions }) => {
                     notifications.length === 0
                         ? styles.emptyListContent
                         : styles.listContent
+                }
+                refreshControl={
+                    typeof onRefresh === 'function' ? (
+                        <RefreshControl
+                            refreshing={refreshing}
+                            onRefresh={handleRefresh}
+                        />
+                    ) : undefined
                 }
             />
         </SafeAreaView>

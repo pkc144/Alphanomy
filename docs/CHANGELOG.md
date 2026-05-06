@@ -6,6 +6,34 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ## [unreleased] - 2026-05-06
 
+### Live notification data wired through NotificationListScreen
+
+The alphanomy NotificationListScreen now renders the user's real notifications instead of the design-mockup `FALLBACK_ITEMS`. Closes the open follow-up logged when the screen first shipped.
+
+**New file**: `src/screens/Home/hooks/useNotificationFeed.js`
+- Reads from `TradeContext` (`allNotifications`, `getAllNotifcations`, `isNotificationLoading`, `userEmail`, `configData`) — the same `GET /api/sendnotification/get-user-notifications/{userEmail}` feed `src/screens/Home/PushNotificationScreen.js` (the 1800-line legacy production screen) consumes. No new backend endpoint introduced.
+- Normalizes the three legacy notification shapes (inApp / rebalance / stock) — same shapes PushNotificationScreen's `sortNotificationsByDate` handles — into the flat `{ id, section, kind, title, message, time, unread, _raw }` rows the design system expects. inApp parents expand into N sub-rows.
+- Section labels: `Today` / `Yesterday` / `Earlier`. Time formatting: `just now` / `Xm ago` / `Xh ago` / `Yesterday` / `Apr 27`. `kind` classifier picks one of `order` / `advisory` / `reminder` / `message` / `alert` from a keyword scan, mapping directly to the alphanomy variant's icon palette (blue / green / amber / purple / red).
+- `markRead(rowOrId)` — recovers the raw mongo `_id` from the built row and calls `PUT /api/sendnotification/mark-notification-read-by-id` (same body as legacy).
+- `markAllRead()` — fans out per-id PUTs in parallel (deduplicated), then refreshes. No bulk endpoint today; swap the body for a single PUT when the backend exposes one.
+
+**Container update** (`src/components/NotificationListScreen.js`): calls `useNotificationFeed()` and forwards `viewModel = { notifications, isLoading }` + `actions = { onBack, onRefresh, onMarkAllRead, onNotificationPress }`. `onNotificationPress` marks the row read (no detail-view yet).
+
+**Presentation updates**:
+- `designs/alphanomy/screens/NotificationListScreen.js` — pull-to-refresh wired via `RefreshControl`, initial-load `ActivityIndicator`, and the "Mark all read" button is disabled when only `FALLBACK_ITEMS` are showing (prevents fake-mongo-id PUTs against the sample data). `FALLBACK_ITEMS` ships only when the container hands an empty array AND nothing is in flight — so the design preview still renders for unauthenticated boot, but disappears the moment a real fetch resolves.
+- `designs/default/screens/NotificationListScreen.js` — same `RefreshControl` wiring (when the container exposes `onRefresh`).
+
+**What stayed unchanged**:
+- The 1800-line `PushNotificationScreen.js` legacy screen — route still registered for deep-link / push-tap reachability, but no in-app bell on the alphanomy fork points at it.
+- `TradeContext.getAllNotifcations` — both screens now share the same hook surface, so any read-state mutation either makes is reflected on both.
+- Detail-view modal (per-notification tap → modal/full screen) — not ported in this commit. PushNotificationScreen's 700-line modal with stock-detail / rebalance-detail rendering is a separate task.
+
+**Docs updated** (per the BLOCKING design-system rule):
+- `docs/DESIGN_COMPONENT_AUDIT.md § NotificationListScreen` — "Live data wired" bullet added; open follow-ups updated to reflect the closed item.
+- `docs/DESIGN_MIGRATION_PROGRESS.md` — full work-log entry with hook contract, normalizer mapping, what was/wasn't changed, and the Visual QA pending action.
+
+---
+
 ### Bugfix — alphanomy Profile + ChangeAdvisor bell taps were still hitting the legacy notifications screen
 
 User reported "I am getting old notification page only" after the NotificationListScreen migration shipped. The `_AppHeader` bell (Home / Orders / Plans / More headers) was correctly navigating to `NotificationListScreen`, but the **Profile-tab bell** and **ChangeAdvisor bell** — both rendered by the alphanomy variant — still called `onNavigateNotifications` callbacks that hardcoded `navigation.navigate('PushNotificationScreen')`, the legacy 1800-line production screen.
