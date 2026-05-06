@@ -6,6 +6,35 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ## [unreleased] - 2026-05-06
 
+### Fixed — Kotak V1→V2 API migration (backend-only, ccxt-india) — ported from b2b 6a31f4f
+
+**Problem.** ALL Kotak API calls (orders, funds, holdings) returned HTTP 502 with empty body. 0/26 orders succeeded. Rate-limit tuning and sId routing had no effect.
+
+**Root cause.** Kotak sunset their V1 API gateway (`gw-napi.kotaksecurities.com`) in October 2025. The V2 API uses the per-user dynamic `baseUrl` (e.g. `https://e43.kotaksecurities.com`) returned by `tradeApiValidate`, with shorter paths and minimal headers. Additionally, SEBI's April 2026 static IP mandate requires order API calls to originate from a whitelisted IP — our per-customer egress IPv6 is whitelisted but the server's default IPv4 is not.
+
+**Diagnosis steps:**
+1. Confirmed `gw-napi.kotaksecurities.com` returns 502 even on unauthenticated root URL
+2. Tested all Kotak endpoints: `mnapi` (522 timeout), `cnapi` (connection timeout), `e43` (200 on V2 paths)
+3. Discovered V2 SDK (`Kotak-Neo/Kotak-neo-api-v2`) documents the migration
+4. Confirmed `e43.kotaksecurities.com/quick/user/orders` returns 200 (V2 path works)
+5. Order placement on e43 returned `stCode:100008` (IP unauthorized) from default IP
+6. Switched to egress IPv6 → `stCode:100022` (expired session) → proves IP IS whitelisted
+
+**Fix (ccxt-india `brokers/kotak/kotak.py`):**
+- Route API calls through dynamic `baseUrl` instead of dead `gw-napi` gateway
+- V2 paths: `/quick/order/rule/ms/place` (no `/Orders/2.0/` prefix)
+- V2 headers: only `Sid` + `Auth` (dropped `Authorization: Bearer` and `neo-fin-key`)
+- Added `"os": "NEOTRADEAPI"` to order body (V2 requirement)
+- `neo_fin_key` simplified to always `"neotradeapi"`
+- `serverId` falls back to `dataCenter` when `hsServerId` is empty
+- `_parse_error_response` now reads V2 fields (`errMsg`/`stCode`/`desc`)
+
+**Result.** Orders now reach Kotak — user got proper "insufficient funds" rejections instead of 502s.
+
+**Files touched:** `ccxt-india/brokers/kotak/kotak.py`, `ccxt-india/common/broker_rate_limits.yml`. Documented the migration in `docs/BROKER_CONNECTION.md`.
+
+---
+
 ### Fixed — MPReviewTradeModal: Place Order spinner stuck forever (Axis Securities, Dhan, all brokers) — ported from b2b 250eee6
 
 **Problem.** Clicking "Place Order" in the MP rebalance review modal caused the button to spin indefinitely. No HTTP request was ever sent to the backend (`/rebalance/process-trade`). Confirmed via nginx access logs on Alphab2bapp: zero `okhttp`/React Native requests for that endpoint while the Flutter (tidi) app hit it successfully.
@@ -17,8 +46,7 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 2. Removed the orphaned inner `{` at line 430 (syntax error — `} catch` cannot follow a plain block).
 3. Added `latestRebalance?.model_Id` optional chaining (defensive — `latestRebalance` starts as `null` and is populated asynchronously).
 
-**Files changed:**
-- `src/components/ModelPortfolioComponents/MPReviewTradeModal.js` — `try {` moved to line 319 (was 429), orphaned `{` removed, optional chaining on `latestRebalance?.model_Id`
+**Files changed:** `src/components/ModelPortfolioComponents/MPReviewTradeModal.js` — `try {` moved to line 319 (was 429), orphaned `{` removed, optional chaining on `latestRebalance?.model_Id`.
 
 **Port note**: ignored the upstream `metro.config.js` SDK-path edit (Alphanomy uses sibling layout `../alphaquark-mobile-sdk`, not `../../`) and the `android/gradle.properties` JDK-path tweak (gitignored on Alphanomy; per-developer setting).
 
