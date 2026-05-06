@@ -23,7 +23,7 @@ import {
 import axios from 'axios';
 import MPInvestNowModal from '../../components/ModelPortfolioComponents/MPInvestNowModal';
 import PaymentSuccessModal from '../../components/ModelPortfolioComponents/PaymentSuccessModal';
-import {useNavigation} from '@react-navigation/native';
+import {useNavigation, useRoute} from '@react-navigation/native';
 import MPCard from '../../components/ModelPortfolioComponents/MPCard';
 import {getAuth} from '@react-native-firebase/auth';
 import server from '../../utils/serverConfig';
@@ -282,6 +282,40 @@ const ModelPortfolioScreen = ({type = '', onDataLoaded}) => {
     });
     setPaymentModal(true);
   };
+
+  // Auto-open the payment modal when arriving from the alphanomy HomeScreen's
+  // Subscribe button. Home navigates with route params:
+  //   { kind: 'mp' | 'bespoke', subscribe: true, planName: <string> }
+  // We wait for the matching catalog list to load (allStrategy / allBespoke),
+  // switch to the correct tab via the routes array (order varies based on
+  // `config.bespokePlansEnabled` / `config.modelPortfolioEnabled`), find the
+  // plan by name, fire handlePricingCardClick, then clear the params so the
+  // effect doesn't refire on rerenders.
+  const route = useRoute();
+  useEffect(() => {
+    const params = route?.params;
+    if (!params || params.subscribe !== true || !params.kind) return;
+    const list = params.kind === 'bespoke' ? allBespoke : allStrategy;
+    if (!Array.isArray(list) || list.length === 0) return;
+    const target =
+      (params.planName &&
+        list.find(p => p?.name === params.planName)) ||
+      list[0];
+    if (!target) return;
+    const tabKey =
+      params.kind === 'bespoke' ? 'bespoke' : 'modelportfolio';
+    const tabIdx = routes.findIndex(r => r.key === tabKey);
+    if (tabIdx >= 0 && tabIdx !== index) setIndex(tabIdx);
+    handlePricingCardClick(target);
+    if (typeof navigation?.setParams === 'function') {
+      navigation.setParams({
+        kind: undefined,
+        subscribe: undefined,
+        planName: undefined,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [route?.params, allStrategy, allBespoke, routes]);
 
   const handleCardClickSelect = item => setSelectedCard(item);
 
