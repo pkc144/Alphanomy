@@ -7,14 +7,37 @@ import server from "../../utils/serverConfig";
 import Config from "react-native-config";
 import { generateToken } from "../../utils/SecurityTokenManager";
 
-// Indices configuration with correct symbols and exchanges
-// NOTE: Primary symbols MUST match what the WebSocket actually sends
+// Indices configuration with correct symbols and exchanges.
+//
+// 2026-05-07: removed `alternativeSymbols` for nifty50 / bankNifty.
+// The backend ws-server `INDICES_CONFIG` (commit edf0679) now
+// canonicalizes index broadcasts to the real-token symbols
+// `NIFTY` / `BANKNIFTY` / `FINNIFTY` (the alias keys
+// `NIFTY 50` / `NIFTY BANK` / `NIFTY FIN SERVICE` mapped to
+// AngelOne tokens 99926000/99926009/99926037 which never receive
+// live ticks → stale data). The frontend's fallback chain was
+// then double-subscribing to both real AND alias names — both
+// delivered ticks (Redis stored both keys; AngelOne auto-resolve
+// populated aliases), and the `subscribedSymbolsRef` Set gate
+// accepted ticks from either → user saw the Nifty 50 / Bank Nifty
+// values flicker between fresh and stale prices ~3-5x/sec.
+//
+// finNifty also drops `NIFTY FIN SERVICE` as primary (was matching
+// the stale-token key) and now uses canonical `FINNIFTY` plus a
+// few alias fallbacks in case some legacy tenant deploy still
+// publishes under the old name.
+//
+// IMPORTANT: also see the fallback-Set fix below — even with this
+// list, the previous `Set.add()` accumulation pattern could
+// re-introduce flicker if any tenant ever publishes both names
+// concurrently. The Set is now REPLACED on each tryNext attempt,
+// so only the currently-active sym passes the gate.
 const indicesConfig = {
   nifty50: {
     symbol: "NIFTY",
     exchange: "NSE",
     displayName: "Nifty 50",
-    alternativeSymbols: ["NIFTY 50", "Nifty 50", "NIFTY_50"],
+    alternativeSymbols: [],
   },
   sensex: {
     symbol: "SENSEX",
@@ -26,13 +49,13 @@ const indicesConfig = {
     symbol: "BANKNIFTY",
     exchange: "NSE",
     displayName: "BankNifty",
-    alternativeSymbols: ["NIFTY BANK", "NIFTYBANK", "Nifty Bank", "BANK NIFTY"],
+    alternativeSymbols: [],
   },
   finNifty: {
-    symbol: "NIFTY FIN SERVICE",
+    symbol: "FINNIFTY",
     exchange: "NSE",
     displayName: "FinNifty",
-    alternativeSymbols: ["FINNIFTY", "NIFTY FINANCIAL SERVICES", "Nifty Fin Service", "NIFTY_FIN_SERVICE"],
+    alternativeSymbols: ["NIFTY FIN SERVICE", "NIFTY FINANCIAL SERVICES", "Nifty Fin Service", "NIFTY_FIN_SERVICE"],
   },
 };
 
@@ -161,11 +184,18 @@ const MarketIndices = () => {
             activeSymbolRef.current[key] = sym;
             hasReceivedRef.current[key] = false;
 
-            // Track all subscribed symbols for this key
-            if (!subscribedSymbolsRef.current[key]) {
-              subscribedSymbolsRef.current[key] = new Set();
-            }
-            subscribedSymbolsRef.current[key].add(sym);
+            // 2026-05-07: REPLACE the Set, don't accumulate.
+            // Previously this used `.add(sym)` which kept the
+            // prior fallback symbol active alongside the new one.
+            // When the alias and canonical Redis keys both held
+            // data (which they do: AngelOne auto-resolve populates
+            // both `ltp:NSE:NIFTY` and `ltp:NSE:NIFTY 50`), the
+            // gate at line 172 accepted ticks from either → stale
+            // and fresh prices alternated ~3-5x/sec on the home
+            // header. Replacing the Set ensures only the currently
+            // active sym passes the gate; previous-attempt ticks
+            // from the wsManager are silently dropped at line 172.
+            subscribedSymbolsRef.current[key] = new Set([sym]);
 
             const callback = ({ symbol, ltp }) => {
               // Accept data from ANY symbol we've subscribed to for this key
