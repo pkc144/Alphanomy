@@ -21,6 +21,7 @@ import {
     Bookmark,
 } from 'lucide-react-native';
 import { getAuth } from '@react-native-firebase/auth';
+import DeviceInfo from 'react-native-device-info';
 import Config from '../../utils/safeConfig';
 import { useTrade } from '../TradeContext';
 import { useComponent } from '../../design/useDesign';
@@ -138,6 +139,15 @@ const AccountSettingsScreen = ({ navigation }) => {
 
     const Presentation = useComponent('screens.AccountSettingsScreen');
 
+    // Variant-facing app-version string (e.g. "Alphanomy v1.0.0 · Build 1").
+    // DeviceInfo.getVersion / getBuildNumber are sync from JS-side cached
+    // BuildConfig values, so no async fetch needed. Default presentation
+    // ignores `appVersion` / `whiteLabelText`; alphanomy reads them.
+    const versionName = DeviceInfo.getVersion();
+    const buildNumber = DeviceInfo.getBuildNumber();
+    const whiteLabelText = Config?.REACT_APP_WHITE_LABEL_TEXT || 'Alphanomy';
+    const appVersion = `${whiteLabelText} v${versionName} · Build ${buildNumber}`;
+
     return (
         <Presentation
             viewModel={{
@@ -150,6 +160,9 @@ const AccountSettingsScreen = ({ navigation }) => {
                 gradientEnd,
                 showBackgroundLogo,
                 backgroundLogo,
+                // Additive — default presentation ignores these.
+                appVersion,
+                whiteLabelText,
             }}
             actions={{
                 onGoBack: () => navigation?.goBack(),

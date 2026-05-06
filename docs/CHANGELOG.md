@@ -6,6 +6,31 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ## [unreleased] - 2026-05-04
 
+### `alphanomy` design variant — foundation slice + LoginScreen
+
+New variant under `designs/alphanomy/` modelled on `alphanomy-improved.html`. Ships the full token bundle (blue→purple gradient, soft lavender surfaces, Poppins binding for DM Sans intent — DM Sans .ttf addition is the only step needed to switch to the literal HTML typeface) and one screen override (`screens.LoginScreen`) as a visual proof. All other screens fall through to `designs/default/`. Activated via `DESIGN_VARIANT=alphanomy` in `.env`; revert by commenting out that line.
+
+**Files added**:
+- `designs/alphanomy/tokens/index.js` — `COLORS / GRADIENTS / TYPOGRAPHY / SPACING / RADII / SHADOWS` plus default-builder re-exports for backend override compatibility.
+- `designs/alphanomy/screens/LoginScreen.js` — gradient hero + overlapping white card layout matching HTML § "01 · Sign In". Same `viewModel` / `actions` contract as the default presentation, so the existing container at `src/screens/Authentication/LoginScreen.js` is unchanged.
+- `designs/alphanomy/screens/SignupScreen.js` — purple→blue reversed gradient + Full Name / Email / Password fields + terms checkbox + gradient "Create Account" CTA, matching HTML § "02 · Sign Up". Same `viewModel` / `actions` contract as default.
+- `designs/alphanomy/screens/HomeScreen.js` — **design preview** of HTML § "04 · Home": gradient logo + greeting derived from email, horizontal ticker strip, P&L hero with Returns badge, Model Portfolios section with hero-style plan card (TOP 100 badge + 3-up meta grid), Top Bespoke Plans section with white plan card and gradient Subscribe CTA. Sample data matches the mockup; live `allTabData` binding deferred to a follow-up.
+- `designs/alphanomy/screens/_AppHeader.js` — internal helper (gradient logo + greeting + bell + avatar + ticker strip) shared across alphanomy screens. Underscore prefix marks it as variant-private (not registered in the design-system registry).
+- `designs/alphanomy/screens/OrderScreen.js` — HTML § "06 · Orders": pill tabs (Orders Placed / Rejected) + soft search bar + alphanomy empty state (or stripped-down order list when `viewModel.orders` non-empty). Same contract as default.
+- `designs/alphanomy/screens/ModelPortfolioScreen.js` — HTML § "07 · Plans": pill tabs (Bespoke Plans / Model Portfolio) with active-tab gradient fill + plan card list (Save % badge, original-price strikethrough, frequency pill incl. amber Weekly variant, View More + gradient Subscribe Now CTA). Sample plans match the mockup.
+- `designs/alphanomy/screens/AccountSettingsScreen.js` — HTML § "09 · Profile": gradient profile card (avatar + name + email + Edit pill) + grouped settings sections rendered from `viewModel.menuItems` with cycling colored icon tiles (brand → purple → green → amber); danger color for logout rows; trailing "Alphanomy v2.4.1 · Build 241" version line.
+- `designs/alphanomy/index.js` — variant root, six screen keys registered.
+
+**Skipped HTML screens (documented in `DESIGN_MIGRATION_PROGRESS.md`)**: Onboarding (§ 03) + Notifications (§ 08) need new default keys + containers first; Portfolio (§ 05) — `PortfolioScreen` not yet migrated to the design system, no key for the variant to override.
+
+**Files changed**:
+- `designs/registry.js` — registered the new variant.
+- `.env` — added `DESIGN_VARIANT=alphanomy` with explanatory comment.
+
+**Docs updated (per blocking rule)**: `DESIGN_MIGRATION_PROGRESS.md` (new entry), `DESIGN_COMPONENT_AUDIT.md` (LoginScreen row footnote noting the alphanomy override). No content changes to `DESIGN_SYSTEM_ARCHITECTURE.md` — the variant exercises existing rules without altering them.
+
+---
+
 ### Alphanomy fork — port design system + SDK refactor from Alphab2bapp (cross-repo sync)
 
 Alphanomy is a rebrand fork of Alphab2bapp. This commit cycle brings the Alphab2bapp `feature/sdk-plus-config-ui` HEAD (`bb416e8`) into the Alphanomy repo so both share the same design-system and SDK plumbing going forward.

@@ -1,4 +1,26 @@
-import { AppRegistry, AppState } from 'react-native';
+// Bridgeless-mode startup race fix.
+//
+// Reanimated requires new architecture (bridgeless). In bridgeless mode,
+// when a legacy native module (notifee/firebase/razorpay/etc.) fires an
+// event during early init, the bridge tries to call into the JS module
+// `RCTEventEmitter` — but RN's renderer (which registers it) hasn't loaded
+// yet because index.js's import chain is still resolving. The thrown error
+// aborts the whole bundle evaluation, AppRegistry.registerComponent is
+// never called, and the app boots to a blank white screen.
+//
+// Pre-registering a no-op RCTEventEmitter handler before any other import
+// runs absorbs those early events safely, letting App.js finish loading.
+require('react-native/Libraries/EventEmitter/RCTEventEmitter').register({
+  receiveEvent: () => {},
+  receiveTouches: () => {},
+});
+
+import { AppRegistry, AppState, LogBox } from 'react-native';
+
+LogBox.ignoreLogs([
+  /Failed to call into JavaScript module method RCTEventEmitter\.receiveEvent/,
+]);
+
 import App from './App';
 import { name as appName } from './app.json';
 import notifee, { AndroidImportance, EventType } from '@notifee/react-native';

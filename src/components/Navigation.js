@@ -352,9 +352,18 @@ if (state.routes[state.index]?.state) {
 
 const currentKey = currentTabRoute?.key || "";
 const currentName = currentTabRoute?.name || "";
+  // Variant-gated chrome: the legacy CustomToolbar (greeting + cart + bell +
+  // avatar + ticker strip) wraps every tab screen in the default variant.
+  // Variants that ship their own in-screen header (e.g. alphanomy's _AppHeader
+  // helper used by HomeScreen / OrderScreen / ModelPortfolioScreen) suppress
+  // it to avoid the duplicate-header look. Tenants who want the legacy
+  // chrome simply leave DESIGN_VARIANT unset (or set it to "default").
+  const showLegacyToolbar =
+    !Config?.DESIGN_VARIANT || Config.DESIGN_VARIANT === 'default';
+
   return (
     <SafeAreaView style={{flex: 1}}>
-      <CustomToolbar currentRoute={currentName} />
+      {showLegacyToolbar && <CustomToolbar currentRoute={currentName} />}
       <Tab.Navigator
         initialRouteName="Home"
         screenOptions={({route}) => ({

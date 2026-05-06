@@ -36,6 +36,8 @@ import {useTrade} from '../TradeContext';
 import CustomTabBar from './CustomTabbar';
 import {useConfig} from '../../context/ConfigContext';
 import { useComponent } from '../../design/useDesign';
+import useHomeMarketSummary from '../Home/hooks/useHomeMarketSummary';
+import { shapeMpPlan, shapeBespokePlan } from '../../utils/alphanomyPlanShape';
 
 const {width, width: ScreenWidth} = Dimensions.get('window');
 
@@ -48,6 +50,21 @@ const ModelPortfolioScreen = ({type = '', onDataLoaded}) => {
   const mainColor = config?.mainColor || '#2563EB';
 
   const Presentation = useComponent('screens.ModelPortfolioScreen');
+
+  // Variant-facing live tickers — must run unconditionally at top of the
+  // component (rules-of-hooks). Default presentation ignores `tickers`.
+  const { tickers } = useHomeMarketSummary();
+
+  // Variant-facing alphanomy plan rows — derived from the same catalog
+  // state the legacy MP card list reads (`allStrategy`, `allBespoke`).
+  // Default presentation ignores `alphanomyPlans`.
+  const alphanomyPlans = React.useMemo(
+      () => ({
+          mp: (allStrategy || []).map((p) => shapeMpPlan(p)).filter(Boolean),
+          bespoke: (allBespoke || []).map((p) => shapeBespokePlan(p)).filter(Boolean),
+      }),
+      [allStrategy, allBespoke],
+  );
 
   const [allStrategy, setAllStrategy] = useState([]);
   const [allBespoke, setAllBespoke] = useState([]);
@@ -550,6 +567,11 @@ const ModelPortfolioScreen = ({type = '', onDataLoaded}) => {
         selectedPlan,
         showHeader: !(type === 'tab'),
         width,
+        // Additive — default presentation ignores these.
+        tickers,
+        userEmail,
+        config,
+        alphanomyPlans,
       }}
       actions={{
         onGoBack: () => navigation.goBack(),

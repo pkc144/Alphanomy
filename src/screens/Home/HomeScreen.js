@@ -45,6 +45,8 @@ import {
 import RebalanceAdvices from '../../components/AdviceScreenComponents/RebalanceAdvices';
 import useHomeScreenTabs from './hooks/useHomeScreenTabs';
 import useHomeScreenModals from './hooks/useHomeScreenModals';
+import useHomeMarketSummary from './hooks/useHomeMarketSummary';
+import useHomePlanSummary from './hooks/useHomePlanSummary';
 import { useComponent } from '../../design/useDesign';
 // styles import retained — allTabData JSX subtrees reference styles from the
 // container's scope (e.g. styles.StockTitle for section headers). The
@@ -234,23 +236,38 @@ const HomeScreen = ({ }) => {
       //  console.log('sorted',sortedRebalances[0]);
       if (!latest) return null;
 
-      // Find execution for this user AND current broker
-      // A user may execute the same rebalance with multiple brokers,
-      // so we check broker match to allow re-execution with a different broker
-      // Also match DummyBroker executions when broker is not connected
+      // 3-tier execution matching (mirrors RebalanceAdvices.js + tidi
+      // RebalanceStatusService._matchExecution):
+      //   Tier 1: exact (email + current broker)
+      //   Tier 2: DummyBroker fallback
+      //   Tier 3: any email match — entry exists for a different broker.
+      //           If other broker's status is "executed", treat current
+      //           broker as fresh toExecute (different broker = different
+      //           holdings). Otherwise pass through (pending is pending
+      //           regardless of broker tag).
       const userExecutionsFiltered =
         latest?.subscriberExecutions?.filter(
           execution => execution?.user_email === userEmail,
         ) || [];
 
-      const userExecution =
+      let userExecution =
         userExecutionsFiltered.find(
           ex => broker && ex?.user_broker === broker,
         ) ||
         userExecutionsFiltered.find(
           ex => ex?.user_broker === 'DummyBroker',
-        ) ||
-        (!broker ? userExecutionsFiltered[0] : undefined);
+        );
+      if (!userExecution && userExecutionsFiltered.length > 0) {
+        // Tier 3: entry exists for a different broker
+        const anyMatch = userExecutionsFiltered[0];
+        const otherStatus = (anyMatch?.status || '').toLowerCase();
+        if (otherStatus === 'executed') {
+          // Executed on broker A ≠ executed on broker B
+          userExecution = {...anyMatch, status: 'toExecute', user_broker: broker};
+        } else {
+          userExecution = anyMatch;
+        }
+      }
 
       const matchingFailedTrades = modelPortfolioRepairTrades?.find(
         trade =>
@@ -1618,6 +1635,22 @@ const HomeScreen = ({ }) => {
   // against this container's scope, so they keep working unchanged.
   const Presentation = useComponent('screens.HomeScreen');
 
+  // Variant-facing additions (alphanomy reads these; default ignores them).
+  // Tickers: live LTPs from MarketDataContext + previous-close fetch for
+  // change indicators. P&L: aggregated holdings sum from MultiBrokerContext.
+  // See src/screens/Home/hooks/useHomeMarketSummary.js for the resolution.
+  const { tickers, pnlSummary } = useHomeMarketSummary();
+  // Plan summaries: top MP + bespoke plan from the catalogs
+  // (mirrors getAllStrategy / getAllBespoke endpoints used by
+  // src/screens/Drawer/ModelPortfolioScreen.js — same auth headers,
+  // same advisorTag/userEmail dependencies). Returns nulls until the
+  // user is authenticated AND the advisor config has resolved.
+  const { heroPlan, bespokePlan } = useHomePlanSummary({
+    userEmail,
+    advisorTag: configData?.config?.REACT_APP_ADVISOR_SPECIFIC_TAG,
+    headerName: configData?.config?.REACT_APP_HEADER_NAME,
+  });
+
   const home = {
     seeAllBespoke, setSeeAllBespoke,
     seeAllBespokeplan, setSeeAllBespokeplan,
@@ -1645,6 +1678,10 @@ const HomeScreen = ({ }) => {
     ethicalSearchQuery, setEthicalSearchQuery,
     showUpdateModal, setShowUpdateModal,
     onStateChange, convertToTimeAgo,
+    // Variant-facing market summary (additive — default presentation ignores).
+    tickers, pnlSummary,
+    // Variant-facing plan summaries.
+    heroPlan, bespokePlan,
   };
 
   return <Presentation home={home} />;

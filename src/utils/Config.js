@@ -1,11 +1,22 @@
-import ZamzamLogo from '../assets/AppLogo/logo.png';
+// SharedDefaultLogo is the fallback logo applied to every variant
+// that doesn't explicitly override `logo`. The file at
+// `src/assets/AppLogo/logo.png` is the ZamZam-branded logo (the
+// asset is byte-identical to `src/assets/AppLogo/Zamzam.png`) — so
+// any variant that inherits `sharedUIConfig` without overriding
+// `logo` will display ZamZam branding. Variants which need their
+// own brand MUST set `logo` and `toolbarlogo` explicitly (see
+// `alphaquark` below). The variable was previously named
+// `ZamzamLogo`, which made the leak path visually obvious in code
+// review but was misleading: this is the SHARED-CONFIG fallback
+// logo, not a ZamZam-specific asset.
+import SharedDefaultLogo from '../assets/AppLogo/logo.png';
 import AlphaQuarkLogo from '../assets/logo.png';
 
 // Shared UI config — theme, colors, layout
 const sharedUIConfig = {
   themeColor: '#ff0000',
-  logo: ZamzamLogo,
-  toolbarlogo: ZamzamLogo,
+  logo: SharedDefaultLogo,
+  toolbarlogo: SharedDefaultLogo,
   homeScreenLayout: 'layout1',
   mainColor: '#0D021F',
   secondaryColor: '#ffffff',
@@ -23,7 +34,7 @@ const sharedUIConfig = {
   selectedTabcolor: '#8555EF',
   basketcolor: '#600CC0',
   basketsymbolbg: '#6D0DD6',
-  googleWebClientId: '713385591555-uj9v6fdjnceg9dr5ts0gb0l5523uhqr2.apps.googleusercontent.com',
+  googleWebClientId: '892331696104-e26pu9iotqrjk1o6jq4ifd4e95fasil1.apps.googleusercontent.com',
 };
 
 // Per-advisor config: subdomain + advisorRaCode
@@ -50,7 +61,7 @@ const APP_VARIANTS = {
     basketsymbolbg: '#8D2952',
     basket1: '#9D2115',
     basket2: '#6B1207',
-    googleWebClientId: '713385591555-uj9v6fdjnceg9dr5ts0gb0l5523uhqr2.apps.googleusercontent.com',
+    googleWebClientId: '892331696104-e26pu9iotqrjk1o6jq4ifd4e95fasil1.apps.googleusercontent.com',
     subdomain: 'prod',
     advisorRaCode: 'ALPHAQUARK',
     paymentModal: {
@@ -69,7 +80,6 @@ const APP_VARIANTS = {
   rgxresearch:   {...sharedUIConfig, subdomain: 'rgxresearch',     advisorRaCode: 'RGXRESEARCH'},
   arfs:          {...sharedUIConfig, subdomain: 'arfs',            advisorRaCode: 'ARFS'},
   magnus:        {...sharedUIConfig, subdomain: 'zamzamcapital',   advisorRaCode: 'ZAMZAMCAPITAL'},
-  alphanomy:     {...sharedUIConfig, subdomain: 'alphanomy',       advisorRaCode: 'ALPHANOMY'},
 
   EmptyStateUi: {
     backgroundColor: '#6B1400',

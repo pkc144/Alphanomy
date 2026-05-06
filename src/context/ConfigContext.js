@@ -257,6 +257,38 @@ export const ConfigProvider = ({ children }) => {
                         // full token catalog.
                         // ============================================================================
                         colorTokens: apiData.colorTokens || {},
+
+                        // ============================================================================
+                        // TENANT TAGLINES (optional advisor override)
+                        // ============================================================================
+                        // Hero copy + trust badges shown on auth screens. The alphanomy
+                        // variant reads these to override its built-in tenant copy
+                        // ("Folios · Research", "Your Alpha, Engineered.", "SEBI Registered",
+                        // etc.) — see designs/alphanomy/screens/LoginScreen.js +
+                        // SignupScreen.js. Falls back to the hardcoded variant copy when
+                        // a field is missing.
+                        //
+                        // Backend shape (`appadvisors.taglines`):
+                        //   {
+                        //     login: {
+                        //       brandSubtag,   // string — sub-tag under brand name
+                        //       heroTitle,     // string — main hero heading (allows \n)
+                        //       heroSubtitle,  // string — supporting copy
+                        //       trustBadges,   // [{ icon: 'check'|'shield'|...,  label: string }]
+                        //     },
+                        //     signup: {
+                        //       brandSubtag,
+                        //       heroTitle,
+                        //       heroSubtitle,    // careful with claims like "50,000+ investors"
+                        //                        // — legal/compliance review per tenant
+                        //     }
+                        //   }
+                        //
+                        // Compliance note: any quantitative claim (investor counts, returns,
+                        // performance numbers) must be tenant-approved before going live.
+                        // Surfacing taglines via backend lets legal vary copy per tenant
+                        // without a code change.
+                        taglines: apiData.taglines || null,
                     };
 
                     console.log('✅ Using newConfig from API for APP_VARIANTS:', {

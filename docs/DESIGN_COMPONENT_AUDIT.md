@@ -215,6 +215,22 @@ ViewModel sketches captured in the audit-task pass (2026-05-01). The `viewModel`
 
 **Phase F migration order (recommended):** ResetPassword → EmailScreenAppleLogin + TermsModal → LogOutScreen → LoginScreen + SignupScreen (paired) → SignUpRADetails + PhoneNumberScreen (paired) → ChangeAdvisor (Account section).
 
+> **Variant override note (2026-05-04):** Six screens have second
+> presentations under `designs/alphanomy/screens/` (alphanomy 2026
+> redesign): `screens.LoginScreen`, `screens.SignupScreen`,
+> `screens.HomeScreen`, `screens.OrderScreen`,
+> `screens.ModelPortfolioScreen`, `screens.AccountSettingsScreen`.
+> viewModel / actions contracts are identical to the default
+> presentations; switching variants does not change audit row verdicts.
+> HomeScreen / ModelPortfolioScreen / OrderScreen are *design previews* —
+> they use sample data matching the HTML mockup; live data binding
+> (`allTabData` / `viewModel.routes` / live order rows) is deferred.
+> Onboarding, Notifications (both new in HTML mockup), and Portfolio
+> screens have no variant override — Onboarding/Notifications need new
+> default keys + containers first; Portfolio (`PortfolioScreen`) is not
+> yet migrated to the design system. See
+> `DESIGN_MIGRATION_PROGRESS.md § 2026-05-04`.
+
 ### Account Settings screen
 
 | Screen | File | Verdict | Phase | viewModel highlights |

@@ -404,9 +404,8 @@ const AddToCartModal = ({
         visibilityTime: 4500,
         position: 'bottom',
       });
-      return;
     }
-    const isFundsEmpty = !_fundsPreflight.ok && _fundsPreflight.reason !== 'NOT_CONNECTED';
+    const isFundsEmpty = !_fundsPreflight.ok && _fundsPreflight.reason !== 'NOT_CONNECTED' && _fundsPreflight.reason !== 'TRANSIENT';
 
     const currentBrokerRejectedCount = await getRejectedCount();
 

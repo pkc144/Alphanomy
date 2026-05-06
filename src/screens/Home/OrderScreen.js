@@ -33,6 +33,7 @@ import { useTrade } from '../TradeContext';
 import { isOrderRejected } from '../../utils/orderStatusUtils';
 import useModalStore from '../../GlobalUIModals/modalStore';
 import { useComponent } from '../../design/useDesign';
+import useHomeMarketSummary from './hooks/useHomeMarketSummary';
 
 export default function OrderScreen() {
     const { configData } = useTrade();
@@ -109,6 +110,10 @@ export default function OrderScreen() {
         [openModal]
     );
 
+    // Variant-facing live tickers (alphanomy reads these for `_AppHeader`).
+    // userEmail is already in scope above (line 44).
+    const { tickers } = useHomeMarketSummary();
+
     const viewModel = useMemo(
         () => ({
             orders: allOrders,
@@ -117,8 +122,12 @@ export default function OrderScreen() {
                 start: config?.gradient1,
                 end: config?.gradient2,
             },
+            // Additive — default presentation ignores these.
+            tickers,
+            userEmail,
+            config,
         }),
-        [allOrders, loading, config?.gradient1, config?.gradient2]
+        [allOrders, loading, config, tickers, userEmail],
     );
 
     const actions = useMemo(() => ({ openDdpiHelp }), [openDdpiHelp]);
