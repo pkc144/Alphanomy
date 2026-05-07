@@ -196,7 +196,7 @@ const HomeScreen = ({ }) => {
   const getRebalanceRepair = () => {
     let repairData = JSON.stringify({
       modelName: modelNames,
-      advisor: modelPortfolioStrategyfinal[0]['advisor'],
+      advisor: configData?.config?.REACT_APP_HEADER_NAME,
       userEmail: userEmail,
       userBroker: broker,
     });

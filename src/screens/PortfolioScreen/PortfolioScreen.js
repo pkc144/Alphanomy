@@ -108,7 +108,7 @@ const PortfolioScreen = () => {
   const getRebalanceRepair = () => {
     const repairData = JSON.stringify({
       modelName: modelNames,
-      advisor: modelPortfolioStrategy[0]['advisor'],
+      advisor: configData?.config?.REACT_APP_HEADER_NAME,
       userEmail: userEmail,
     });
     const config2 = {

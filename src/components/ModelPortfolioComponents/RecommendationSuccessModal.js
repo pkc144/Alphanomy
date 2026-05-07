@@ -146,10 +146,10 @@ const RecommendationSuccessModal = ({
   const [manualEditPrice, setManualEditPrice] = useState('');
   const [submittingManualIdx, setSubmittingManualIdx] = useState(null);
 
-  // 2026-05-07: per-row "Refresh Status" for OPEN orders (Axis timing
+  // 2026-05-08: per-row "Refresh Status" for OPEN orders (Axis timing
   // race — order.history returns [] immediately after placement, so we
   // return orderStatus='OPEN' and let the user refresh manually or wait
-  // for the 4:30 PM cron to resolve it via the broker order book).
+  // for the every-15-min cron to resolve it via the broker order book).
   const [refreshingIdx, setRefreshingIdx] = useState(null);
 
   const refreshOrderStatus = async (idx, item) => {
@@ -183,6 +183,29 @@ const RecommendationSuccessModal = ({
           }
           return next;
         });
+        // Persist to DB if the order is now complete
+        const terminal = ['COMPLETE', 'COMPLETED', 'TRADED', 'FILLED'];
+        if (terminal.includes(newStatus.toUpperCase()) && modelName) {
+          axios.post(
+            `${server.ccxtServer.baseUrl}rebalance/resolve-single-order`,
+            {
+              user_email: userEmail,
+              orderId,
+              user_broker: currentBroker,
+              model_name: modelName,
+              new_status: newStatus,
+            },
+            {
+              headers: {
+                'Content-Type': 'application/json',
+                'aq-encrypted-key': generateToken(
+                  Config.REACT_APP_AQ_KEYS,
+                  Config.REACT_APP_AQ_SECRET,
+                ),
+              },
+            },
+          ).catch(() => {}); // fire-and-forget; cron is the safety net
+        }
         Toast.show({
           type: 'success',
           text1: 'Status updated',
