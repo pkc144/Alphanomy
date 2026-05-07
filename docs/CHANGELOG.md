@@ -4,6 +4,50 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ---
 
+## [unreleased] - 2026-05-08 (10)
+
+### Fix — Root-cause advisor mismatch + 15-min stale-order resolution cron
+
+**Root cause identified and fixed:** `model_portfolio_user.advisor` was stored as
+`"AlphaQuark"` (from `strategyDetails.advisor` in the DB) while `process-trades`
+sent `"prod"` (from `configData.REACT_APP_ADVISOR_SPECIFIC_TAG`). The mismatch
+caused `get_user_model_portfolio()` to return `None` → `user_doc_id = None` →
+`advice_executed_user_model_db()` modified 0 documents → DB never updated → repair
+always showed the same failed orders.
+
+**Fix — Mobile app (6 call sites):** All `insert-user-doc` and `get-repair` calls
+now use `configData?.config?.REACT_APP_HEADER_NAME` as the `advisor` field (the
+canonical subdomain slug), which matches what `process-trades` sends.
+
+**Fix — ccxt-india:** Removed the flaky advisor-agnostic fallback from
+`get_user_model_portfolio()`. Added `pending_with_order_id` guard in `repair()` to
+skip re-placing orders that already have a broker orderId (Axis OPEN timing race).
+Added `resolve_single_order_status()` DB method + `POST /rebalance/resolve-single-order`
+endpoint for targeted single-order DB updates.
+
+**Fix — Cron schedule:** Changed `cron_resolve_stale_orders.py` from once daily at
+4:30 PM IST to every 15 minutes during market hours (`*/15 3-11 * * 1-5` UTC).
+
+**Fix — Refresh button:** When the Refresh Status button gets a terminal status
+(COMPLETE/TRADED), it now also calls `/rebalance/resolve-single-order` to persist
+the result to DB immediately (fire-and-forget; 15-min cron is the safety net).
+
+**Files touched (mobile):**
+- `src/components/ModelPortfolioComponents/MPInvestNowModal.js`
+- `src/screens/Home/ModifyInvestment1.js`
+- `src/FunctionCall/services/ModelPFServices.js`
+- `src/screens/PortfolioScreen/PortfolioScreen.js`
+- `src/screens/Home/HomeScreen.js`
+- `src/components/AdviceScreenComponents/RebalanceAdvices.js`
+- `src/components/ModelPortfolioComponents/RecommendationSuccessModal.js`
+
+**Files touched (ccxt-india, tidi):**
+- `rebalancing/utils/db_manager.py` — removed fallback, added `pending_with_order_id` guard, added `resolve_single_order_status()`
+- `apps/app_model_portfolio.py` — added `POST /rebalance/resolve-single-order`
+- crontab: `0 11 * * 1-5` → `*/15 3-11 * * 1-5`
+
+---
+
 ## [unreleased] - 2026-05-07 (9)
 
 ### Docs — Model Portfolio & Baskets architecture documents
