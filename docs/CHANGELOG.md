@@ -4,6 +4,30 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ---
 
+## [unreleased] - 2026-05-07 (4)
+
+### Fixed — Axis Securities: order placement misreported as failure (timing race + BSE no-orderId)
+
+**Backend fix only (ccxt-india) — no mobile app change.**
+
+Two bugs causing Axis orders to surface as failures in the app despite being placed:
+
+**Bug 1 — Timing race (YESBANK, GTLINFRA):**
+After order placement, `get_order_status()` calls Axis's `order.history` endpoint immediately. Axis returns HTTP 200 but an empty list — the order isn't yet visible in the history API (race condition). `_parse_order_status_response` converted `[]` → `{}` → `OrderStatusResponse(status=0, qty='0', orderId='')`. `check_order_status` returned this as apparent success with zeros; the app saw `orderId=''` / `qty=0` and marked the order as REJECTED with "Success" message — confusing and wrong.
+
+Fix: in `check_order_status` (`trading_logic/buy_sell_all_brokers.py`), detect `status=0` + empty `orderId` when the placement result has a real `orderId` → return placement result with `orderStatus='OPEN'` and `message_aq='Order placed (history pending)'`.
+
+**Bug 2 — BSE no-orderId (ADARSHPL):**
+Axis returned `statusCode:200` but `data.status="Internal Server Error"` with no `omsOrderId`. `_parse_order_response` treated any HTTP 200 as success, emitting `OrderResponse(orderId='', status=0)` — which made the order appear placed but untracked.
+
+Fix: in `_parse_order_response` (`brokers/axis/axis.py`), validate `omsOrderId` is non-empty after extracting it. If empty, return `ErrorResponse` with the embedded error message from `data.status`.
+
+**Files (ccxt-india):**
+- `brokers/axis/axis.py` — `_parse_order_response`, `_parse_order_status_response`
+- `trading_logic/buy_sell_all_brokers.py` — `check_order_status`
+
+---
+
 ## [unreleased] - 2026-05-07 (3)
 
 ### Fixed — MarketIndices: remove FinNifty + fix Sensex case-sensitivity
