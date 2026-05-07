@@ -4,6 +4,26 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ---
 
+## [unreleased] - 2026-05-07 (6)
+
+### Improved — AfterSubscriptionScreen: redesign Holdings tab + fix Distribution tab lock
+
+**Holdings tab — card redesign.** Replaced the horizontal-scroll table (fixed-width columns, truncated on small screens) with a vertical list of per-stock cards. Each card shows:
+- Symbol (with `-EQ`/`-BE` suffix stripped for readability) + returns badge (green/red pill) in the header
+- 2×2 grid of data cells: Current Price | Avg. Buy | Shares | Weight
+- Left accent border using `themeColor` (from `useConfig()`) so the card respects the advisor's branding
+- Subtle elevation/shadow to lift cards off the white background
+
+Cards scroll naturally via FlatList — no horizontal scroll, all data visible without interaction.
+
+**Distribution tab — lock when subscription not active.** `CustomTabbarMPPerformance` previously only locked `idx=0` (Holdings) when `isSubscriptionActive=true`. Changed `isDisabled = idx === 0 && isSubscriptionActive` → `isDisabled = isSubscriptionActive` so ALL tabs are locked when the premium gate is active.
+
+**Files:**
+- `src/screens/Home/AfterSubscriptionScreen.js` — Holdings card redesign + `themeColor` from config
+- `designs/default/composites/CustomTabbarMPPerformance.js` — lock all tabs when `isSubscriptionActive=true`
+
+---
+
 ## [unreleased] - 2026-05-07 (5)
 
 ### Fixed — AfterSubscriptionScreen: Portfolio Holdings showing "Premium Access Required" for subscribed users
