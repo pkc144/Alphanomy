@@ -49,6 +49,24 @@ const CheckedIcon = require('../../assets/checked.png');
 const FailureIcon = require('../../assets/cross.png');
 const PartialIcon = require('../../assets/partial_success.png');
 
+// Maps broker display names to the ccxt-india route slug used for
+// the v2/single-order-status endpoint (POST /<slug>/v2/single-order-status).
+const BROKER_SLUG_MAP = {
+  'Axis Securities': 'axis',
+  'Angel One': 'angelone',
+  'Zerodha': 'zerodha',
+  'Upstox': 'upstox',
+  'Dhan': 'dhan',
+  'Fyers': 'fyers',
+  'ICICI Direct': 'icici',
+  'Kotak': 'kotak',
+  'AliceBlue': 'aliceblue',
+  'Motilal Oswal': 'motilal-oswal',
+  'HDFC Securities': 'hdfc',
+  'IIFL Securities': 'iifl',
+  'Groww': 'groww',
+};
+
 const RecommendationSuccessModal = ({
   openSuccessModal,
   setOpenSucessModal,
@@ -127,6 +145,69 @@ const RecommendationSuccessModal = ({
   const [manualEditQty, setManualEditQty] = useState('');
   const [manualEditPrice, setManualEditPrice] = useState('');
   const [submittingManualIdx, setSubmittingManualIdx] = useState(null);
+
+  // 2026-05-07: per-row "Refresh Status" for OPEN orders (Axis timing
+  // race — order.history returns [] immediately after placement, so we
+  // return orderStatus='OPEN' and let the user refresh manually or wait
+  // for the 4:30 PM cron to resolve it via the broker order book).
+  const [refreshingIdx, setRefreshingIdx] = useState(null);
+
+  const refreshOrderStatus = async (idx, item) => {
+    if (refreshingIdx !== null) return;
+    const orderId = item?.orderId || item?.uniqueOrderId;
+    if (!orderId || !userEmail || !currentBroker) return;
+    const slug = BROKER_SLUG_MAP[currentBroker];
+    if (!slug) return;
+    setRefreshingIdx(idx);
+    try {
+      const resp = await axios.post(
+        `${server.ccxtServer.baseUrl}${slug}/v2/single-order-status`,
+        { user_email: userEmail, orderId },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'aq-encrypted-key': generateToken(
+              Config.REACT_APP_AQ_KEYS,
+              Config.REACT_APP_AQ_SECRET,
+            ),
+          },
+        },
+      );
+      const newStatus = resp?.data?.orderStatus;
+      if (newStatus && newStatus.toUpperCase() !== 'OPEN') {
+        setOrderResponse(prev => {
+          if (!Array.isArray(prev)) return prev;
+          const next = prev.slice();
+          if (next[idx]) {
+            next[idx] = { ...next[idx], orderStatus: newStatus };
+          }
+          return next;
+        });
+        Toast.show({
+          type: 'success',
+          text1: 'Status updated',
+          text2: `${item?.symbol || item?.tradingSymbol}: ${newStatus}`,
+          visibilityTime: 3000,
+        });
+      } else {
+        Toast.show({
+          type: 'info',
+          text1: 'Still pending',
+          text2: 'Order not yet confirmed by broker. Auto-updates after market close.',
+          visibilityTime: 4000,
+        });
+      }
+    } catch (e) {
+      Toast.show({
+        type: 'error',
+        text1: 'Refresh failed',
+        text2: e?.response?.data?.error || e?.message || 'Try again.',
+        visibilityTime: 3000,
+      });
+    } finally {
+      setRefreshingIdx(null);
+    }
+  };
 
   const startManualEdit = (idx, item) => {
     const defaultQty = String(item?.quantity ?? item?.qty ?? '');
@@ -440,6 +521,22 @@ const RecommendationSuccessModal = ({
                 </Text>
               </View>
             )}
+            {/* Amber OPEN badge — order placed but broker confirmation pending
+                (Axis timing race: order.history returns [] immediately after
+                placement; cron resolves at 4:30 PM or user can tap Refresh). */}
+            {isSuccessStatus && (item?.orderStatus || '').toUpperCase() === 'OPEN' && (
+              <View style={{
+                marginLeft: 8,
+                backgroundColor: '#FEF3C7',
+                paddingHorizontal: 6,
+                paddingVertical: 2,
+                borderRadius: 4,
+              }}>
+                <Text style={{ color: '#92400E', fontSize: 10, fontFamily: 'Poppins-Medium' }}>
+                  OPEN
+                </Text>
+              </View>
+            )}
             {/* AMO pill — rendered on every result card whose `variant`
                 resolves to "AMO". After-Market Orders are accepted by the
                 broker outside 09:15–15:30 IST and queued for execution at
@@ -581,6 +678,63 @@ const RecommendationSuccessModal = ({
               Mark as Placed (manual)
             </Text>
           </TouchableOpacity>
+        ) : null}
+
+        {/* 2026-05-07: "Refresh Status" inline section for OPEN orders.
+         *
+         * Shown when the order has orderStatus='OPEN' — meaning it was
+         * submitted to the broker but the history API returned empty
+         * (timing race on Axis; other brokers may also OPEN-queue AMOs).
+         * Tapping Refresh calls /<broker>/v2/single-order-status and
+         * updates the row in local state if the broker confirms a new
+         * status. If still OPEN, shows a toast. Status also auto-resolves
+         * via the 4:30 PM cron (cron_resolve_stale_orders.py).
+         */}
+        {isSuccessStatus && (item?.orderStatus || '').toUpperCase() === 'OPEN' ? (
+          <View style={{
+            marginTop: 6,
+            marginBottom: 4,
+            padding: 8,
+            backgroundColor: '#FFFBEB',
+            borderWidth: 1,
+            borderColor: '#FDE68A',
+            borderRadius: 6,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}>
+            <Text style={{
+              flex: 1,
+              color: '#78350F',
+              fontSize: 11,
+              fontFamily: 'Poppins-Regular',
+              lineHeight: 16,
+              marginRight: 8,
+            }}>
+              Placed — awaiting broker confirmation
+            </Text>
+            <TouchableOpacity
+              onPress={() => refreshOrderStatus(index, item)}
+              disabled={refreshingIdx !== null}
+              style={{
+                paddingHorizontal: 10,
+                paddingVertical: 5,
+                borderRadius: 6,
+                borderWidth: 1,
+                borderColor: '#D97706',
+                backgroundColor: '#FEF3C7',
+                flexDirection: 'row',
+                alignItems: 'center',
+                opacity: refreshingIdx !== null ? 0.6 : 1,
+              }}>
+              {refreshingIdx === index ? (
+                <ActivityIndicator size="small" color="#92400E" style={{ marginRight: 4 }} />
+              ) : null}
+              <Text style={{ color: '#92400E', fontSize: 11, fontFamily: 'Poppins-Medium' }}>
+                {refreshingIdx === index ? 'Checking…' : 'Refresh'}
+              </Text>
+            </TouchableOpacity>
+          </View>
         ) : null}
 
         {modelId && !isSuccessStatus && manualEditingIdx === index ? (

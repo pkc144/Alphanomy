@@ -4,6 +4,46 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ---
 
+## [unreleased] - 2026-05-07 (8)
+
+### Added — Result modal: OPEN badge + Refresh Status button for pending orders
+
+**Mobile app change only (RecommendationSuccessModal.js).**
+
+When Axis (and any broker) returns `orderStatus='OPEN'` — caused by the order
+history API returning an empty list immediately after placement (timing race) —
+the order result card in `RecommendationSuccessModal` now shows:
+- An amber **OPEN** badge next to the stock name, distinguishing it from
+  confirmed (no badge) and rejected (red FAILURE badge) rows.
+- An inline **"Placed — awaiting broker confirmation"** amber info bar with a
+  **Refresh** button. Tapping Refresh calls `/<brokerSlug>/v2/single-order-status`
+  on ccxt-india with `{user_email, orderId}`. If the broker confirms a new status,
+  the row updates immediately. If still OPEN, a toast explains auto-update at 4:30 PM.
+
+`BROKER_SLUG_MAP` added as a module-level constant mapping all 14 supported
+broker display names to their ccxt route slugs.
+
+`refreshingIdx` state tracks which row's refresh is in flight, disabling the
+button while the request is pending. Error toasts cover network failures.
+
+The status also auto-resolves via `cron_resolve_stale_orders.py` at 4:30 PM IST —
+the Refresh button provides immediate confirmation without waiting for the cron.
+
+**Context — ADARSHPL "Bad Gateway":** The error `'Cash buy orders are not allowed
+on the security: ADARSHPLEQ for this profile.'` seen for ADARSHPL is an Axis
+account-level profile restriction (the test account cannot buy this security in
+cash/delivery mode). This is NOT a code bug — the error is correctly attributed to
+ADARSHPL and displays on that row. The earlier YESBANK confusion was from a
+pre-fix execution where the wrong scriptId (ADARSHPL's BSE scriptId) was
+being used for YESBANK due to the MCX scrip master collision (fixed in entry (4)).
+
+**Files (mobile app):**
+- `src/components/ModelPortfolioComponents/RecommendationSuccessModal.js`
+  — `BROKER_SLUG_MAP` const, `refreshingIdx` state, `refreshOrderStatus()` fn,
+    amber OPEN badge in `renderOrderItem`, Refresh button inline section
+
+---
+
 ## [unreleased] - 2026-05-07 (7)
 
 ### Fixed — Axis Securities: available cash shows 0 (funds response missing `data` wrapper)
