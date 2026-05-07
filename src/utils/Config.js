@@ -79,10 +79,26 @@ const APP_VARIANTS = {
   // alphanomy — separate business tenant (Path B). Requires backend
   // `appadvisors` doc with `subdomain: 'alphanomy'` populated with the
   // tenant's logo/appName/advisorRaCode/etc. Until the backend record
-  // exists, this variant will fall back to the inherited sharedUIConfig
-  // values (SharedDefaultLogo / themeColor #ff0000) — a clear visual
-  // signal that the backend tenant isn't ready yet.
-  alphanomy:     {...sharedUIConfig, subdomain: 'alphanomy',       advisorRaCode: 'ALPHANOMY'},
+  // exists, this variant inherits sharedUIConfig values for theming
+  // BUT explicitly nulls out `logo`/`toolbarlogo` — consumers must
+  // route image rendering through `<BrandLogo>`, which detects
+  // `DESIGN_VARIANT=alphanomy` and renders the JS-drawn gradient mark
+  // (`AlphanomyLogo`) instead of leaking the SharedDefaultLogo
+  // (Zamzam-branded PNG) or the legacy AlphaQuark `logo.png` asset.
+  alphanomy:     {...sharedUIConfig, subdomain: 'alphanomy',       advisorRaCode: 'ALPHANOMY', logo: null, toolbarlogo: null,
+    mainColor: '#1246F0',
+    secondaryColor: '#FFFFFF',
+    gradient1: '#1246F0',
+    gradient2: '#7C3AED',
+    placeholderText: '#8B96B0',
+    bottomTabbg: 'rgba(255,255,255,0.97)',
+    tabIconColor: '#8B96B0',
+    selectedTabcolor: '#1246F0',
+    basket1: '#1246F0',
+    basket2: '#7C3AED',
+    basketcolor: '#1246F0',
+    basketsymbolbg: 'rgba(18,70,240,0.09)',
+  },
   zamzamcapital: {...sharedUIConfig, subdomain: 'zamzamcapital',   advisorRaCode: 'ZAMZAMCAPITAL'},
   rgxresearch:   {...sharedUIConfig, subdomain: 'rgxresearch',     advisorRaCode: 'RGXRESEARCH'},
   arfs:          {...sharedUIConfig, subdomain: 'arfs',            advisorRaCode: 'ARFS'},
