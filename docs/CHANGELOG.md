@@ -4,6 +4,24 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ---
 
+## [unreleased] - 2026-05-07 (5)
+
+### Fixed — AfterSubscriptionScreen: Portfolio Holdings showing "Premium Access Required" for subscribed users
+
+**Problem.** Subscribed users with no executed trades saw "Premium Access Required" in the Portfolio Holdings tab of `AfterSubscriptionScreen`. The `EmptyStateInfoMP` component's default title/subtitle was designed for pre-subscription access gates and was incorrectly inherited by the post-subscription empty state.
+
+`AfterSubscriptionScreen` is navigated to only for subscribed users. When `tableData` is empty (no executed trades — e.g. user subscribed but has not accepted and placed the first rebalance), the Holdings tab rendered `<EmptyStateInfoMP />` with no props, falling through to the default "Premium Access Required" title.
+
+**Fix.** Explicitly pass contextually correct title and subtitle to `EmptyStateInfoMP` in the Holdings empty-state branch: "No Holdings Yet" / "Accept and execute your first rebalance to start building your portfolio." This accurately describes the state (subscribed, no trades yet) without implying the user needs to purchase access.
+
+**Distribution tab unchanged.** The Distribution tab correctly shows `latestRebalance?.adviceEntries` (model strategy allocations), which is always valid to display for subscribed users regardless of trade history.
+
+**`isSubscriptionActive={false}` unchanged.** This prop on `CustomTabBarMPPerformance` means "premium gate is NOT active" — when `false`, no lock icon appears and both tabs are tappable. This is correct for a post-subscription screen.
+
+**Files:** `src/screens/Home/AfterSubscriptionScreen.js`
+
+---
+
 ## [unreleased] - 2026-05-07 (4)
 
 ### Fixed — Axis Securities: order placement misreported as failure (timing race + BSE no-orderId)

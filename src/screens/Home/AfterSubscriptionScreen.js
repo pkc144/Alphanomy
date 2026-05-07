@@ -674,7 +674,10 @@ const AfterSubscriptionScreen = ({route}) => {
                           </Text>
                         </View>
                       ) : (
-                        <EmptyStateInfoMP />
+                        <EmptyStateInfoMP
+                          title="No Holdings Yet"
+                          subtitle="Accept and execute your first rebalance to start building your portfolio."
+                        />
                       )}
                     </SafeAreaView>
                   ),
