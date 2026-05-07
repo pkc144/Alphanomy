@@ -30,6 +30,43 @@ import SdkProviderRoot, {
   isSdkIntegrationEnabled,
 } from './src/sdk/SdkProviderRoot';
 
+// Hoisted to module scope so its component identity stays STABLE across
+// App re-renders. Previously declared inline inside the App body (`const
+// SdkRootWrapper = ...`) — that recreated the wrapper function on every
+// App render, React saw a new component type at the wrapper node and
+// unmounted the entire navigation subtree below it on every parent state
+// change, wiping useState in every screen. Reproduced as the LoginScreen
+// / SignupScreen "characters disappear / fluctuate as you type / can't
+// type at all" symptom (verified via adb input on emulator-5554 on
+// 2026-05-07: a single `adb shell input text "TestUser"` produced only
+// "T" in the field because the screen was unmounting between characters).
+const SdkOnWrapper = ({userEmail, children}) => (
+  <SdkProviderRoot userEmail={userEmail}>{children}</SdkProviderRoot>
+);
+
+// Same root cause: was declared inline inside App body, remounted on each
+// render, and on Android each remount touched the native StatusBar APIs
+// which Android registered as a window-focus event — so the IME would
+// drop its bound EditText immediately after focus and the keyboard
+// dismissed itself.
+const CustomStatusBar = ({barStyle}) => {
+  const insets = useSafeAreaInsets();
+  return (
+    <LinearGradient
+      colors={['rgba(0, 86, 183, 1)', 'rgba(0, 86, 183, 1)']}
+      start={{x: 0, y: 0}}
+      end={{x: 1, y: 0}}
+      style={{height: insets.top}}>
+      <StatusBar
+        animated={true}
+        barStyle={barStyle || 'light-content'}
+        translucent={true}
+        backgroundColor="transparent"
+      />
+    </LinearGradient>
+  );
+};
+
 const App = () => {
   const [isSplashCompleted, setSplashCompleted] = useState(false);
   const [iscomplete, setcomplete] = useState(false);
@@ -180,33 +217,11 @@ const App = () => {
     }
   }, [!!user]);
 
-  const CustomStatusBar = ({barStyle}) => {
-    const insets = useSafeAreaInsets();
-
-    return (
-      <LinearGradient
-        colors={['rgba(0, 86, 183, 1)', 'rgba(0, 86, 183, 1)']}
-        start={{x: 0, y: 0}}
-        end={{x: 1, y: 0}}
-        style={{height: insets.top}}>
-        <StatusBar
-          animated={true}
-          barStyle={barStyle || 'light-content'}
-          translucent={true}
-          backgroundColor="transparent"
-        />
-      </LinearGradient>
-    );
-  };
-
-  // Wrap the app in <AqSdkProvider/> ONLY when SDK integration is on.
-  // When off, SdkRootWrapper is a no-op fragment so the legacy code
-  // path is unchanged. Behind REACT_APP_SDK_INTEGRATION=true.
-  const SdkRootWrapper = isSdkIntegrationEnabled()
-    ? ({children}) => (
-        <SdkProviderRoot userEmail={userEmail}>{children}</SdkProviderRoot>
-      )
-    : ({children}) => <>{children}</>;
+  // CustomStatusBar + SdkRootWrapper are now defined at module scope (top
+  // of file) so they don't get a new component identity on every App
+  // render. See the comments at their definitions for the production
+  // symptom that motivated the hoist.
+  const sdkOn = isSdkIntegrationEnabled();
 
   return (
     <SafeAreaProvider style={{flex: 1}}>
@@ -220,18 +235,33 @@ const App = () => {
                 <TradeProvider>
                   <GstConfigProvider>
                   <ModalProvider>
-                    <SdkRootWrapper>
-                    <SafeAreaView style={{flex: 1}}>
-                      <Navigation
-                        iscomplete={iscomplete}
-                        userEmail={userEmail}
-                        isAuthenticated={!!user}
-                      />
-                      <Toast />
-                    </SafeAreaView>
-                    <ModalManager />
-                    <BrokerAlertModal />
-                    </SdkRootWrapper>
+                    {sdkOn ? (
+                      <SdkOnWrapper userEmail={userEmail}>
+                        <SafeAreaView style={{flex: 1}}>
+                          <Navigation
+                            iscomplete={iscomplete}
+                            userEmail={userEmail}
+                            isAuthenticated={!!user}
+                          />
+                          <Toast />
+                        </SafeAreaView>
+                        <ModalManager />
+                        <BrokerAlertModal />
+                      </SdkOnWrapper>
+                    ) : (
+                      <>
+                        <SafeAreaView style={{flex: 1}}>
+                          <Navigation
+                            iscomplete={iscomplete}
+                            userEmail={userEmail}
+                            isAuthenticated={!!user}
+                          />
+                          <Toast />
+                        </SafeAreaView>
+                        <ModalManager />
+                        <BrokerAlertModal />
+                      </>
+                    )}
                   </ModalProvider>
                   </GstConfigProvider>
                 </TradeProvider>
