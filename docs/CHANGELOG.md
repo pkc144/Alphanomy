@@ -4,6 +4,20 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ---
 
+## [unreleased] - 2026-05-07 (9)
+
+### Docs — Model Portfolio & Baskets architecture documents
+
+**New files:**
+- `docs/MODEL_PORTFOLIO_ARCHITECTURE.md` — complete architecture for Model Portfolio: subscribe/unsubscribe flows, rebalance (calculate → execute), failure handling & repair, manual override, DB update chain, refresh & status polling, broker migration, performance & P&L, SDK integration (Phase C/D), full API endpoint reference (aq_backend + ccxt-india + SDK routes), web vs mobile differences, state management, security.
+- `docs/BASKETS_ARCHITECTURE.md` — complete architecture for Baskets: lifecycle, MongoDB schema (basket_advice + to_trade_net + GTT/SLPT), basket processing logic (netting, expiry parsing, conflict filtering, closure detection), order placement flow, failure handling, GTT/SL/SLPT order types, DB update, web vs mobile differences.
+
+**Covers:** Alphab2bapp (mobile), prod-alphaquark-github (web), aq_backend_github (backend routes + MongoDB schemas), ccxt-india (rebalance/order endpoints).
+
+**Files touched:** `docs/MODEL_PORTFOLIO_ARCHITECTURE.md` (new), `docs/BASKETS_ARCHITECTURE.md` (new), `docs/CHANGELOG.md`
+
+---
+
 ## [unreleased] - 2026-05-07 (8)
 
 ### Added — Result modal: OPEN badge + Refresh Status button for pending orders
