@@ -4,6 +4,31 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ---
 
+## [unreleased] - 2026-05-07 (7)
+
+### Fixed — Axis Securities: available cash shows 0 (funds response missing `data` wrapper)
+
+**Backend fix only (ccxt-india). No mobile app change.**
+
+`_parse_funds_response()` in `brokers/axis/axis.py` returned a flat dict:
+```json
+{ "status": 0, "availablecash": "12345.00", ... }
+```
+
+Every other broker (Zerodha, IIFL, HDFC, Groww, Upstox, Fyers, Kotak, XTS) wraps the funds fields inside a `"data"` key:
+```json
+{ "status": 0, "data": { "availablecash": "12345.00", ... } }
+```
+
+The mobile app reads `funds?.data?.availablecash` in every consumer (`SubscriptionScreen.js:476`, `MPPerformanceScreen.js:502`, `RebalanceAdvices.js:589/802`, `DdpiModal.js:2287`, `UserStrategySubscribeModal.js:329`). With a flat response, `funds?.data` is `undefined` → `availablecash` is `undefined` → displayed as `0`.
+
+Fix: wrap the mapped fields inside `"data": { ... }` in `_parse_funds_response`.
+
+**Files (ccxt-india):** `brokers/axis/axis.py` — `_parse_funds_response`
+**Deploy:** `ssh tidi` → `servers/server2/ccxtprod/ccxt-india` → `./pull_restart.sh`
+
+---
+
 ## [unreleased] - 2026-05-07 (6)
 
 ### Improved — AfterSubscriptionScreen: redesign Holdings tab + fix Distribution tab lock
