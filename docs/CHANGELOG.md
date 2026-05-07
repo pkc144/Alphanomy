@@ -4,6 +4,40 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ---
 
+## [unreleased] - 2026-05-07 (3)
+
+### Fixed — MarketIndices: remove FinNifty + fix Sensex case-sensitivity
+
+**FinNifty removed from indices bar.** AngelOne WebSocket token 26037 (FINNIFTY/NSE) does not deliver live ticks — confirmed by pubsub monitoring (0 FINNIFTY messages in 80+ samples while NIFTY/BANKNIFTY/SENSEX stream normally). The `ltp:NSE:FINNIFTY` Redis key never populates. No other data source available. Removing FinNifty from `indicesConfig` eliminates the permanent "Loading..." card.
+
+**Sensex alternativeSymbols uppercased.** Mixed-case fallback aliases (`"Sensex"`) would cause the `subscribedSymbolsRef` Set gate to drop `ltp_update` events — the server emits the symbol normalized to uppercase (`"SENSEX"`) but the Set contained the original-case alias. Removed `"Sensex"` (only fallback that was mixed-case); kept `"BSE SENSEX"` and `"SENSEX 30"` which are already uppercase.
+
+**Files:** `src/components/HomeScreenComponents/MarketIndices.js`
+
+---
+
+## [unreleased] - 2026-05-07 (2)
+
+### Fixed — WebSocketManager: indices stuck on "Loading..." after connect_error
+
+**Problem.** Nifty 50 / Sensex / BankNifty showed "Loading..." indefinitely on cold start whenever the socket.io connection had a `connect_error` on its first attempt (network race, SSL handshake delay, etc.).
+
+Two compounding bugs in `WebSocketManager.js`:
+
+1. **Dangling Promise** — `connect_error` handler set `connectingPromise = null` but never resolved the Promise that was already returned to callers. Every `await this.connect()` inside `subscribeToAllSymbols` hung forever on the stale Promise. The `subscribe-array` HTTP POST that registers NIFTY/SENSEX/BANKNIFTY in Redis never fired, so those symbols were never recorded as user subscriptions. The server's `auto_sync` (every 5s) had nothing to join the client to.
+
+2. **`subscribedSymbols` populated too late** — symbols were added to the `subscribedSymbols` Map only after the `subscribe-array` POST succeeded. On the next socket reconnect, `resubscribeAll()` iterated `subscribedSymbols` — but NIFTY was missing, so it wasn't re-posted even after the socket recovered.
+
+**Fix (`WebSocketManager.js`):**
+- Store the Promise `resolve` callback in `connectResolve` outside the Promise constructor so `connect_error` can call it, unblocking all awaiting callers. The HTTP `subscribe-array` POST works fine without an active socket — it's a plain REST call to the WebSocket server.
+- In `subscribe()`, add symbol to `subscribedSymbols` immediately (before `subscribeToAllSymbols` is called), so `resubscribeAll()` picks it up on any subsequent reconnect regardless of whether the POST succeeded.
+
+**Result:** on cold start, if the first socket.io attempt fails, `subscribeToAllSymbols` unblocks, posts NIFTY/BANKNIFTY/SENSEX to `subscribe-array` (HTTP succeeds), and when the socket reconnects `subscribe_me` + `resubscribeAll` both fire with the full symbol list — indices load within ~1–2s of the reconnected handshake instead of staying stuck until manual navigation.
+
+**Files:** `src/components/AdviceScreenComponents/DynamicText/WebSocketManager.js`
+
+---
+
 ## [unreleased] - 2026-05-07
 
 ### Added — Per-row "Mark as Placed" inline editor for MP rebalance failures + DDPI sync

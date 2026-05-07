@@ -9,29 +9,15 @@ import { generateToken } from "../../utils/SecurityTokenManager";
 
 // Indices configuration with correct symbols and exchanges.
 //
-// 2026-05-07: removed `alternativeSymbols` for nifty50 / bankNifty.
-// The backend ws-server `INDICES_CONFIG` (commit edf0679) now
-// canonicalizes index broadcasts to the real-token symbols
-// `NIFTY` / `BANKNIFTY` / `FINNIFTY` (the alias keys
-// `NIFTY 50` / `NIFTY BANK` / `NIFTY FIN SERVICE` mapped to
-// AngelOne tokens 99926000/99926009/99926037 which never receive
-// live ticks → stale data). The frontend's fallback chain was
-// then double-subscribing to both real AND alias names — both
-// delivered ticks (Redis stored both keys; AngelOne auto-resolve
-// populated aliases), and the `subscribedSymbolsRef` Set gate
-// accepted ticks from either → user saw the Nifty 50 / Bank Nifty
-// values flicker between fresh and stale prices ~3-5x/sec.
+// 2026-05-07: removed finNifty — AngelOne WebSocket token 26037 does
+// not deliver live ticks reliably; key ltp:NSE:FINNIFTY never
+// populates in Redis. Confirmed by pubsub monitoring: 0 FINNIFTY
+// messages in 80+ samples while NIFTY/BANKNIFTY/SENSEX all stream.
 //
-// finNifty also drops `NIFTY FIN SERVICE` as primary (was matching
-// the stale-token key) and now uses canonical `FINNIFTY` plus a
-// few alias fallbacks in case some legacy tenant deploy still
-// publishes under the old name.
-//
-// IMPORTANT: also see the fallback-Set fix below — even with this
-// list, the previous `Set.add()` accumulation pattern could
-// re-introduce flicker if any tenant ever publishes both names
-// concurrently. The Set is now REPLACED on each tryNext attempt,
-// so only the currently-active sym passes the gate.
+// alternativeSymbols for sensex are all uppercase — the server
+// normalizes symbols to uppercase before emitting ltp_update, so
+// mixed-case aliases like "Sensex" would cause the Set gate to drop
+// valid ticks. Fallbacks kept for resilience but must stay uppercase.
 const indicesConfig = {
   nifty50: {
     symbol: "NIFTY",
@@ -43,19 +29,13 @@ const indicesConfig = {
     symbol: "SENSEX",
     exchange: "BSE",
     displayName: "Sensex",
-    alternativeSymbols: ["Sensex", "BSE SENSEX", "SENSEX 30"],
+    alternativeSymbols: ["BSE SENSEX", "SENSEX 30"],
   },
   bankNifty: {
     symbol: "BANKNIFTY",
     exchange: "NSE",
     displayName: "BankNifty",
     alternativeSymbols: [],
-  },
-  finNifty: {
-    symbol: "FINNIFTY",
-    exchange: "NSE",
-    displayName: "FinNifty",
-    alternativeSymbols: ["NIFTY FIN SERVICE", "NIFTY FINANCIAL SERVICES", "Nifty Fin Service", "NIFTY_FIN_SERVICE"],
   },
 };
 
