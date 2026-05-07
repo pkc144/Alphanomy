@@ -1161,8 +1161,22 @@ export function AngleOneTpinModal({
   const jwtToken = userDetails?.jwtToken;
   const userEmail = userDetails?.email;
   useEffect(() => {
-    if (!isOpen || edisStatusProp || !jwtToken) return;
+    if (!isOpen) return;
     if (verifyFiredRef.current) return;
+    // Prop path: parent already fetched EDIS status (e.g. RebalanceAdviceContent
+    // pre-fetches on userDetails change). If it already shows edis=true, auto-skip
+    // without re-fetching — same logic as the fetch path below.
+    if (edisStatusProp?.edis === true) {
+      verifyFiredRef.current = true;
+      const isDdpiActive =
+        edisStatusProp.errorcode === 'AG1000' ||
+        (typeof edisStatusProp.message === 'string' &&
+          /already.+registered.+with.+CDSL/i.test(edisStatusProp.message));
+      console.log('[DdpiModal] prop edis=true → auto-skip, ddpiActive=', isDdpiActive);
+      setTimeout(() => handleProceed(isDdpiActive), 0);
+      return;
+    }
+    if (!jwtToken) return;
     verifyFiredRef.current = true;
     const fetchEdisStatus = async () => {
       try {
