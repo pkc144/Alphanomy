@@ -6,6 +6,12 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ## [unreleased] - 2026-05-06
 
+### Skipped — b2b 91f5f44 (SDK path revert) does not apply to Alphanomy
+
+Upstream `91f5f44` reverts `metro.config.js` SDK path from `../alphaquark-mobile-sdk` back to `../../alphaquark-mobile-sdk` because Vansh's machine has Alphab2bapp at `codes/Alphab2bapp` (one level deeper) and the SDK at `codes/alphaquark-mobile-sdk` (one level up). On this Alphanomy fork the SDK is a sibling at `~/Desktop/AQ/App/alphaquark-mobile-sdk` and Alphanomy lives at `~/Desktop/AQ/App/Alphanomy`, so `../alphaquark-mobile-sdk` is correct. Reverting would break Metro resolution. The MPReviewTradeModal fix that 91f5f44 also references is already covered by porting `250eee6` above. The SDK-side `AbortController` timeout fix mentioned in 91f5f44's body was never actually committed to the SDK repo (`alphaquark-mobile-sdk`'s git log has no matching commit and `lib/`/`src/` lack `AbortController`) — nothing to port.
+
+---
+
 ### Fixed — WebSocket server: stale Nifty / BankNifty / FinNifty values (tidi `websocket-alphaquark`) — ported from b2b edf0679
 
 **Problem.** The `/ws/indices` WebSocket broadcast sent stale values for `NIFTY_50` (~35 h old, yesterday's price), `NIFTY_BANK`, and `NIFTY_FIN_SERVICE`. Values oscillated between correct and incorrect because both fresh (`NIFTY`) and stale (`NIFTY 50`) keys were broadcast simultaneously — the mobile app intermittently consumed the stale key.
