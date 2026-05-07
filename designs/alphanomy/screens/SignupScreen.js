@@ -21,8 +21,6 @@ import {
     Platform,
     TouchableOpacity,
     TextInput,
-    ScrollView,
-    SafeAreaView,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Toast from 'react-native-toast-message';
@@ -81,29 +79,17 @@ const SignupScreen = ({ viewModel, actions }) => {
     const [pwdFocused, setPwdFocused] = React.useState(false);
 
     return (
-        <SafeAreaView style={styles.safe}>
+        // Layout mirrors the working default/legacy SignupScreen — plain
+        // <View> + <KeyboardAvoidingView>, NO <SafeAreaView> and NO
+        // <ScrollView>. See `LoginScreen.js` for the full root-cause writeup
+        // on Vivo V2058 (Android 15 / Fabric) — same fix applied here.
+        <View style={styles.safe}>
             <StatusBar barStyle="light-content" backgroundColor={COLORS.brand.secondary} />
             <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={styles.flex}
             >
-                {/*
-                  Note (2026-05-06): the TouchableWithoutFeedback wrapper
-                  used to surround this ScrollView and call `dismissError`
-                  (which also calls `Keyboard.dismiss()`) on every body
-                  tap. On Android that races with TextInput focus and
-                  prevents the inputs from accepting keystrokes reliably.
-                  Replaced with `keyboardDismissMode="on-drag"` so users
-                  dismiss the keyboard by scrolling instead — the inputs
-                  no longer fight the wrapper for the touch event.
-                */}
-                <ScrollView
-                    style={styles.flex}
-                    contentContainerStyle={styles.scroll}
-                    keyboardShouldPersistTaps="handled"
-                    keyboardDismissMode="on-drag"
-                    showsVerticalScrollIndicator={false}
-                >
+                <View style={[styles.flex, styles.scroll]}>
                         {/* ── HERO (purple→blue, reversed from LoginScreen) ── */}
                         <LinearGradient
                             colors={GRADIENTS.brandReverse}
@@ -309,10 +295,10 @@ const SignupScreen = ({ viewModel, actions }) => {
                                 </TouchableOpacity>
                             </View>
                         </View>
-                </ScrollView>
+                </View>
             </KeyboardAvoidingView>
             <Toast />
-        </SafeAreaView>
+        </View>
     );
 };
 

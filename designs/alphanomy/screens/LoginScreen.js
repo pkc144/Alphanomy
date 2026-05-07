@@ -24,8 +24,6 @@ import {
     TouchableOpacity,
     TextInput,
     Image,
-    ScrollView,
-    SafeAreaView,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Toast from 'react-native-toast-message';
@@ -120,35 +118,45 @@ const LoginScreen = ({ viewModel, actions }) => {
     const [emailFocused, setEmailFocused] = React.useState(false);
     const [pwdFocused, setPwdFocused] = React.useState(false);
 
-    // DIAGNOSTIC (2026-05-07) — temp instrumentation. Remove once fix lands.
-    const renderCountRef = React.useRef(0);
-    renderCountRef.current += 1;
-    console.log('[ALN_LOGIN render]', renderCountRef.current, { eF: emailFocused, pF: pwdFocused, eLen: email.length });
-
     return (
-        <SafeAreaView style={styles.safe}>
+        // Layout mirrors the working default/legacy LoginScreen — plain
+        // <View> + <KeyboardAvoidingView>, NO <SafeAreaView> and NO
+        // <ScrollView>. Reproduced 2026-05-07 on Vivo V2058 (Android 15
+        // / Fabric / new arch): with the previous SafeAreaView →
+        // KeyboardAvoidingView → ScrollView nesting, tapping a TextInput
+        // popped the keyboard for a frame and then it dismissed. Trace
+        // (`logcat | grep ImeFocusController`) showed `mServedView` toggling
+        // null↔EditText every ~300-800ms — the IME was repeatedly losing
+        // its bound view. Root cause: Android `windowSoftInputMode=
+        // adjustResize` resizes the activity when the keyboard opens,
+        // which makes the wrapping ScrollView reflow its content; with
+        // Fabric, that reflow detaches and re-attaches the focused
+        // EditText's native node, and the IME unbinds. Dropping the
+        // ScrollView (the form fits without scrolling on every supported
+        // device — confirmed against the default presentation which has
+        // been in production for a year) keeps the EditText's native
+        // node stable across keyboard show/hide.
+        //
+        // The `behavior={'height'}` on Android (was `undefined`) further
+        // aligns with the default presentation; some Vivo devices appear
+        // to still drop IME binding on layout reflow when KAV does
+        // nothing on Android.
+        //
+        // (2026-05-06) The TouchableWithoutFeedback `dismissKeyboard`
+        // wrapper is intentionally NOT restored — it was racing with
+        // TextInput focus on body taps. The default presentation does
+        // wrap, but with the `behavior='height'` change here that wrap
+        // is no longer needed for keyboard dismissal: tapping outside
+        // an input on Android with the keyboard up dismisses via the
+        // system back gesture, and explicit "tap to dismiss" affordances
+        // can be added per-control later if the design calls for them.
+        <View style={styles.safe}>
             <StatusBar barStyle="light-content" backgroundColor={COLORS.brand.primary} />
             <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={styles.flex}
             >
-                {/*
-                  Note (2026-05-06): the TouchableWithoutFeedback wrapper
-                  used to surround this ScrollView and call
-                  `dismissKeyboard` (which calls `Keyboard.dismiss()`) on
-                  every body tap. On Android that races with TextInput
-                  focus and prevents the inputs from accepting keystrokes
-                  reliably — same defect we hit on SignupScreen.
-                  Replaced with `keyboardDismissMode="on-drag"` so users
-                  dismiss the keyboard by scrolling instead.
-                */}
-                <ScrollView
-                    style={styles.flex}
-                    contentContainerStyle={styles.scroll}
-                    keyboardShouldPersistTaps="handled"
-                    keyboardDismissMode="on-drag"
-                    showsVerticalScrollIndicator={false}
-                >
+                <View style={[styles.flex, styles.scroll]}>
                         {/* ── HERO ── */}
                         <LinearGradient
                             colors={GRADIENTS.brand}
@@ -211,18 +219,9 @@ const LoginScreen = ({ viewModel, actions }) => {
                                         placeholder="you@example.com"
                                         placeholderTextColor={COLORS.text.muted}
                                         value={email}
-                                        onChangeText={(t) => {
-                                            console.log('[ALN_LOGIN onChange email]', JSON.stringify(t));
-                                            onEmailChange(t.toLowerCase());
-                                        }}
-                                        onFocus={() => {
-                                            console.log('[ALN_LOGIN focus email]');
-                                            setEmailFocused(true);
-                                        }}
-                                        onBlur={() => {
-                                            console.log('[ALN_LOGIN blur email]');
-                                            setEmailFocused(false);
-                                        }}
+                                        onChangeText={(t) => onEmailChange(t.toLowerCase())}
+                                        onFocus={() => setEmailFocused(true)}
+                                        onBlur={() => setEmailFocused(false)}
                                         keyboardType="email-address"
                                         autoCapitalize="none"
                                         autoCorrect={false}
@@ -332,10 +331,10 @@ const LoginScreen = ({ viewModel, actions }) => {
                                 </TouchableOpacity>
                             </View>
                         </View>
-                </ScrollView>
+                </View>
             </KeyboardAvoidingView>
             <Toast />
-        </SafeAreaView>
+        </View>
     );
 };
 
