@@ -432,6 +432,12 @@ const styles = StyleSheet.create({
     maxWidth: screenWidth,
     paddingVertical: 10,
     paddingHorizontal: 20,
+    // Clip the children to the card bounds so the 50×50 fallback logo
+    // (`alpha-100.png`) doesn't bleed past the gradient when the plan
+    // has sparse data (alphanomy tenant returns empty currentPrice /
+    // pricingOptions / stats, collapsing the card height). Without this,
+    // the icon visually overlaps the tab strip rendered immediately below.
+    overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,

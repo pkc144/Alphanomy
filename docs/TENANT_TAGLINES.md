@@ -5,12 +5,13 @@
 
 ## Why this exists
 
-The alphanomy variant ships hardcoded marketing copy on the auth screens:
+The alphanomy variant ships hardcoded marketing copy on the auth screens AND on the Home section headers:
 
 - LoginScreen — `"Folios · Research"` sub-tag, `"Your Alpha, Engineered."` hero, `"Research-backed investment plans curated by SEBI-registered advisors."` subhead, `"SEBI Registered"` + `"256-bit Encrypted"` trust badges.
 - SignupScreen — `"Create account"` sub-tag, `"Start investing smarter today."` hero, **`"Join 50,000+ investors getting institutional-grade advice."`** subhead.
+- HomeScreen — `"Bespoke Active Recommendations"` under Recommendations, `"Ranked by user feedback"` under both Model Portfolios and Top Bespoke Plans (duplicated).
 
-That last claim is a quantitative legal/compliance hazard if shipped to a tenant whose actual investor count is different. **Surfacing all of this copy via `appadvisors.taglines` lets per-tenant compliance own the message without code changes.**
+The signup quantitative claim is a legal/compliance hazard if shipped to a tenant whose actual investor count is different. The Home subtitles are softer copy (no quantitative claims) but still benefit from per-tenant tone control. **Surfacing all of this copy via `appadvisors.taglines` lets per-tenant compliance own the message without code changes.**
 
 ## Resolution order
 
@@ -41,6 +42,11 @@ Per-field fallback: a partial backend override (e.g. only `heroTitle` set) keeps
       heroSubtitle:  string?,
         // ⚠️ Quantitative claims (investor counts, returns) — tenant +
         // compliance approval REQUIRED before going live.
+    },
+    home: {
+      recommendationsSubtitle:  string?,   // under "Recommendations" section
+      modelPortfoliosSubtitle:  string?,   // under "Model Portfolios" section
+      bespokePlansSubtitle:     string?,   // under "Top Bespoke Plans" section
     }
   }
 }
@@ -66,8 +72,8 @@ Add new keys to `TRUST_ICON_MAP` in the same file when a tenant requests a new i
 ## Client passthrough
 
 1. `src/context/ConfigContext.js` reads `apiData.taglines` from `/api/app-advisor/get` and exposes it as `config.taglines` on the React context.
-2. `src/screens/Authentication/LoginScreen.js` and `SignupScreen.js` containers spread `config?.taglines?.login` / `.signup` into their respective `viewModel.taglines` field.
-3. `designs/alphanomy/screens/LoginScreen.js` and `SignupScreen.js` consume `viewModel.taglines` and merge per-field with `FALLBACK_TAGLINES`.
+2. `src/screens/Authentication/LoginScreen.js` and `SignupScreen.js` containers spread `config?.taglines?.login` / `.signup` into their respective `viewModel.taglines` field. `src/screens/Home/HomeScreen.js` container spreads `configData?.config?.taglines?.home` into the `home` prop bag as `home.taglines`.
+3. `designs/alphanomy/screens/LoginScreen.js`, `SignupScreen.js`, and `HomeScreen.js` consume their respective `taglines` and merge per-field with the local `FALLBACK_*_TAGLINES` constant.
 
 Default presentation ignores the field — the addition is variant-only.
 
@@ -87,4 +93,6 @@ Coordinate the backend change in the same PR cycle as the support-UI form, since
 - `src/context/ConfigContext.js` § `TENANT TAGLINES` — code-level shape comment.
 - `designs/alphanomy/screens/LoginScreen.js` (`FALLBACK_TAGLINES`) — built-in copy.
 - `designs/alphanomy/screens/SignupScreen.js` — Signup taglines (no `trustBadges`).
+- `designs/alphanomy/screens/HomeScreen.js` (`FALLBACK_HOME_TAGLINES`) — Home section subtitle copy.
 - `docs/DESIGN_MIGRATION_PROGRESS.md § 2026-05-05 (taglines)` — work log.
+- `docs/DESIGN_MIGRATION_PROGRESS.md § 2026-05-07 (home subtitles)` — Home extension work log.

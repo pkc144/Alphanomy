@@ -196,7 +196,7 @@ const HomeScreen = ({ }) => {
   const getRebalanceRepair = () => {
     let repairData = JSON.stringify({
       modelName: modelNames,
-      advisor: configData?.config?.REACT_APP_HEADER_NAME,
+      advisor: modelPortfolioStrategyfinal[0]['advisor'],
       userEmail: userEmail,
       userBroker: broker,
     });
@@ -1692,6 +1692,23 @@ const HomeScreen = ({ }) => {
     // Variant-facing user name for the greeting (full name preferred over
     // email-derived first-name fallback).
     userName,
+    // Variant-facing active-portfolio sections (alphanomy variant only):
+    //   rebalanceList — sorted MP rebalance items the user is subscribed to,
+    //                   with `latestRebalance` + `userInvestmentAmount`
+    //                   already merged in. Same shape that powers the legacy
+    //                   <RebalanceAdvices> component on the default presentation.
+    //   recommendationList — pending bespoke trade recos for this user. Same
+    //                        array the legacy <StockAdvices type="home"> reads.
+    // Default presentation ignores these — they're additive, not contract-breaking.
+    rebalanceList: filteredAndSortedStrategies,
+    recommendationList: stockRecoNotExecutedfinal,
+    // Variant-facing tenant copy for Home section subtitles. Same
+    // pattern as `taglines.login` / `taglines.signup` (see
+    // `src/context/ConfigContext.js § TENANT TAGLINES` and
+    // `docs/TENANT_TAGLINES.md`). Default presentation ignores;
+    // alphanomy reads `home.taglines.modelPortfoliosSubtitle` etc.
+    // and falls back per-field to its hardcoded copy.
+    taglines: configData?.config?.taglines?.home || null,
   };
 
   return <Presentation home={home} />;

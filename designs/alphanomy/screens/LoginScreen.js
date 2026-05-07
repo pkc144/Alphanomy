@@ -120,6 +120,11 @@ const LoginScreen = ({ viewModel, actions }) => {
     const [emailFocused, setEmailFocused] = React.useState(false);
     const [pwdFocused, setPwdFocused] = React.useState(false);
 
+    // DIAGNOSTIC (2026-05-07) — temp instrumentation. Remove once fix lands.
+    const renderCountRef = React.useRef(0);
+    renderCountRef.current += 1;
+    console.log('[ALN_LOGIN render]', renderCountRef.current, { eF: emailFocused, pF: pwdFocused, eLen: email.length });
+
     return (
         <SafeAreaView style={styles.safe}>
             <StatusBar barStyle="light-content" backgroundColor={COLORS.brand.primary} />
@@ -206,9 +211,18 @@ const LoginScreen = ({ viewModel, actions }) => {
                                         placeholder="you@example.com"
                                         placeholderTextColor={COLORS.text.muted}
                                         value={email}
-                                        onChangeText={(t) => onEmailChange(t.toLowerCase())}
-                                        onFocus={() => setEmailFocused(true)}
-                                        onBlur={() => setEmailFocused(false)}
+                                        onChangeText={(t) => {
+                                            console.log('[ALN_LOGIN onChange email]', JSON.stringify(t));
+                                            onEmailChange(t.toLowerCase());
+                                        }}
+                                        onFocus={() => {
+                                            console.log('[ALN_LOGIN focus email]');
+                                            setEmailFocused(true);
+                                        }}
+                                        onBlur={() => {
+                                            console.log('[ALN_LOGIN blur email]');
+                                            setEmailFocused(false);
+                                        }}
                                         keyboardType="email-address"
                                         autoCapitalize="none"
                                         autoCorrect={false}
@@ -508,9 +522,16 @@ const styles = StyleSheet.create({
         paddingVertical: SPACING.md,
     },
     inputBoxFocused: {
+        // Focus visual: only change borderColor + backgroundColor. Do NOT
+        // toggle elevation/shadow on focus — adding elevation to a parent
+        // View causes Android to recompose its native layer, which detaches
+        // and reattaches the TextInput child, which drops the IME's served
+        // view binding (the keyboard pops up briefly then dismisses, and
+        // characters disappear as you type). Reproduced in the field on
+        // Vivo V2058 (Android 15) on 2026-05-07. Keep this rule for any
+        // focus-driven style change here and on SignupScreen.
         backgroundColor: COLORS.surface.card,
         borderColor: COLORS.brand.primary,
-        ...SHADOWS.xs,
     },
     input: {
         flex: 1,

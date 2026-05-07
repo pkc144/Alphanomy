@@ -37,63 +37,29 @@ import {
 } from '../tokens';
 import AppHeader from './_AppHeader';
 
-// Fallback plan rows used when the container hasn't supplied catalog data
-// yet (boot, no auth, no advisor config, empty catalog response). Same
-// shape that `src/utils/alphanomyPlanShape.js` produces.
-const FALLBACK_PLANS = {
-    bespoke: [
-        {
-            id: 'fallback-momentum-weekly',
-            name: 'Momentum Weekly',
-            priceNow: '₹ 1.00',
-            validity: 'Validity: 12 Days',
-            freq: 'Weekly',
-            freqVariant: 'amber',
-        },
-        {
-            id: 'fallback-sanjana-premium',
-            name: 'Sanjana Premium',
-            priceOrig: '₹ 3,487',
-            priceNow: '₹ 2,999',
-            validity: 'Monthly validity',
-            freq: 'Monthly',
-            saveBadge: 'Save 14%',
-        },
-        {
-            id: 'fallback-recurring-growth',
-            name: 'Recurring Growth',
-            priceNow: '₹ 100.00',
-            validity: 'Monthly validity',
-            freq: 'Monthly',
-        },
-    ],
-    mp: [
-        {
-            id: 'fallback-alpha-growth',
-            name: 'Alpha Growth Plan',
-            priceNow: '₹ 20.00',
-            validity: 'Monthly validity',
-            freq: 'Monthly',
-        },
-    ],
-};
-
-const ModelPortfolioScreenAlphanomy = ({ viewModel, actions, home }) => {
+const ModelPortfolioScreenAlphanomy = ({ viewModel, actions, home, slots }) => {
     const userEmail = home?.userEmail || viewModel?.userEmail || '';
     const userName = home?.userName || viewModel?.userName || '';
     const config = home?.config || viewModel?.config;
     const tickers = home?.tickers || viewModel?.tickers;
-    // Live plan rows from container; fall back to design-preview entries
-    // when the catalog is empty (boot, no auth, no advisor config).
+    // Modal slots produced by the container — `MPInvestNowModal`, success +
+    // recommendation modals, etc. Render them as siblings of the SafeAreaView
+    // so they overlay the whole screen (the container gates each slot on its
+    // own state, e.g. `paymentModal ? <MPInvestNowModal /> : null`).
+    const {
+        InvestNowModalSlot = null,
+        PaymentSuccessSlot = null,
+        RecommendationSuccessSlot = null,
+    } = slots || {};
+    // Live plan rows from the container — `viewModel.alphanomyPlans` is
+    // shaped from `allStrategy`/`allBespoke` via `alphanomyPlanShape.js`.
+    // Empty arrays render an empty state (no fake placeholders).
     const livePlans = viewModel?.alphanomyPlans;
-    const liveBespoke = livePlans?.bespoke?.length ? livePlans.bespoke : null;
-    const liveMp = livePlans?.mp?.length ? livePlans.mp : null;
+    const bespokePlans = livePlans?.bespoke || [];
+    const mpPlans = livePlans?.mp || [];
 
     const [tab, setTab] = useState('bespoke');
-    const plans =
-        tab === 'bespoke'
-            ? liveBespoke || FALLBACK_PLANS.bespoke
-            : liveMp || FALLBACK_PLANS.mp;
+    const plans = tab === 'bespoke' ? bespokePlans : mpPlans;
 
     return (
         <SafeAreaView style={styles.safe}>
@@ -155,15 +121,39 @@ const ModelPortfolioScreenAlphanomy = ({ viewModel, actions, home }) => {
                     </TouchableOpacity>
                 </View>
 
-                {plans.map((plan, idx) => (
-                    <PlanCard key={plan.id || idx} plan={plan} />
-                ))}
+                {plans.length === 0 ? (
+                    <View style={styles.emptyState}>
+                        <Text style={styles.emptyTitle}>
+                            No {tab === 'bespoke' ? 'bespoke plans' : 'model portfolios'} yet
+                        </Text>
+                        <Text style={styles.emptySub}>
+                            Plans configured for your advisor will appear here.
+                        </Text>
+                    </View>
+                ) : (
+                    plans.map((plan, idx) => (
+                        <PlanCard
+                            key={plan.id || idx}
+                            plan={plan}
+                            onSubscribe={() =>
+                                actions?.onSubscribe?.(plan.id, tab)
+                            }
+                            onViewMore={() =>
+                                actions?.onViewMore?.(plan.id, tab)
+                            }
+                        />
+                    ))
+                )}
             </ScrollView>
+            {/* Modal slots — gated by container state, render nothing when closed. */}
+            {InvestNowModalSlot}
+            {PaymentSuccessSlot}
+            {RecommendationSuccessSlot}
         </SafeAreaView>
     );
 };
 
-const PlanCard = ({ plan }) => {
+const PlanCard = ({ plan, onSubscribe, onViewMore }) => {
     const hasDiscount = !!plan.priceOrig;
     return (
         <View style={styles.planCard}>
@@ -209,10 +199,18 @@ const PlanCard = ({ plan }) => {
             </View>
 
             <View style={styles.btnRow}>
-                <TouchableOpacity style={styles.btnView} activeOpacity={0.85}>
+                <TouchableOpacity
+                    style={styles.btnView}
+                    activeOpacity={0.85}
+                    onPress={onViewMore}
+                >
                     <Text style={styles.btnViewText}>View More</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.btnSubWrap} activeOpacity={0.9}>
+                <TouchableOpacity
+                    style={styles.btnSubWrap}
+                    activeOpacity={0.9}
+                    onPress={onSubscribe}
+                >
                     <LinearGradient
                         colors={GRADIENTS.brand}
                         start={{ x: 0, y: 0 }}
@@ -235,6 +233,22 @@ const styles = StyleSheet.create({
         padding: SPACING.lg - 2,
         gap: SPACING.md - 2,
         paddingBottom: SPACING.huge,
+    },
+
+    emptyState: {
+        paddingVertical: SPACING.huge,
+        alignItems: 'center',
+    },
+    emptyTitle: {
+        ...TYPOGRAPHY.bodyEmphasis,
+        fontSize: 14,
+        color: COLORS.text.primary,
+    },
+    emptySub: {
+        fontSize: 11,
+        color: COLORS.text.muted,
+        marginTop: 6,
+        textAlign: 'center',
     },
 
     pillTabs: {

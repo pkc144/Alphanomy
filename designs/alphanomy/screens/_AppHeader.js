@@ -258,6 +258,11 @@ const styles = StyleSheet.create({
     tickerStrip: { paddingBottom: 2 },
     tickerStripContent: { gap: SPACING.sm + 2, paddingRight: SPACING.lg },
     chip: {
+        // No minWidth — chip stays content-sized for a tighter look. The
+        // `fontVariant: ['tabular-nums']` on tickerVal / tickerChg below
+        // keeps the digits inside each chip stable so LTP updates don't
+        // visibly jiggle, even though the chip's overall width does
+        // change slightly when the value's character count changes.
         backgroundColor: COLORS.surface.subtle,
         borderWidth: 1,
         borderColor: COLORS.border.default,
@@ -278,8 +283,15 @@ const styles = StyleSheet.create({
         color: COLORS.text.primary,
         marginVertical: 3,
         letterSpacing: -0.2,
+        // Tabular digits keep "23,995.7" the same width as "24,001.2" so
+        // the value text doesn't reflow on every ltp_update.
+        fontVariant: ['tabular-nums'],
     },
-    tickerChg: { fontSize: 10, fontWeight: '700' },
+    tickerChg: {
+        fontSize: 10,
+        fontWeight: '700',
+        fontVariant: ['tabular-nums'],
+    },
 });
 
 export default AppHeader;

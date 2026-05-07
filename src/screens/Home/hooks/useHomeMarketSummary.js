@@ -1,44 +1,43 @@
 /**
- * useHomeMarketSummary — derives the alphanomy variant's HomeScreen header data.
+ * useHomeMarketSummary — derives the alphanomy variant's HomeScreen header
+ * data (live tickers + portfolio P&L summary).
  *
  * Returns:
  *   {
- *     tickers: [{ name, value, change, dir }, ...],   // 3 indices, alphanomy-shaped
+ *     tickers: [{ name, value, change, dir }, ...],
  *     pnlSummary: { currentPnl, invested, currentValue, returnsPct },
  *   }
  *
- * Tickers source:
- *   - Static config of 3 indices (NIFTY 50 / SENSEX / BANKNIFTY) — same set the
- *     legacy `<MarketIndices>` uses.
- *   - Live LTPs from `MarketDataContext` (subscribes once, reads from cache).
- *   - Previous-close prices via a one-shot POST to
- *     `${ccxtServer}misc/indices-previous-close`. Failures are silent — the
- *     ticker just shows the LTP without a change indicator.
+ * **Tickers** — live LTPs via the existing `WebSocketManager` singleton
+ * (socket.io-client, already used by `<MarketIndices>`, watchlist, etc.).
+ * The `MarketDataContext` was the original source but it never opens a
+ * WebSocket of its own — `WebSocketManager` is the actually-working
+ * pipeline. We subscribe to NIFTY / SENSEX / BANKNIFTY (mirrors
+ * `indicesConfig` in `src/components/HomeScreenComponents/MarketIndices.js`)
+ * and fetch each index's previous-close from
+ * `${ccxtServer}misc/indices-previous-close` so the change indicator
+ * (▼ 97.00 (0.40%)) can be computed.
  *
- * P&L source:
- *   - `MultiBrokerContext.aggregatedHoldings` — already normalized + summed
- *     across brokers (`useMultiBrokerHoldings.js` is the producer). Sums
- *     `totalInvested` and `totalCurrentValue` to derive the portfolio summary.
- *   - When no broker is connected the result is all zeros (matches the HTML
- *     mockup's pre-onboarding state).
+ * **P&L** — sum of `MultiBrokerContext.aggregatedHoldings` (already
+ * normalized + ltp-multiplied by `useMultiBrokerHoldings`). Returns
+ * all-zero when no broker is connected.
  *
- * Wired into the home container (`src/screens/Home/HomeScreen.js`) and
- * surfaced via the `home` prop bag for the alphanomy `HomeScreen` and
- * `_AppHeader` presentations. Default presentation ignores these fields
- * — they're additive, no contract break.
+ * Both data sources degrade silently when their providers / sockets are
+ * unavailable — the hook always returns the same shape, just with empty
+ * arrays / zero values. Consumers fall back to design-preview placeholders.
  */
 
-import { useContext, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
-import MarketDataContext from '../../../context/MarketDataContext';
-import MultiBrokerContext from '../../../context/MultiBrokerContext';
+import { useTrade } from '../../TradeContext';
 import server from '../../../utils/serverConfig';
 import Config from '../../../utils/safeConfig';
 import { generateToken } from '../../../utils/SecurityTokenManager';
 import { getAdvisorSubdomain } from '../../../utils/variantHelper';
+import WebSocketManager from '../../../components/AdviceScreenComponents/DynamicText/WebSocketManager';
 
-// Mirror of `indicesConfig` in MarketIndices.js — kept here to avoid pulling
-// in that ~600-line component when all we need is the config + live data.
+// Mirror of `indicesConfig` in MarketIndices.js — kept here to avoid
+// importing that ~600-line component when all we need is the config.
 const INDICES = [
     {
         key: 'nifty50',
@@ -84,24 +83,88 @@ const formatChange = (change, prevClose) => {
 };
 
 export default function useHomeMarketSummary() {
-    // Read raw Contexts directly — both default to null when no provider is
-    // mounted (test environments / isolated previews), so the hook silently
-    // degrades instead of throwing.
-    const market = useContext(MarketDataContext);
-    const broker = useContext(MultiBrokerContext);
-    const [previousClose, setPreviousClose] = useState({}); // { NIFTY: number, ... }
+    const trade = useTrade() || {};
+    const { configData, allHoldingsData, getAllHoldings, broker, brokerStatus } = trade;
 
-    // Subscribe to the 3 indices once on mount.
-    const symbols = useMemo(() => INDICES.map((i) => i.symbol), []);
+    // Mirror what `<PortfolioScreen>` does on mount: ensure
+    // `allHoldingsData` is populated for the connected broker. The
+    // TradeContext `useEffect([userDetails])` already calls
+    // `getAllHoldings()` once when user data loads, but the request
+    // is fire-and-forget — if it errored or never fired (e.g. user
+    // signed in via a path that didn't trigger getUserDeatils), the
+    // P&L hero would stay at ₹0.00 forever. Re-fire on mount of any
+    // surface using this hook, idempotently.
     useEffect(() => {
-        if (!market?.subscribe) return;
-        market.subscribe(symbols);
-    }, [market, symbols]);
+        if (
+            !allHoldingsData &&
+            broker &&
+            brokerStatus !== 'Disconnected' &&
+            typeof getAllHoldings === 'function'
+        ) {
+            getAllHoldings().catch(() => {});
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [broker, brokerStatus, !!allHoldingsData]);
 
-    // One-shot fetch of previous-close prices. Skipped when MarketDataContext
-    // is not mounted (no consumer for the change indicators anyway).
+    // Live LTPs by primary symbol (and alt fallback). Each entry is the
+    // most recent ltp_update payload received via WebSocketManager.
+    const [ltps, setLtps] = useState({});
+    // Previous-close values keyed by primary symbol — fetched once.
+    const [previousClose, setPreviousClose] = useState({});
+    // Comparison mode (mirrors legacy MarketIndices.js):
+    //   'prevClose' — server returned valid prev-close prices; tickers
+    //                 show change vs yesterday's close.
+    //   'opening'   — prev-close fetch failed; use the FIRST live LTP per
+    //                 index as the baseline so change/% start at 0 and
+    //                 grow during the session. Better UX than rendering
+    //                 no change indicator at all.
+    const [comparisonType, setComparisonType] = useState('prevClose');
+    const [openingPrices, setOpeningPrices] = useState({});
+
+    // Subscribe + listen via WebSocketManager. Each index is registered
+    // with both its primary symbol and its alts so the LTP arrives
+    // regardless of which name the server emits. Mirrors the legacy
+    // `<MarketIndices>` flow:
+    //   - DO NOT call `WebSocketManager.initialize(...)` — that overwrites
+    //     the singleton's `configData` / `userEmail` and breaks every
+    //     other subscriber. `websocketInitializer.js` owns the lifecycle.
+    //   - Subscribe to every (primary + alt) symbol pair eagerly. The
+    //     server emits whichever name it knows; we accept all of them and
+    //     normalize back to the canonical symbol.
     useEffect(() => {
-        if (!market) return undefined;
+        if (!configData) return undefined;
+        const ws = WebSocketManager.getInstance();
+        if (!ws) return undefined;
+
+        const pairs = [];
+        INDICES.forEach((cfg) => {
+            pairs.push({ canonicalSymbol: cfg.symbol, name: cfg.symbol, exchange: cfg.exchange });
+            cfg.alts.forEach((alt) =>
+                pairs.push({ canonicalSymbol: cfg.symbol, name: alt, exchange: cfg.exchange }),
+            );
+        });
+
+        pairs.forEach(({ canonicalSymbol, name, exchange }) => {
+            const cb = ({ ltp }) => {
+                const num = Number(ltp);
+                if (!Number.isFinite(num) || num <= 0) return;
+                setLtps((prev) =>
+                    prev[canonicalSymbol] === num
+                        ? prev
+                        : { ...prev, [canonicalSymbol]: num },
+                );
+            };
+            ws.subscribe(name, exchange, cb);
+        });
+        // WebSocketManager doesn't expose a per-callback unsubscribe API —
+        // the legacy MarketIndices accepts the leak too. The closures are
+        // cheap and only fire setLtps; if the consumer unmounts, React
+        // will discard the queued state update with no observable effect.
+        return undefined;
+    }, [configData]);
+
+    // One-shot fetch of previous-close.
+    useEffect(() => {
         let cancelled = false;
         const fetchPrev = async () => {
             try {
@@ -120,7 +183,10 @@ export default function useHomeMarketSummary() {
                 const res = await axios.post(url, payload, { headers, timeout: 8000 });
                 if (cancelled) return;
                 const data = res?.data?.data;
-                if (!data || typeof data !== 'object') return;
+                if (!data || typeof data !== 'object') {
+                    setComparisonType('opening');
+                    return;
+                }
                 const next = {};
                 INDICES.forEach((cfg) => {
                     let price = data[cfg.symbol];
@@ -135,60 +201,106 @@ export default function useHomeMarketSummary() {
                     const num = Number(price);
                     if (Number.isFinite(num)) next[cfg.symbol] = num;
                 });
+                if (Object.keys(next).length === 0) {
+                    setComparisonType('opening');
+                    return;
+                }
                 setPreviousClose(next);
+                setComparisonType('prevClose');
             } catch {
-                // Silent — tickers fall back to LTP-only display.
+                // Server unreachable / errored — switch to opening-price mode.
+                setComparisonType('opening');
             }
         };
         fetchPrev();
         return () => {
             cancelled = true;
         };
-    }, [market]);
+    }, []);
 
-    // Build the alphanomy ticker rows.
-    const tickers = useMemo(() => {
-        if (!market?.getLTPForSymbol) return [];
-        return INDICES.map((cfg) => {
-            // Try primary symbol, then alts — same fallback as legacy MarketIndices.
-            let ltp = market.getLTPForSymbol(cfg.symbol);
-            if (!ltp) {
-                for (const alt of cfg.alts) {
-                    const v = market.getLTPForSymbol(alt);
-                    if (v) {
-                        ltp = v;
-                        break;
-                    }
-                }
+    // Snapshot the first LTP per index when comparisonType is 'opening' so
+    // we have a stable baseline. Done in an effect rather than inline so
+    // re-renders don't keep resetting the baseline to the latest tick.
+    useEffect(() => {
+        if (comparisonType !== 'opening') return;
+        let changed = false;
+        const next = { ...openingPrices };
+        INDICES.forEach((cfg) => {
+            const ltp = ltps[cfg.symbol];
+            if (ltp && !next[cfg.symbol]) {
+                next[cfg.symbol] = ltp;
+                changed = true;
             }
-            const prev = previousClose[cfg.symbol] || 0;
-            const change = ltp && prev ? ltp - prev : 0;
+        });
+        if (changed) setOpeningPrices(next);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [ltps, comparisonType]);
+
+    const tickers = useMemo(() => {
+        const rows = INDICES.map((cfg) => {
+            const ltp = ltps[cfg.symbol] || 0;
+            const base =
+                comparisonType === 'prevClose'
+                    ? previousClose[cfg.symbol] || 0
+                    : openingPrices[cfg.symbol] || 0;
+            const change = ltp && base ? ltp - base : 0;
             return {
                 name: cfg.displayName,
                 value: ltp ? formatNumber(ltp) : '—',
-                change: formatChange(change, prev),
+                change: formatChange(change, base),
                 dir: change > 0 ? 'up' : change < 0 ? 'down' : 'flat',
+                _debug: { ltp, base, comparisonType, symbol: cfg.symbol },
             };
         });
-    }, [market, previousClose]);
+        // Dev-only verification log — prints raw LTP + baseline values for
+        // every render of the home header so they can be cross-checked
+        // against NSE / BSE / Google Finance live data. Remove once
+        // verified. Each line maps 1:1 to a chip on the alphanomy header.
+        if (__DEV__) {
+            console.log(
+                '[Tickers debug]',
+                rows
+                    .map(
+                        (r) =>
+                            `${r.name}: ltp=${r._debug.ltp} base=${r._debug.base} cmp=${r._debug.comparisonType}`,
+                    )
+                    .join(' | '),
+            );
+        }
+        return rows.map(({ _debug, ...rest }) => rest);
+    }, [ltps, previousClose, openingPrices, comparisonType]);
 
-    // Sum aggregatedHoldings into a portfolio summary.
+    // Portfolio P&L summary — sourced from `TradeContext.allHoldingsData`,
+    // the same broker-aggregated holdings doc used by `<PortfolioCard>`
+    // and `<PortfolioScreen>`. The shape comes straight from
+    // `${ccxtServer}<broker>/all-holdings` (server-side aggregation):
+    //   { totalprofitandloss, totalpnlpercentage, totalinvvalue,
+    //     totalholdingvalue }
+    // Returns all-zero when no broker is connected (allHoldingsData is
+    // undefined / shape doesn't match) — matches the "Connect a broker"
+    // empty state on the Home P&L hero.
     const pnlSummary = useMemo(() => {
-        const list = broker?.aggregatedHoldings;
-        if (!Array.isArray(list) || list.length === 0) {
+        const h = allHoldingsData;
+        if (!h || typeof h !== 'object') {
             return { currentPnl: 0, invested: 0, currentValue: 0, returnsPct: 0 };
         }
-        let invested = 0;
-        let currentValue = 0;
-        list.forEach((h) => {
-            if (!h) return;
-            invested += Number(h.totalInvested) || 0;
-            currentValue += Number(h.totalCurrentValue) || 0;
-        });
-        const currentPnl = currentValue - invested;
-        const returnsPct = invested > 0 ? (currentPnl / invested) * 100 : 0;
+        const invested = Number(h.totalinvvalue) || 0;
+        const currentValue = Number(h.totalholdingvalue) || 0;
+        // Prefer the server-supplied totals (already accounts for any
+        // broker-specific reconciliation) over a client-side subtraction;
+        // fall back to (currentValue - invested) when the field is absent.
+        const serverPnl = Number(h.totalprofitandloss);
+        const currentPnl = Number.isFinite(serverPnl)
+            ? serverPnl
+            : currentValue - invested;
+        const serverPct = Number(h.totalpnlpercentage);
+        const returnsPct = Number.isFinite(serverPct)
+            ? serverPct
+            : invested > 0
+            ? (currentPnl / invested) * 100
+            : 0;
         return { currentPnl, invested, currentValue, returnsPct };
-    }, [broker?.aggregatedHoldings]);
+    }, [allHoldingsData]);
 
     return { tickers, pnlSummary };
 }

@@ -27,8 +27,11 @@
  * a missing broker both legitimately read ₹0.00, so suppressing it would
  * conflate two real states.
  *
- * The two "View All" links wire to the container's existing overlay flags
- * (`setSeeAllMPplan` / `setSeeAllBespokeplan`).
+ * The "View All" links navigate to the `Plans` tab (`goToPlans`) with a
+ * `{ kind: 'mp' | 'bespoke' }` route param so `ModelPortfolioScreen` lands
+ * on the matching variant tab. Subscribe buttons add `subscribe: true` and
+ * the plan name; the MP container's `useRoute()` effect auto-opens the
+ * payment modal for that plan on arrival.
  *
  * Receives the same `home` prop bag as designs/default/screens/HomeScreen.js
  * — additional fields (tickers / pnlSummary / heroPlan / bespokePlan) are
@@ -70,20 +73,47 @@ import AppHeader from './_AppHeader';
 //                 not a fallback — a connected broker with zero positions
 //                 looks the same)
 
+// Hardcoded section subtitles used when the backend has no
+// `appadvisors.taglines.home` override for this tenant. Same per-field
+// fallback contract as `FALLBACK_TAGLINES` on Login/Signup — a tenant can
+// set just one field (e.g. only `modelPortfoliosSubtitle`) and the others
+// stay on these defaults. See `docs/TENANT_TAGLINES.md § home` for the
+// backend schema.
+const FALLBACK_HOME_TAGLINES = {
+    recommendationsSubtitle: 'Bespoke Active Recommendations',
+    modelPortfoliosSubtitle: 'Ranked by user feedback',
+    bespokePlansSubtitle: 'Ranked by user feedback',
+};
+
 const HomeScreenPresentation = ({ home }) => {
     const {
         userEmail = '',
         config,
         isRefreshing = false,
         onRefresh = () => {},
-        setSeeAllMPplan = () => {},
-        setSeeAllBespokeplan = () => {},
         tickers,
         pnlSummary,
         heroPlan,
         bespokePlan,
         userName,
+        rebalanceList,
+        recommendationList,
+        taglines,
     } = home || {};
+
+    // Per-field merge with FALLBACK_HOME_TAGLINES so a partial backend
+    // override doesn't blank the un-set fields.
+    const homeCopy = {
+        recommendationsSubtitle:
+            taglines?.recommendationsSubtitle ||
+            FALLBACK_HOME_TAGLINES.recommendationsSubtitle,
+        modelPortfoliosSubtitle:
+            taglines?.modelPortfoliosSubtitle ||
+            FALLBACK_HOME_TAGLINES.modelPortfoliosSubtitle,
+        bespokePlansSubtitle:
+            taglines?.bespokePlansSubtitle ||
+            FALLBACK_HOME_TAGLINES.bespokePlansSubtitle,
+    };
 
     // Header (greeting + ticker strip) is delegated to the shared `<AppHeader>`
     // helper so all alphanomy screens — Home / Order / ModelPortfolio /
@@ -170,6 +200,88 @@ const HomeScreenPresentation = ({ home }) => {
                     </View>
                 </LinearGradient>
 
+                {/* Portfolio Recommendations (MP rebalances) intentionally
+                    omitted on Home for now per product. The data is still
+                    surfaced via `home.rebalanceList` and rendered by the
+                    Plans tab — un-comment the prior block to restore. */}
+
+                {/* Active bespoke recommendations — same data the legacy
+                    <StockAdvices type="home"> reads. Tap → Plans tab (bespoke). */}
+                {Array.isArray(recommendationList) && recommendationList.length > 0 ? (
+                    <View>
+                        <View style={styles.secHd}>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.secTitle}>Recommendations</Text>
+                                <Text style={styles.secSub}>
+                                    {homeCopy.recommendationsSubtitle}
+                                </Text>
+                            </View>
+                            <TouchableOpacity
+                                onPress={() => goToPlans({ kind: 'bespoke' })}
+                                activeOpacity={0.7}
+                            >
+                                <Text style={styles.secLink}>View All</Text>
+                            </TouchableOpacity>
+                        </View>
+                        <View style={{ gap: SPACING.sm }}>
+                            {recommendationList.slice(0, 3).map((reco, i) => {
+                                const symbol =
+                                    reco?.Symbol || reco?.symbol || reco?.tradingSymbol || 'Symbol';
+                                const rawAction =
+                                    reco?.Type || reco?.action || reco?.transactionType || '';
+                                const action = String(rawAction).toUpperCase() || 'BUY';
+                                const isBuy = action.startsWith('B');
+                                const qty = Number(reco?.Quantity || reco?.quantity || 0);
+                                const price = Number(reco?.Price || reco?.price || 0);
+                                const date = reco?.recoDate || reco?.date || reco?.created_at;
+                                const dateStr = date
+                                    ? new Date(date).toLocaleDateString('en-GB', {
+                                          day: '2-digit',
+                                          month: 'short',
+                                      })
+                                    : null;
+                                const qtyPriceStr = qty
+                                    ? `Qty ${qty}${price ? ` @ ₹${price.toLocaleString('en-IN', { maximumFractionDigits: 2 })}` : ''}`
+                                    : null;
+                                return (
+                                    <TouchableOpacity
+                                        key={reco?._id || `${symbol}-${i}`}
+                                        activeOpacity={0.85}
+                                        onPress={() => goToPlans({ kind: 'bespoke' })}
+                                        style={styles.activityCard}
+                                    >
+                                        <View style={styles.activityRow}>
+                                            <Text style={styles.activityName} numberOfLines={1}>
+                                                {symbol}
+                                            </Text>
+                                            <View
+                                                style={
+                                                    isBuy
+                                                        ? styles.actionBadgeBuy
+                                                        : styles.actionBadgeSell
+                                                }
+                                            >
+                                                <Text
+                                                    style={
+                                                        isBuy
+                                                            ? styles.actionBadgeBuyText
+                                                            : styles.actionBadgeSellText
+                                                    }
+                                                >
+                                                    {isBuy ? 'BUY' : 'SELL'}
+                                                </Text>
+                                            </View>
+                                        </View>
+                                        <Text style={styles.activityMeta} numberOfLines={1}>
+                                            {[qtyPriceStr, dateStr].filter(Boolean).join(' · ')}
+                                        </Text>
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </View>
+                    </View>
+                ) : null}
+
                 {/* Model Portfolios section — rendered only when the catalog
                     endpoint has returned at least one MP plan. */}
                 {heroPlan ? (
@@ -177,9 +289,12 @@ const HomeScreenPresentation = ({ home }) => {
                         <View style={styles.secHd}>
                             <View style={{ flex: 1 }}>
                                 <Text style={styles.secTitle}>Model Portfolios</Text>
-                                <Text style={styles.secSub}>Ranked by user feedback</Text>
+                                <Text style={styles.secSub}>{homeCopy.modelPortfoliosSubtitle}</Text>
                             </View>
-                            <TouchableOpacity onPress={() => setSeeAllMPplan(true)} activeOpacity={0.7}>
+                            <TouchableOpacity
+                                onPress={() => goToPlans({ kind: 'mp' })}
+                                activeOpacity={0.7}
+                            >
                                 <Text style={styles.secLink}>View All</Text>
                             </TouchableOpacity>
                         </View>
@@ -225,7 +340,13 @@ const HomeScreenPresentation = ({ home }) => {
                                 <TouchableOpacity
                                     style={styles.btnViewW}
                                     activeOpacity={0.85}
-                                    onPress={() => goToPlans({ kind: 'mp' })}
+                                    onPress={() =>
+                                        goToPlans({
+                                            kind: 'mp',
+                                            viewMore: true,
+                                            planName: heroPlan.name,
+                                        })
+                                    }
                                 >
                                     <Text style={styles.btnViewWText}>View More</Text>
                                 </TouchableOpacity>
@@ -250,9 +371,12 @@ const HomeScreenPresentation = ({ home }) => {
                         <View style={styles.secHd}>
                             <View style={{ flex: 1 }}>
                                 <Text style={styles.secTitle}>Top Bespoke Plans</Text>
-                                <Text style={styles.secSub}>Ranked by user feedback</Text>
+                                <Text style={styles.secSub}>{homeCopy.bespokePlansSubtitle}</Text>
                             </View>
-                            <TouchableOpacity onPress={() => setSeeAllBespokeplan(true)} activeOpacity={0.7}>
+                            <TouchableOpacity
+                                onPress={() => goToPlans({ kind: 'bespoke' })}
+                                activeOpacity={0.7}
+                            >
                                 <Text style={styles.secLink}>View All</Text>
                             </TouchableOpacity>
                         </View>
@@ -281,7 +405,13 @@ const HomeScreenPresentation = ({ home }) => {
                                 <TouchableOpacity
                                     style={styles.btnView}
                                     activeOpacity={0.85}
-                                    onPress={() => goToPlans({ kind: 'bespoke' })}
+                                    onPress={() =>
+                                        goToPlans({
+                                            kind: 'bespoke',
+                                            viewMore: true,
+                                            planName: bespokePlan.name,
+                                        })
+                                    }
                                 >
                                     <Text style={styles.btnViewText}>View More</Text>
                                 </TouchableOpacity>
@@ -415,6 +545,107 @@ const styles = StyleSheet.create({
         paddingHorizontal: 10,
         paddingVertical: 4,
         overflow: 'hidden',
+    },
+
+    // ── ACTIVITY CARDS (rebalances + recommendations) ──
+    activityCard: {
+        backgroundColor: COLORS.surface.card,
+        borderWidth: 1,
+        borderColor: COLORS.border.default,
+        borderRadius: RADII.lg,
+        paddingHorizontal: SPACING.md + 2,
+        paddingVertical: SPACING.sm + 2,
+        ...SHADOWS.card,
+    },
+    activityRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: SPACING.sm,
+    },
+    activityName: {
+        ...TYPOGRAPHY.bodyEmphasis,
+        fontSize: 13,
+        color: COLORS.text.primary,
+        flex: 1,
+    },
+    activityMeta: {
+        fontSize: 11,
+        color: COLORS.text.muted,
+        marginTop: 3,
+    },
+    statusBadgePending: {
+        backgroundColor: 'rgba(18,70,240,0.10)',
+        borderWidth: 1,
+        borderColor: 'rgba(18,70,240,0.20)',
+        borderRadius: 7,
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+    },
+    statusBadgePendingText: {
+        fontSize: 9,
+        fontWeight: '700',
+        color: COLORS.brand.primary,
+        letterSpacing: 0.4,
+        textTransform: 'uppercase',
+    },
+    statusBadgeDone: {
+        backgroundColor: 'rgba(34,197,94,0.10)',
+        borderWidth: 1,
+        borderColor: 'rgba(34,197,94,0.22)',
+        borderRadius: 7,
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+    },
+    statusBadgeDoneText: {
+        fontSize: 9,
+        fontWeight: '700',
+        color: COLORS.status.success,
+        letterSpacing: 0.4,
+        textTransform: 'uppercase',
+    },
+    statusBadgeFailed: {
+        backgroundColor: 'rgba(239,68,68,0.10)',
+        borderWidth: 1,
+        borderColor: 'rgba(239,68,68,0.22)',
+        borderRadius: 7,
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+    },
+    statusBadgeFailedText: {
+        fontSize: 9,
+        fontWeight: '700',
+        color: COLORS.status.danger,
+        letterSpacing: 0.4,
+        textTransform: 'uppercase',
+    },
+    actionBadgeBuy: {
+        backgroundColor: 'rgba(34,197,94,0.12)',
+        borderWidth: 1,
+        borderColor: 'rgba(34,197,94,0.24)',
+        borderRadius: 7,
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+    },
+    actionBadgeBuyText: {
+        fontSize: 9,
+        fontWeight: '800',
+        color: COLORS.status.success,
+        letterSpacing: 0.4,
+    },
+    actionBadgeSell: {
+        backgroundColor: 'rgba(239,68,68,0.12)',
+        borderWidth: 1,
+        borderColor: 'rgba(239,68,68,0.24)',
+        borderRadius: 7,
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+    },
+    actionBadgeSellText: {
+        fontSize: 9,
+        fontWeight: '800',
+        color: COLORS.status.danger,
+        letterSpacing: 0.4,
     },
 
     // ── HERO PLAN CARD (Model Portfolios) ──

@@ -4,6 +4,56 @@
 
 ---
 
+## 2026-05-07 — alphanomy Home section subtitles wired to `taglines.home`
+
+- **Why**: closes the only MEDIUM finding from the 2026-05-07 hardcoded-data audit on the alphanomy variant. The Home section subtitles ("Bespoke Active Recommendations" under Recommendations, "Ranked by user feedback" duplicated under Model Portfolios and Top Bespoke Plans) were baked into the alphanomy presentation, with no per-tenant override path. Same problem the auth screens had before `taglines.login` / `taglines.signup` shipped on 2026-05-05.
+- **Solution**: extend the existing `appadvisors.taglines` schema with a `home: { recommendationsSubtitle, modelPortfoliosSubtitle, bespokePlansSubtitle }` block. Same per-field-fallback contract as login/signup — a tenant can override one field and the others stay on the alphanomy default.
+- **What shipped (code)**:
+  - `src/screens/Home/HomeScreen.js` — container forwards `configData?.config?.taglines?.home || null` into the `home` prop bag as `home.taglines`. Same plumbing pattern as `tickers` / `pnlSummary` / `userName` already use. Default presentation ignores the new field.
+  - `designs/alphanomy/screens/HomeScreen.js` — defined `FALLBACK_HOME_TAGLINES` constant (mirroring `FALLBACK_TAGLINES` on auth screens), destructured `taglines` from `home`, derived `homeCopy` via per-field merge, replaced the three hardcoded subtitle JSX nodes with `{homeCopy.<key>}`.
+- **What shipped (docs, same commit per the design-system blocking rule)**:
+  - `src/context/ConfigContext.js § TENANT TAGLINES` — schema comment now lists the `home` block.
+  - `docs/TENANT_TAGLINES.md` — schema section, "Why this exists" now mentions Home, client-passthrough section now references the Home container + presentation, related-docs section adds the Home presentation file.
+  - `docs/DESIGN_MIGRATION_PROGRESS.md` — this entry.
+  - `docs/CHANGELOG.md` — entry.
+- **What was NOT changed**:
+  - Backend schema — same as the auth taglines: the `appadvisors` collection does not yet carry a `taglines` field. Until the backend ships it, every tenant on alphanomy sees the variant defaults ("Bespoke Active Recommendations" / "Ranked by user feedback"). This is correct legacy behaviour, not a bug — the client side is forward-compatible.
+  - Default variant — unaffected. `default/screens/HomeScreen.js` doesn't render these subtitles in the same form.
+  - LoginScreen / SignupScreen taglines wiring — already-shipped (2026-05-05); only the doc was updated to mention the new sibling.
+- **Visual QA**: ⏳ no on-device verification needed for this pass — fallback copy is byte-identical to the previous hardcoded strings, so absent a backend override the rendered Home is unchanged. Verification will happen when a tenant actually sets `taglines.home.modelPortfoliosSubtitle` to test that the override flows through.
+- **Audit verdict update**: the alphanomy hardcoded-data audit's only MEDIUM Home finding ("Ranked by user feedback" hardcoded subtitle, duplicated) is now resolved. The remaining MEDIUM (`SignupScreen.js:76` quantitative claim) is purely a backend-data-entry task — no code change pending.
+- **Next** (when the backend ships the field):
+  1. Add `taglines.home` to the `appadvisors` Mongoose schema (`aq_backend_github/Models/appAdvisorModel.js`).
+  2. Update `support.alphaquark.in` admin form to allow per-tenant editing of the three Home subtitles.
+  3. Compliance review skipped for Home subtitles (no quantitative claims). Per-tenant tone control only.
+
+---
+
+## 2026-05-06 — alphanomy MPPerformanceScreen pass 1 (chrome + locked state)
+
+- **Reported**: user tapped "View More" on a Model Portfolio plan card from the alphanomy variant and landed on the legacy `MPPerformanceScreen` chrome — partial dark-blue gradient bleed at the top, green-pill Portfolio/OverView/Research tabs, red lock icon on the "Premium Access Required" empty state. None of the alphanomy palette applied.
+- **Root cause**: the container at `src/screens/Drawer/MPPerformanceScreen.js` was already presentation-split via `useComponent('screens.MPPerformanceScreen')`, but the alphanomy variant only registered overrides for the seven entry-point screens (Login / Signup / Home / Order / ModelPortfolio / Account / Portfolio / Notification). MPPerformanceScreen was reachable from alphanomy navigation but resolved through the default registry.
+- **Phase**: I (Model Portfolio surfaces — in scope as of 2026-05-01).
+- **Pass 1 scope** (this commit): hero header chrome + tab strip + locked Portfolio empty state. Pass 2 (later commit) themes the unlocked tab bodies (DistributionGrid, PerformanceChart, methodology blocks, research list).
+- **What shipped (code)**:
+  - `designs/alphanomy/screens/MPPerformanceScreen.js` — variant presentation. Indigo→purple gradient hero card with back button, plan logo, title, GST-aware price + strike-through original + green "SAVE %" pill, pricing-pill row, transparent stat grid (Min. Investment / Volatility / CAGR), rebalance row. Sticky bottom CTA (gradient Subscribe Now / black "Subscribed" pill). Research WebView modal preserved with alphanomy-themed close header. ViewModel + actions + slots contract identical to default — no container change.
+  - `designs/alphanomy/composites/EmptyStateMP.js` — variant lock-state empty view. Indigo Lock icon on a soft halo ring (vs default's flat red lock). Indigo title, muted subtitle. ViewModel contract identical (`title` / `subtitle` / `themeColor` / `mainColor`); the alphanomy override intentionally ignores `themeColor` / `mainColor` so every tenant on this variant gets the same indigo treatment.
+  - `designs/alphanomy/composites/CustomTabbarMPPerformance.js` — variant tab strip. Pill-tab pattern matching `screens/ModelPortfolioScreen.js` (subtle base, gradient fill on the active tab, indigo lock icon when the first tab is disabled because subscription isn't active). Flat-prop contract identical to default (`navigationState` / `jumpTo` / `isSubscriptionActive`).
+  - `designs/alphanomy/index.js` — registered three new keys: `screens.MPPerformanceScreen`, `composites.EmptyStateMP`, `composites.CustomTabbarMPPerformance`. Created `designs/alphanomy/composites/` folder.
+- **What was NOT changed**:
+  - Container `src/screens/Drawer/MPPerformanceScreen.js` — untouched. ViewModel + slots contract was already correct.
+  - `BespokePerformanceScreen` — separate screen, separate "View More" path for bespoke plans. Not yet ported. If the user hits "View More" on a bespoke plan they'll still see the legacy chrome until that override ships.
+  - Tab body slots (PortfolioTabSlot / OverviewTabSlot / ResearchTabSlot) — still rendered through the legacy chrome inside the alphanomy host. The DistributionGrid (Portfolio scene), PerformanceChart + methodology (Overview scene), and research list (Research scene) keep their default styling. Pass 2.
+  - Default variant — untouched. Tenants on `default` get the same legacy MPPerformanceScreen they had before.
+- **Verdict changes** (`DESIGN_COMPONENT_AUDIT.md`):
+  - `MPPerformanceScreen` row: `needs-logic-extraction` → migrated for default (already complete since Phase I) + alphanomy override pass 1 shipped. Note added.
+  - `CustomTabbarMPPerformance` row: same — alphanomy override shipped.
+  - `EmptyStateMP` row: same — alphanomy override shipped.
+- **Test plan / Visual QA**: ⏳ pending on-device verification. After app restart, "View More" → MPPerformanceScreen should render: indigo→purple gradient hero, alphanomy back chevron, alphanomy pill tabs, indigo Lock + halo on the locked Portfolio empty state, gradient Subscribe Now CTA. Tab body content (when subscribed) will still look legacy until pass 2.
+- **Next**: pass 2 — alphanomy DistributionGrid restyle + PerformanceChart container restyle + methodology block restyle. Then BespokePerformanceScreen pass 1.
+
+---
+
 ## 2026-05-06 — Bugfix: alphanomy Profile "Edit" pill was a dead button
 
 - **Reported**: user tapped the gradient profile card's Edit pill on the alphanomy Profile (More tab) and nothing happened.

@@ -379,7 +379,12 @@ const MPPerformanceScreen = ({route}) => {
 
   const subscriptionStatus = getSubscriptionStatus(modelName, subscriptionData?.subscriptions);
   const isActive = subscriptionStatus === 'active' || subscriptionStatus === 'renew';
-  const subscribed = planDetails?.subscribed_by?.filter(email => email === userEmail).length > 0;
+  // Defend against backend variants that return `subscribed_by` as something
+  // other than an array (alphanomy tenant has surfaced it as an object on
+  // some plans, which threw `.filter is not a function`). Treat anything
+  // non-array as no subscribers.
+  const subscribed = Array.isArray(planDetails?.subscribed_by)
+    && planDetails.subscribed_by.some(email => email === userEmail);
 
   // Pricing options
   const getPricingOptions = () => {

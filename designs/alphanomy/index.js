@@ -27,6 +27,9 @@ import ModelPortfolioScreen from './screens/ModelPortfolioScreen';
 import AccountSettingsScreen from './screens/AccountSettingsScreen';
 import PortfolioScreen from './screens/PortfolioScreen';
 import NotificationListScreen from './screens/NotificationListScreen';
+import MPPerformanceScreen from './screens/MPPerformanceScreen';
+import EmptyStateMP from './composites/EmptyStateMP';
+import CustomTabbarMPPerformance from './composites/CustomTabbarMPPerformance';
 
 const variant = {
     name: 'alphanomy',
@@ -40,6 +43,13 @@ const variant = {
         'screens.AccountSettingsScreen': AccountSettingsScreen,
         'screens.PortfolioScreen': PortfolioScreen,
         'screens.NotificationListScreen': NotificationListScreen,
+        // MPPerformanceScreen — pass 1 (chrome + locked state). Tab bodies
+        // (Portfolio / Overview / Research scenes) still render through
+        // legacy chrome; pass 2 will theme the distribution / chart /
+        // methodology blocks.
+        'screens.MPPerformanceScreen': MPPerformanceScreen,
+        'composites.EmptyStateMP': EmptyStateMP,
+        'composites.CustomTabbarMPPerformance': CustomTabbarMPPerformance,
     },
     // SDK widget defaults fall through to designs/default/sdk/ — no overrides
     // shipped in this slice.

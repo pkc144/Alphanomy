@@ -437,9 +437,15 @@ const styles = StyleSheet.create({
         paddingVertical: SPACING.md,
     },
     inputBoxFocused: {
+        // Focus visual: only change borderColor + backgroundColor. Do NOT
+        // toggle elevation/shadow on focus — adding elevation to a parent
+        // View causes Android to recompose its native layer, which detaches
+        // and reattaches the TextInput child, which drops the IME's served
+        // view binding (the keyboard pops up briefly then dismisses, and
+        // characters disappear as you type). Same root cause as the
+        // LoginScreen fix on 2026-05-07.
         backgroundColor: COLORS.surface.card,
         borderColor: COLORS.brand.primary,
-        ...SHADOWS.xs,
     },
     input: {
         flex: 1,

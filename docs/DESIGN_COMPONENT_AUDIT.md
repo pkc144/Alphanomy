@@ -275,9 +275,9 @@ ViewModel sketches captured in the audit-task pass (2026-05-01). The `viewModel`
 | Surface | File | Verdict (provisional) | Phase | Notes |
 |---|---|---|---|---|
 | ModelPortfolioScreen | `src/screens/Drawer/ModelPortfolioScreen.js` | `needs-logic-extraction` | I | Calls `ModelPortfolioService` + likely `useTrade`. ViewModel sketch needed before migration. |
-| MPPerformanceScreen | `src/screens/Drawer/MPPerformanceScreen.js` | `needs-logic-extraction` | I | Performance data + chart fetching in container. |
-| CustomTabbarMPPerformance | `src/screens/Drawer/CustomTabbarMPPerformance.js` | `needs-logic-extraction` | I | Tab navigation + per-tab data dispatch. |
-| EmptyStateMP | `src/screens/Drawer/EmptyStateMP.js` | `clean-extract` | I | Static empty-state UI; only consumes config theme. |
+| MPPerformanceScreen | `src/screens/Drawer/MPPerformanceScreen.js` | `needs-logic-extraction` (default migrated, alphanomy override pass 1 shipped 2026-05-06) | I | Performance data + chart fetching in container. Alphanomy override at `designs/alphanomy/screens/MPPerformanceScreen.js` themes hero + locked tab strip + sticky CTA; tab body scenes (DistributionGrid / PerformanceChart / methodology / research) still resolve through legacy chrome — pass 2 pending. |
+| CustomTabbarMPPerformance | `src/screens/Drawer/CustomTabbarMPPerformance.js` | `needs-logic-extraction` (default migrated, alphanomy override shipped 2026-05-06) | I | Tab navigation + per-tab data dispatch. Alphanomy override at `designs/alphanomy/composites/CustomTabbarMPPerformance.js` recasts the green/grey segmented control to gradient pill tabs with indigo Lock on the disabled-while-locked first tab. |
+| EmptyStateMP | `src/screens/Drawer/EmptyStateMP.js` | `clean-extract` (default migrated, alphanomy override shipped 2026-05-06) | I | Static empty-state UI; only consumes config theme. Alphanomy override at `designs/alphanomy/composites/EmptyStateMP.js` swaps the red Lock for a brand-indigo Lock on a soft halo. |
 | ModelPFCard | `src/screens/PortfolioScreen/ModelPFCard.js` | `needs-logic-extraction` | I | MP card on Portfolio screen; calls `ModelPortfolioService`. |
 
 **Reminder**: if the SDK MP plan firms up before Phase I starts, these flip back to `SDK-pending` and Phase I is dropped instead. The risk is acknowledged; see `DESIGN_SYSTEM_ARCHITECTURE.md § Note on MP and the SDK`.

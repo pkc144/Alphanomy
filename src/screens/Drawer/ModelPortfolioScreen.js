@@ -55,7 +55,16 @@ const ModelPortfolioScreen = ({type = '', onDataLoaded}) => {
   // component (rules-of-hooks). Default presentation ignores `tickers`.
   const { tickers } = useHomeMarketSummary();
 
+  const [allStrategy, setAllStrategy] = useState([]);
+  const [allBespoke, setAllBespoke] = useState([]);
+  const auth = getAuth();
+  const [showPaymentFail, setShowPaymentFail] = useState(false);
+  const navigation = useNavigation();
+  const user = auth.currentUser;
+  const userEmail = user?.email;
+
   // Variant-facing user name for the alphanomy `_AppHeader` greeting.
+  // Declared AFTER `user` so we don't TDZ-read an undeclared binding.
   const userName = userDetails?.name || user?.displayName || '';
 
   // Variant-facing alphanomy plan rows — derived from the same catalog
@@ -68,14 +77,6 @@ const ModelPortfolioScreen = ({type = '', onDataLoaded}) => {
       }),
       [allStrategy, allBespoke],
   );
-
-  const [allStrategy, setAllStrategy] = useState([]);
-  const [allBespoke, setAllBespoke] = useState([]);
-  const auth = getAuth();
-  const [showPaymentFail, setShowPaymentFail] = useState(false);
-  const navigation = useNavigation();
-  const user = auth.currentUser;
-  const userEmail = user?.email;
   const [loading, setLoading] = useState();
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState(null);
@@ -294,7 +295,10 @@ const ModelPortfolioScreen = ({type = '', onDataLoaded}) => {
   const route = useRoute();
   useEffect(() => {
     const params = route?.params;
-    if (!params || params.subscribe !== true || !params.kind) return;
+    if (!params || !params.kind) return;
+    const wantsSubscribe = params.subscribe === true;
+    const wantsViewMore = params.viewMore === true;
+    if (!wantsSubscribe && !wantsViewMore) return;
     const list = params.kind === 'bespoke' ? allBespoke : allStrategy;
     if (!Array.isArray(list) || list.length === 0) return;
     const target =
@@ -306,11 +310,19 @@ const ModelPortfolioScreen = ({type = '', onDataLoaded}) => {
       params.kind === 'bespoke' ? 'bespoke' : 'modelportfolio';
     const tabIdx = routes.findIndex(r => r.key === tabKey);
     if (tabIdx >= 0 && tabIdx !== index) setIndex(tabIdx);
-    handlePricingCardClick(target);
+    if (wantsSubscribe) {
+      handlePricingCardClick(target);
+    } else {
+      // View More — same path the legacy MPCard's onViewMore takes:
+      //   MP → MPPerformanceScreen, Bespoke → BespokePerformanceScreen.
+      if (params.kind === 'bespoke') handleCardClickBespoke(target);
+      else handleCardClick(target);
+    }
     if (typeof navigation?.setParams === 'function') {
       navigation.setParams({
         kind: undefined,
         subscribe: undefined,
+        viewMore: undefined,
         planName: undefined,
       });
     }
@@ -615,6 +627,32 @@ const ModelPortfolioScreen = ({type = '', onDataLoaded}) => {
         onGoBack: () => navigation.goBack(),
         onTabIndexChange: setIndex,
         onCloseModal: () => setModalVisible(false),
+        // Alphanomy variant: tapping Subscribe Now on a shaped plan card
+        // resolves the raw plan from allStrategy/allBespoke by id and fires
+        // the existing handlePricingCardClick → MPInvestNowModal opens.
+        onSubscribe: (planId, kind) => {
+          const list = kind === 'bespoke' ? allBespoke : allStrategy;
+          if (!Array.isArray(list) || !planId) return;
+          const raw = list.find(
+            (p) => (p?._id || p?.id || p?.model_name) === planId,
+          );
+          if (raw) handlePricingCardClick(raw);
+        },
+        // Alphanomy variant: tapping View More resolves the raw plan and
+        // routes to the same legacy detail screen alphaquark navigates to:
+        //   MP plan → handleCardClick → MPPerformanceScreen
+        //   Bespoke → handleCardClickBespoke → BespokePerformanceScreen
+        // Identical path to MPCard's `onViewMore: handleCardClick` on default.
+        onViewMore: (planId, kind) => {
+          const list = kind === 'bespoke' ? allBespoke : allStrategy;
+          if (!Array.isArray(list) || !planId) return;
+          const raw = list.find(
+            (p) => (p?._id || p?.id || p?.model_name) === planId,
+          );
+          if (!raw) return;
+          if (kind === 'bespoke') handleCardClickBespoke(raw);
+          else handleCardClick(raw);
+        },
       }}
       slots={{
         TabBarSlot: (props) => <CustomTabBar {...props} />,
