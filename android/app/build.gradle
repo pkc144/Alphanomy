@@ -39,7 +39,7 @@ android {
         applicationId "com.aq.alphanomy"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
+        versionCode 38
         versionName "1.0.0"
 
         missingDimensionStrategy "store", "play"
