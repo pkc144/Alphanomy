@@ -1709,6 +1709,12 @@ const HomeScreen = ({ }) => {
     // alphanomy reads `home.taglines.modelPortfoliosSubtitle` etc.
     // and falls back per-field to its hardcoded copy.
     taglines: configData?.config?.taglines?.home || null,
+    // Variant-facing knowledge data (blogs / videos / pdf). Default
+    // presentation uses the KnowledgeHub component directly; alphanomy
+    // variant renders its own inline cards from these arrays.
+    blogs,
+    videos,
+    pdf,
   };
 
   return <Presentation home={home} />;

@@ -62,6 +62,12 @@ import {
 } from '../tokens';
 import AppHeader from './_AppHeader';
 
+// Functional components — same as src/screens/Home/HomeScreen.js uses,
+// giving full trade-execution, modal, download, and playback capabilities.
+import StockAdvices from '../../../src/components/AdviceScreenComponents/StockAdvices';
+import RebalanceAdvices from '../../../src/components/AdviceScreenComponents/RebalanceAdvices';
+import KnowledgeHub from '../../../src/components/HomeScreenComponents/KnowledgeHub';
+
 // All sections render strictly from the `home` prop bag supplied by the
 // container (`src/screens/Home/HomeScreen.js`). When a live data source is
 // empty/null the corresponding section is omitted entirely — no hardcoded
@@ -99,6 +105,8 @@ const HomeScreenPresentation = ({ home }) => {
         rebalanceList,
         recommendationList,
         taglines,
+        setSeeAllBespoke,
+        setSeeAllMP,
     } = home || {};
 
     // Per-field merge with FALLBACK_HOME_TAGLINES so a partial backend
@@ -205,82 +213,52 @@ const HomeScreenPresentation = ({ home }) => {
                     surfaced via `home.rebalanceList` and rendered by the
                     Plans tab — un-comment the prior block to restore. */}
 
-                {/* Active bespoke recommendations — same data the legacy
-                    <StockAdvices type="home"> reads. Tap → Plans tab (bespoke). */}
-                {Array.isArray(recommendationList) && recommendationList.length > 0 ? (
+                {/* Portfolio Recommendations — uses the real RebalanceAdvices
+                    component for full execute/review/status functionality. */}
+                {Array.isArray(rebalanceList) && rebalanceList.length > 0 ? (
                     <View>
                         <View style={styles.secHd}>
                             <View style={{ flex: 1 }}>
-                                <Text style={styles.secTitle}>Recommendations</Text>
+                                <Text style={styles.secTitle}>Portfolio Recommendations</Text>
                                 <Text style={styles.secSub}>
-                                    {homeCopy.recommendationsSubtitle}
+                                    Model Portfolio Active Rebalances
                                 </Text>
                             </View>
                             <TouchableOpacity
-                                onPress={() => goToPlans({ kind: 'bespoke' })}
+                                onPress={() => { if (setSeeAllMP) setSeeAllMP(true); }}
                                 activeOpacity={0.7}
                             >
                                 <Text style={styles.secLink}>View All</Text>
                             </TouchableOpacity>
                         </View>
-                        <View style={{ gap: SPACING.sm }}>
-                            {recommendationList.slice(0, 3).map((reco, i) => {
-                                const symbol =
-                                    reco?.Symbol || reco?.symbol || reco?.tradingSymbol || 'Symbol';
-                                const rawAction =
-                                    reco?.Type || reco?.action || reco?.transactionType || '';
-                                const action = String(rawAction).toUpperCase() || 'BUY';
-                                const isBuy = action.startsWith('B');
-                                const qty = Number(reco?.Quantity || reco?.quantity || 0);
-                                const price = Number(reco?.Price || reco?.price || 0);
-                                const date = reco?.recoDate || reco?.date || reco?.created_at;
-                                const dateStr = date
-                                    ? new Date(date).toLocaleDateString('en-GB', {
-                                          day: '2-digit',
-                                          month: 'short',
-                                      })
-                                    : null;
-                                const qtyPriceStr = qty
-                                    ? `Qty ${qty}${price ? ` @ ₹${price.toLocaleString('en-IN', { maximumFractionDigits: 2 })}` : ''}`
-                                    : null;
-                                return (
-                                    <TouchableOpacity
-                                        key={reco?._id || `${symbol}-${i}`}
-                                        activeOpacity={0.85}
-                                        onPress={() => goToPlans({ kind: 'bespoke' })}
-                                        style={styles.activityCard}
-                                    >
-                                        <View style={styles.activityRow}>
-                                            <Text style={styles.activityName} numberOfLines={1}>
-                                                {symbol}
-                                            </Text>
-                                            <View
-                                                style={
-                                                    isBuy
-                                                        ? styles.actionBadgeBuy
-                                                        : styles.actionBadgeSell
-                                                }
-                                            >
-                                                <Text
-                                                    style={
-                                                        isBuy
-                                                            ? styles.actionBadgeBuyText
-                                                            : styles.actionBadgeSellText
-                                                    }
-                                                >
-                                                    {isBuy ? 'BUY' : 'SELL'}
-                                                </Text>
-                                            </View>
-                                        </View>
-                                        <Text style={styles.activityMeta} numberOfLines={1}>
-                                            {[qtyPriceStr, dateStr].filter(Boolean).join(' · ')}
-                                        </Text>
-                                    </TouchableOpacity>
-                                );
-                            })}
+                        <View style={{ marginLeft: -2 }}>
+                            <RebalanceAdvices userEmail={userEmail} type={'home'} />
                         </View>
                     </View>
                 ) : null}
+
+                {/* Active bespoke recommendations — uses the real StockAdvices
+                    component for full trade execution, review modal, broker
+                    connect, DDPI/TPIN flows — identical to src/HomeScreen. */}
+                <View>
+                    <View style={styles.secHd}>
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.secTitle}>Recommendations</Text>
+                            <Text style={styles.secSub}>
+                                {homeCopy.recommendationsSubtitle}
+                            </Text>
+                        </View>
+                        <TouchableOpacity
+                            onPress={() => { if (setSeeAllBespoke) setSeeAllBespoke(true); }}
+                            activeOpacity={0.7}
+                        >
+                            <Text style={styles.secLink}>View All</Text>
+                        </TouchableOpacity>
+                    </View>
+                    <View style={{ marginLeft: -2 }}>
+                        <StockAdvices userEmail={userEmail} type={'home'} />
+                    </View>
+                </View>
 
                 {/* Model Portfolios section — rendered only when the catalog
                     endpoint has returned at least one MP plan. */}
@@ -440,11 +418,19 @@ const HomeScreenPresentation = ({ home }) => {
                         </View>
                     </View>
                 ) : null}
-            </ScrollView>
+
+                {/* Knowledge Hub — uses the real KnowledgeHub component for
+                    full video playback, blog webview, PDF download/view,
+                    tab switching, and View All navigation. */}
+                <View style={{ marginTop: SPACING.sm }}>
+                    <KnowledgeHub type="home" />
+                </View>
+
+
+                </ScrollView>
         </SafeAreaView>
     );
-};
-
+    };
 const styles = StyleSheet.create({
     safe: { flex: 1, backgroundColor: COLORS.surface.base },
     flex: { flex: 1 },
@@ -867,3 +853,4 @@ const styles = StyleSheet.create({
 });
 
 export default HomeScreenPresentation;
+

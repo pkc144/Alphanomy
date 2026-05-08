@@ -257,15 +257,15 @@ export default function useHomeMarketSummary() {
         // against NSE / BSE / Google Finance live data. Remove once
         // verified. Each line maps 1:1 to a chip on the alphanomy header.
         if (__DEV__) {
-            console.log(
-                '[Tickers debug]',
-                rows
-                    .map(
-                        (r) =>
-                            `${r.name}: ltp=${r._debug.ltp} base=${r._debug.base} cmp=${r._debug.comparisonType}`,
-                    )
-                    .join(' | '),
-            );
+            // console.log(
+            //     '[Tickers debug]',
+            //     rows
+            //         .map(
+            //             (r) =>
+            //                 `${r.name}: ltp=${r._debug.ltp} base=${r._debug.base} cmp=${r._debug.comparisonType}`,
+            //         )
+            //         .join(' | '),
+            // );
         }
         return rows.map(({ _debug, ...rest }) => rest);
     }, [ltps, previousClose, openingPrices, comparisonType]);
