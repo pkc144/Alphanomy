@@ -235,6 +235,8 @@ const CustomTabBarIcon = ({name, focused}) => {
   );
 };
 
+const PlansTabWrapper = () => <ModelPortfolioScreen type="tab" />;
+
 const MainTabNavigator = () => {
   const {
     isModalVisible,
@@ -419,12 +421,12 @@ const currentName = currentTabRoute?.name || "";
             options={{headerShown: false}}
           />
         ) : (
-          <Tab.Screen
-            key="plans-screen"
-            name="Plans"
-            options={{headerShown: false}}>
-            {() => <ModelPortfolioScreen type="tab" />}
-          </Tab.Screen>
+        <Tab.Screen
+          key="plans-screen"
+          name="Plans"
+          options={{headerShown: false}}
+          component={PlansTabWrapper}
+        />
         )}
         <Tab.Screen
           name="More"

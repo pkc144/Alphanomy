@@ -1652,7 +1652,7 @@ const HomeScreen = ({ }) => {
   // src/screens/Drawer/ModelPortfolioScreen.js — same auth headers,
   // same advisorTag/userEmail dependencies). Returns nulls until the
   // user is authenticated AND the advisor config has resolved.
-  const { heroPlan, bespokePlan } = useHomePlanSummary({
+  const { heroPlan, bespokePlan, heroPlanRaw, bespokePlanRaw } = useHomePlanSummary({
     userEmail,
     advisorTag: configData?.config?.REACT_APP_ADVISOR_SPECIFIC_TAG,
     headerName: configData?.config?.REACT_APP_HEADER_NAME,
@@ -1689,6 +1689,7 @@ const HomeScreen = ({ }) => {
     tickers, pnlSummary,
     // Variant-facing plan summaries.
     heroPlan, bespokePlan,
+    heroPlanRaw, bespokePlanRaw,
     // Variant-facing user name for the greeting (full name preferred over
     // email-derived first-name fallback).
     userName,

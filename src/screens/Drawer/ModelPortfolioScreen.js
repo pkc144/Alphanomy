@@ -296,9 +296,29 @@ const ModelPortfolioScreen = ({type = '', onDataLoaded}) => {
   useEffect(() => {
     const params = route?.params;
     if (!params || !params.kind) return;
+
+    // 1. Tab switching (always happens if kind is present)
+    const tabKey =
+      params.kind === 'bespoke' ? 'bespoke' : 'modelportfolio';
+    const tabIdx = routes.findIndex(r => r.key === tabKey);
+    if (tabIdx >= 0 && tabIdx !== index) setIndex(tabIdx);
+
+    // 2. Action processing (subscribe / viewMore)
     const wantsSubscribe = params.subscribe === true;
     const wantsViewMore = params.viewMore === true;
-    if (!wantsSubscribe && !wantsViewMore) return;
+    if (!wantsSubscribe && !wantsViewMore) {
+      // If it's just 'View All', we clear the params after switching tabs
+      if (typeof navigation?.setParams === 'function') {
+        navigation.setParams({
+          kind: undefined,
+          subscribe: undefined,
+          viewMore: undefined,
+          planName: undefined,
+        });
+      }
+      return;
+    }
+
     const list = params.kind === 'bespoke' ? allBespoke : allStrategy;
     if (!Array.isArray(list) || list.length === 0) return;
     const target =
@@ -306,10 +326,7 @@ const ModelPortfolioScreen = ({type = '', onDataLoaded}) => {
         list.find(p => p?.name === params.planName)) ||
       list[0];
     if (!target) return;
-    const tabKey =
-      params.kind === 'bespoke' ? 'bespoke' : 'modelportfolio';
-    const tabIdx = routes.findIndex(r => r.key === tabKey);
-    if (tabIdx >= 0 && tabIdx !== index) setIndex(tabIdx);
+
     if (wantsSubscribe) {
       handlePricingCardClick(target);
     } else {

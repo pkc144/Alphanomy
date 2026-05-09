@@ -94,5 +94,8 @@ export default function useHomePlanSummary({ userEmail, advisorTag, headerName }
         [bespokeList],
     );
 
-    return { heroPlan, bespokePlan };
+    const heroPlanRaw = (mpList || [])[0] || null;
+    const bespokePlanRaw = (bespokeList || [])[0] || null;
+
+    return { heroPlan, bespokePlan, heroPlanRaw, bespokePlanRaw };
 }

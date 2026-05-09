@@ -101,6 +101,8 @@ const HomeScreenPresentation = ({ home }) => {
         pnlSummary,
         heroPlan,
         bespokePlan,
+        heroPlanRaw,
+        bespokePlanRaw,
         userName,
         rebalanceList,
         recommendationList,
@@ -318,13 +320,14 @@ const HomeScreenPresentation = ({ home }) => {
                                 <TouchableOpacity
                                     style={styles.btnViewW}
                                     activeOpacity={0.85}
-                                    onPress={() =>
-                                        goToPlans({
-                                            kind: 'mp',
-                                            viewMore: true,
-                                            planName: heroPlan.name,
-                                        })
-                                    }
+                                    onPress={() => {
+                                        if (heroPlanRaw) {
+                                            navigation.navigate('MPPerformanceScreen', {
+                                                modelName: heroPlanRaw.name || heroPlanRaw.model_name,
+                                                specificPlan: heroPlanRaw,
+                                            });
+                                        }
+                                    }}
                                 >
                                     <Text style={styles.btnViewWText}>View More</Text>
                                 </TouchableOpacity>
@@ -383,13 +386,14 @@ const HomeScreenPresentation = ({ home }) => {
                                 <TouchableOpacity
                                     style={styles.btnView}
                                     activeOpacity={0.85}
-                                    onPress={() =>
-                                        goToPlans({
-                                            kind: 'bespoke',
-                                            viewMore: true,
-                                            planName: bespokePlan.name,
-                                        })
-                                    }
+                                    onPress={() => {
+                                        if (bespokePlanRaw) {
+                                            navigation.navigate('BespokePerformanceScreen', {
+                                                modelName: bespokePlanRaw.name || bespokePlanRaw.model_name,
+                                                specificPlan: bespokePlanRaw,
+                                            });
+                                        }
+                                    }}
                                 >
                                     <Text style={styles.btnViewText}>View More</Text>
                                 </TouchableOpacity>

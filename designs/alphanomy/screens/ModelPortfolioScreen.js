@@ -58,7 +58,14 @@ const ModelPortfolioScreenAlphanomy = ({ viewModel, actions, home, slots }) => {
     const bespokePlans = livePlans?.bespoke || [];
     const mpPlans = livePlans?.mp || [];
 
-    const [tab, setTab] = useState('bespoke');
+    const { tabIndex = 0 } = viewModel || {};
+    const [tab, setTab] = useState(tabIndex === 0 ? 'bespoke' : 'mp');
+
+    // Sync local tab state with container's tabIndex (e.g. when navigating from Home View All)
+    React.useEffect(() => {
+        setTab(tabIndex === 0 ? 'bespoke' : 'mp');
+    }, [tabIndex]);
+
     const plans = tab === 'bespoke' ? bespokePlans : mpPlans;
 
     return (
