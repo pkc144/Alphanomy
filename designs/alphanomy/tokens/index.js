@@ -422,4 +422,9 @@ export const DEFAULT_SHADOWS = {
 export const buildShadows = (config) =>
     mergeStyleMap(DEFAULT_SHADOWS, config?.shadowTokens);
 
+// Variant assets — alphanomy-branded logos. Shape mirrors upstream's
+// src/theme/assets.js so useTokens() resolves these the same way it
+// resolves the default-variant assets.
+export { DEFAULT_ASSETS, buildAssets } from './assets';
+
 export { isValidColor };

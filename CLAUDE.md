@@ -353,6 +353,7 @@ All architecture docs are in the `docs/` folder:
 | [DESIGN_SYSTEM_ARCHITECTURE.md](docs/DESIGN_SYSTEM_ARCHITECTURE.md) | Design-system migration design — 4-layer model, `DesignProvider` registry, container/presentation split, SDK boundary, MP-freeze rule |
 | [DESIGN_COMPONENT_AUDIT.md](docs/DESIGN_COMPONENT_AUDIT.md) | Per-surface verdict matrix (clean-extract / needs-logic-extraction / SDK-bound-skip / SDK-pending / defer) |
 | [DESIGN_MIGRATION_PROGRESS.md](docs/DESIGN_MIGRATION_PROGRESS.md) | Design-system chronological work log — phases, surfaces touched, verdict changes |
+| [WHITELABEL_RECIPE.md](docs/WHITELABEL_RECIPE.md) | Canonical playbook for adding a new whitelabel — what stays upstream vs in the fork, native-shell delta, registry merge-conflict strategy, step-by-step bootstrap, SYNC.md template. **This repo (Alphanomy) IS a whitelabel fork** of Alphab2bapp; this doc explains the contract it should be honoring. See `SYNC.md` at the repo root for fork-specific notes. |
 | [BROKER_FLOW_AUDIT.md](docs/BROKER_FLOW_AUDIT.md) | Per-broker deep flow walkthrough — legacy vs SDK side-by-side with file:line references for every API call, WebView intercept, encryption envelope, IP-callout, reauth handling. Source of truth for any per-broker SDK migration step. |
 | [CHANGELOG.md](docs/CHANGELOG.md) | All changes, fixes, and updates with dates |
 
