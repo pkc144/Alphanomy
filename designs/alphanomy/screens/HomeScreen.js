@@ -239,29 +239,6 @@ const HomeScreenPresentation = ({ home }) => {
                     </View>
                 ) : null}
 
-                {/* Active bespoke recommendations — uses the real StockAdvices
-                    component for full trade execution, review modal, broker
-                    connect, DDPI/TPIN flows — identical to src/HomeScreen. */}
-                <View>
-                    <View style={styles.secHd}>
-                        <View style={{ flex: 1 }}>
-                            <Text style={styles.secTitle}>Recommendations</Text>
-                            <Text style={styles.secSub}>
-                                {homeCopy.recommendationsSubtitle}
-                            </Text>
-                        </View>
-                        <TouchableOpacity
-                            onPress={() => { if (setSeeAllBespoke) setSeeAllBespoke(true); }}
-                            activeOpacity={0.7}
-                        >
-                            <Text style={styles.secLink}>View All</Text>
-                        </TouchableOpacity>
-                    </View>
-                    <View style={{ marginLeft: -2 }}>
-                        <StockAdvices userEmail={userEmail} type={'home'} />
-                    </View>
-                </View>
-
                 {/* Model Portfolios section — rendered only when the catalog
                     endpoint has returned at least one MP plan. */}
                 {heroPlan ? (
@@ -422,6 +399,35 @@ const HomeScreenPresentation = ({ home }) => {
                         </View>
                     </View>
                 ) : null}
+
+                {/* Active bespoke recommendations — uses the real StockAdvices
+                    component for full trade execution, review modal, broker
+                    connect, DDPI/TPIN flows — identical to src/HomeScreen.
+                    Section moved below the Plans cards on 2026-05-10 — was
+                    rendering above Model Portfolios / Top Bespoke Plans
+                    which inverted the canonical upstream order (upstream
+                    shows EITHER plans OR recommendations gated on
+                    `hasActiveContent`; alphanomy renders both, so the
+                    correct visual order is plans-first then recommendations). */}
+                <View>
+                    <View style={styles.secHd}>
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.secTitle}>Recommendations</Text>
+                            <Text style={styles.secSub}>
+                                {homeCopy.recommendationsSubtitle}
+                            </Text>
+                        </View>
+                        <TouchableOpacity
+                            onPress={() => { if (setSeeAllBespoke) setSeeAllBespoke(true); }}
+                            activeOpacity={0.7}
+                        >
+                            <Text style={styles.secLink}>View All</Text>
+                        </TouchableOpacity>
+                    </View>
+                    <View style={{ marginLeft: -2 }}>
+                        <StockAdvices userEmail={userEmail} type={'home'} />
+                    </View>
+                </View>
 
                 {/* Knowledge Hub — uses the real KnowledgeHub component for
                     full video playback, blog webview, PDF download/view,
