@@ -78,6 +78,27 @@ this repo. The cleanup trades a partial visual mix for a clean separation
 that's ready to flip to fully variant-aware once upstream fixes
 `useTokens()`.
 
+## Always-tracked files that aren't obvious
+
+`android/gradle.properties` is **TRACKED** in this repo (it was previously
+gitignored — that was a bug; removed 2026-05-09 because fresh clones
+couldn't build). It carries `hermesEnabled`, `newArchEnabled`,
+`android.useAndroidX`, the JVM heap, the Java install path, the
+release-signing-config key names. The build.gradle reads these at
+configure time; the file going missing kills the build with
+`Could not get unknown property 'hermesEnabled'` at line 130 of
+`android/app/build.gradle`.
+
+Standing rule: **any change to `android/gradle.properties` must be
+committed**. Do not gitignore it. Do not let your local IDE silently
+diverge from it. Per-machine-only overrides (your Java install path,
+your local heap, real signing passwords) belong in
+`~/.gradle/gradle.properties` instead — Gradle merges that file
+automatically and it is never in any repo. The `TODO_*` placeholder
+tokens for release-signing in `android/gradle.properties` should stay
+as TODO tokens here; the real values go in `~/.gradle/gradle.properties`
+on the machine that does release builds.
+
 ## What this fork must NOT have
 
 - A patch to `src/assets/*` — that breaks the default variant's

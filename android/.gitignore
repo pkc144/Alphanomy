@@ -1,1 +1,15 @@
-gradle.properties
+# gradle.properties is intentionally TRACKED in this repo (was previously
+# gitignored on 2026-05-09 — removed because new clones / fresh syncs
+# couldn't build without it; the build.gradle reads `hermesEnabled`,
+# `newArchEnabled`, `android.useAndroidX` etc. from it).
+#
+# IMPORTANT: any change to android/gradle.properties (Java path, JVM
+# args, hermes/newArch toggles, signing config) MUST be committed so that
+# every clone and every upstream-sync of this repo sees the same gradle
+# settings. Do NOT add it back to .gitignore.
+#
+# Secret values (release-keystore passwords) belong in this file ONLY as
+# placeholder TODO_* tokens for now; if real release-signing credentials
+# need persistence, move them to a per-machine ~/.gradle/gradle.properties
+# (which gradle merges automatically) — never put plaintext signing
+# passwords in a tracked file.
