@@ -33,14 +33,12 @@ import {
 } from '@react-navigation/drawer'; // Import Drawer Navigator
 import {
   FolderClock,
-  BookmarkPlus,
   LogOut,
   Shield,
   FileText,
   DollarSign,
   Activity,
   History,
-  Notebook,
   Newspaper,
   Briefcase,
   XIcon,
@@ -421,12 +419,12 @@ const currentName = currentTabRoute?.name || "";
             options={{headerShown: false}}
           />
         ) : (
-        <Tab.Screen
-          key="plans-screen"
-          name="Plans"
-          options={{headerShown: false}}
-          component={PlansTabWrapper}
-        />
+          <Tab.Screen
+            key="plans-screen"
+            name="Plans"
+            options={{headerShown: false}}
+            component={PlansTabWrapper}
+          />
         )}
         <Tab.Screen
           name="More"
