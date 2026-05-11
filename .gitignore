@@ -32,6 +32,8 @@ local.properties
 .cxx/
 *.keystore
 !debug.keystore
+!android/app/debug.keystore
+!android/app/alphanomy-release.keystore
 
 # node.js
 #
