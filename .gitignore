@@ -31,9 +31,11 @@ local.properties
 *.hprof
 .cxx/
 *.keystore
+*.keystore.bak
 !debug.keystore
-!android/app/debug.keystore
-!android/app/alphanomy-release.keystore
+
+# React Native link generates these into drawable dirs from node_modules packages
+android/app/src/main/res/drawable-*/node_modules_*
 
 # node.js
 #
@@ -74,15 +76,3 @@ yarn-error.log
 !.yarn/sdks
 !.yarn/versions
 .env
-.env.broker
-
-# Firebase / Google service configs (contain API keys, project ids)
-google-services.json
-GoogleService-Info.plist
-
-# Bundled JS artifacts (generated, may embed keys)
-*.bundle
-
-# Metro build artifacts (regenerated on each release build)
-android/app/src/main/assets/index.android.bundle
-android/app/src/main/res/drawable-mdpi/
