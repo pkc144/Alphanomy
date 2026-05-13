@@ -2758,6 +2758,10 @@ const styles = StyleSheet.create({
   modalContainer: {
     backgroundColor: '#fff',
     maxHeight: screenHeight,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 5,
     elevation: 5,
     flex: 1,
   },
