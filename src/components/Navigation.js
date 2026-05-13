@@ -486,6 +486,10 @@ const CustomDrawerContent = props => {
   const [imageUrl, setImageUrl] = useState('');
   const [currentStep, setCurrentStep] = useState(0);
   const isDrawerOpen = useDrawerStatus(); // Use hook to determine drawer status
+  const wasEverOpenedRef = useRef(false);
+  if (isDrawerOpen === 'open') {
+    wasEverOpenedRef.current = true;
+  }
   useEffect(() => {
     if (auth.currentUser) {
       setUserEmail(auth.currentUser.email);
@@ -632,6 +636,15 @@ const CustomDrawerContent = props => {
       </TouchableOpacity>
     );
   };
+
+  // Defer rendering the drawer body until the drawer has actually been
+  // opened at least once. React Navigation v7's drawer panel is mounted
+  // even while "closed" and on iOS the off-screen translate can take one
+  // frame to settle — without this guard, the menu flashes visibly on
+  // top of the home tab right after login (`navigation.replace('Home')`).
+  if (!wasEverOpenedRef.current && isDrawerOpen !== 'open') {
+    return null;
+  }
 
   return (
     <LinearGradient
@@ -994,16 +1007,18 @@ screenOptions={{
 }
 
 const DrawerNavigator = () => {
+  const {width: windowWidth, height: windowHeight} = Dimensions.get('window');
   return (
     <Drawer.Navigator
       drawerContent={props => <CustomDrawerContent {...props} />}
+      defaultStatus="closed"
       screenOptions={{
         swipeEnabled: false,
         drawerPosition: 'right',
         drawerStyle: {
-          backgroundColor: 'red',
-          width: '100%',
-          height: '100%',
+          backgroundColor: 'transparent',
+          width: windowWidth,
+          height: windowHeight,
         },
         drawerLabelStyle: {
           fontSize: 18,

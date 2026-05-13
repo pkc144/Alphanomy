@@ -4,6 +4,23 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ---
 
+## [unreleased] - 2026-05-13 (sync)
+
+### Sync — port two missed files from upstream feature/ios2.6
+
+**`src/components/Navigation.js`** — upstream "navigation to home page after login fixed"
+(commit `6a13ab8`). Was committed in the upstream 18:59 IST but missed by Alphanomy's
+earlier sync run that same day.
+
+**`src/hooks/useKitePublisherPolling.js`** (new file) — Zerodha Kite Publisher
+order-book polling fallback hook extracted from RebalanceModal/MPReviewTradeModal.
+Shared logic for all modals hosting a Kite Publisher WebView.
+
+`src/` is now byte-identical with upstream `feature/ios2.6`. `designs/default/`
+and `App.js` were intentionally left at Alphanomy's ahead versions.
+
+---
+
 ## [unreleased] - 2026-05-08 (10)
 
 ### Fix — Root-cause advisor mismatch + 15-min stale-order resolution cron

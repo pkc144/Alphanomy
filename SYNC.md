@@ -9,8 +9,8 @@ you're new here.
 
 - **Repo**: `https://github.com/.../Alphab2bapp` (local clone at
   `/home/pk/Alphaquark_docs/AlphaQuark/codes/github/Alphab2bapp`)
-- **Tracked branch**: `feature/sdk-plus-config_forkv2`
-- **Last sync attempt**: 2026-05-09 — content port (not git merge), see
+- **Tracked branch**: `feature/ios2.6`
+- **Last sync attempt**: 2026-05-13 — content port (not git merge), see
   § "Sync history" below.
 
 ## ⚠️ This fork has unrelated git history with upstream
@@ -153,6 +153,26 @@ from `WHITELABEL_RECIPE.md` works as designed. The 2-line conflict on
 merge.
 
 ## Sync history
+
+### 2026-05-13 — Full src/ sync from feature/ios2.6 (content port)
+
+Brought `src/` to byte-identical parity with upstream `feature/ios2.6`.
+Two files were missed by the earlier 20260513 sync run:
+
+- **`src/components/Navigation.js`** — upstream commit `6a13ab8`
+  ("navigation to home page after login fixed"). Fix was committed at
+  18:59 IST but the Alphanomy sync at 20:22 only pulled `HomeScreen.js`,
+  leaving Navigation.js behind.
+- **`src/hooks/useKitePublisherPolling.js`** (NEW) — Zerodha Kite Publisher
+  order-book polling fallback hook. Extracted from the inline implementation
+  in `RebalanceModal.js`/`MPReviewTradeModal.js` so any modal hosting a Kite
+  Publisher WebView shares the same recovery logic. Added upstream in commit
+  `9b84f6b`.
+
+No other `src/` differences remain. `designs/default/` and `App.js` were
+NOT touched — Alphanomy's versions are ahead of source on those files
+(`MPPerformanceScreen.js` has an alphanomy-specific `overflow: 'hidden'` fix;
+`App.js` has `MarketDataProvider` + component-identity stability hoisting).
 
 ### 2026-05-09 — Whitelabel cleanup pass (content port, not git merge)
 
