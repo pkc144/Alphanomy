@@ -387,7 +387,7 @@ const HomeScreen = ({ }) => {
         if (updateCheckDone.current) return;
 
         try {
-          const result = await checkForAppUpdate();
+          const result = await checkForAppUpdate(config?.latestAppVersion);
           if (result.updateAvailable) {
             setShowUpdateModal(true);
             updateCheckDone.current = true;

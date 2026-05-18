@@ -334,6 +334,12 @@ export const ConfigProvider = ({ children }) => {
                         // Surfacing taglines via backend lets legal vary copy per tenant
                         // without a code change.
                         taglines: apiData.taglines || null,
+
+                        // ============================================================================
+                        // APP UPDATE — set this field in MongoDB to trigger the update modal
+                        // db.appadvisors.updateOne({subdomain:'alphanomy'},{$set:{latestAppVersion:'1.0.5'}})
+                        // ============================================================================
+                        latestAppVersion: apiData.latestAppVersion || null,
                     };
 
                     console.log('✅ Using newConfig from API for APP_VARIANTS:', {

@@ -26,7 +26,7 @@ import {GstConfigProvider} from './src/context/GstConfigContext';
 import {MarketDataProvider} from './src/context/MarketDataContext';
 import ModalManager from './src/GlobalUIModals/ModalManager';
 import BrokerAlertModal from './src/GlobalUIModals/BrokerAlertModal';
-import UpdateAppModal from './src/UpdateAppModal';
+import UpdateAppModal, {AppUpdateChecker} from './src/UpdateAppModal';
 import SdkProviderRoot, {
   isSdkIntegrationEnabled,
 } from './src/sdk/SdkProviderRoot';
@@ -247,7 +247,6 @@ const App = () => {
 
   return (
     <SafeAreaProvider style={{flex: 1}}>
-      <UpdateAppModal />
       <CustomStatusBar barStyle={'dark-content'} />
       <GestureHandlerRootView style={{flex: 1}}>
         <DesignProvider>
@@ -270,6 +269,7 @@ const App = () => {
                         </SafeAreaView>
                         <ModalManager />
                         <BrokerAlertModal />
+                        <AppUpdateChecker />
                       </SdkOn>
                     ) : (
                       <>
@@ -283,6 +283,7 @@ const App = () => {
                         </SafeAreaView>
                         <ModalManager />
                         <BrokerAlertModal />
+                        <AppUpdateChecker />
                       </>
                     )}
                   </ModalProvider>

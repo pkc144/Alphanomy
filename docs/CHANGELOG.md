@@ -4,6 +4,44 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ---
 
+## [unreleased] - 2026-05-18 (update-modal)
+
+### Fix — Update modal sources version from backend config, not Play Store scrape
+
+`react-native-version-check`'s `playStore` provider scrapes the public Play
+Store HTML and silently returns `null` whenever Google changes their page
+structure — which has happened repeatedly, leaving the in-app "Update
+available" prompt permanently dormant. Switched the version source to a
+backend-controlled field (`appadvisors.latestAppVersion`) surfaced via
+`ConfigContext`, with the Play Store scrape kept as the fallback when the
+backend field is absent.
+
+**Files touched:**
+- `src/UpdateAppModal.js` — `checkForAppUpdate(serverVersion)` accepts the
+  backend version and skips scraping when present. New named export
+  `AppUpdateChecker` reads `config.latestAppVersion` and renders the modal;
+  must live inside `ConfigProvider`.
+- `src/context/ConfigContext.js` — exposes `latestAppVersion` from
+  `apiData.latestAppVersion`.
+- `src/screens/Home/HomeScreen.js` — passes `config?.latestAppVersion` to
+  `checkForAppUpdate`.
+- `App.js` — replaces the top-level `<UpdateAppModal />` (which was
+  outside `ConfigProvider` and thus could never read the new field) with
+  `<AppUpdateChecker />` inside the provider tree, in both the
+  `SdkOn`/legacy branches.
+
+**Backend toggle:**
+```
+db.appadvisors.updateOne(
+  {subdomain:'alphanomy'},
+  {$set:{latestAppVersion:'1.0.5'}}
+)
+```
+Setting this to a version greater than the user's installed `versionName`
+triggers the modal. Unset / null falls back to Play Store scraping.
+
+---
+
 ## [unreleased] - 2026-05-13 (sync)
 
 ### Sync — port two missed files from upstream feature/ios2.6
