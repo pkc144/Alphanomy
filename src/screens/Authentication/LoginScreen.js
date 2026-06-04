@@ -61,7 +61,14 @@ const LoginScreen = () => {
 
     React.useEffect(() => {
         if (config?.googleWebClientId) {
-            GoogleSignin.configure({ webClientId: config.googleWebClientId });
+            GoogleSignin.configure({
+                webClientId: config.googleWebClientId,
+                // iOS GoogleSignIn SDK requires its own clientID set explicitly
+                // (NOT the web client ID) or it raises GIDSignIn.m:530 NSException
+                // and crashes the app on signIn(). Sourced from GoogleService-Info.plist
+                // CLIENT_ID for the alphanomy Firebase project.
+                iosClientId: '713385591555-kffitn2ee2c7kr6j66bqaf8hr72fcp58.apps.googleusercontent.com',
+            });
         }
     }, [config?.googleWebClientId]);
 

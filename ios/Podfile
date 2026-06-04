@@ -1,3 +1,9 @@
+# Disable React Native New Architecture (Bridgeless / Fabric).
+# Reanimated 4.x hard-required New Arch; downgraded to 3.19.5 which works
+# without it. The legacy renderer avoids the RCTLegacyViewManagerInteropComponentView
+# crash we hit on RN 0.78 Bridgeless during mount of the full provider tree.
+ENV['RCT_NEW_ARCH_ENABLED'] = '0'
+
 # Resolve react_native_pods.rb with node to allow for hoisting
 require Pod::Executable.execute_command('node', ['-p',
   'require.resolve(

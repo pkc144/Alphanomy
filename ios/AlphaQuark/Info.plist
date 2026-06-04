@@ -2,8 +2,6 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key/>
-	<string/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
@@ -33,18 +31,16 @@
 			<string>Editor</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.googleusercontent.apps.892331696104-gs4gdllr0ges38e0i4627b4arb6over6</string>
+				<string>com.googleusercontent.apps.713385591555-kffitn2ee2c7kr6j66bqaf8hr72fcp58</string>
 			</array>
 		</dict>
-		<dict>
-			<key>CFBundleTypeRole</key>
-			<string>Editor</string>
-			<key>CFBundleURLSchemes</key>
-			<array/>
-		</dict>
 	</array>
+	<key>GIDClientID</key>
+	<string>713385591555-kffitn2ee2c7kr6j66bqaf8hr72fcp58.apps.googleusercontent.com</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSAppTransportSecurity</key>
@@ -55,7 +51,19 @@
 		<true/>
 	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string/>
+	<string>Alphanomy uses your location to verify regional market access and broker eligibility for SEBI-registered services.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Alphanomy needs access to your photo library to let you save contract notes, statements, and screenshots of your portfolio.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Alphanomy saves trade confirmations, statements, and portfolio screenshots to your photo library.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Alphanomy uses the camera to capture KYC documents and identity verification photos required by SEBI.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Alphanomy uses the microphone for in-app voice notes during customer support sessions.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Alphanomy uses Face ID to authenticate access to your portfolio and signed advice.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Alphanomy uses your contacts to invite friends to advisory plans.</string>
 	<key>UIAppFonts</key>
 	<array>
 		<string>FontAwesome.ttf</string>

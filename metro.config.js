@@ -50,6 +50,13 @@ const config = {
       // those resolve to the host app's @babel/runtime install.
       '@babel/runtime': path.resolve(__dirname, 'node_modules/@babel/runtime'),
     },
+    blockList: [
+      // ios/build can grow to tens of GB of Xcode artifacts (DerivedData,
+      // intermediates). If Metro walks it during haste-map init, /index.bundle
+      // requests hang indefinitely. Codegen outputs in ios/build/generated/
+      // are still picked up by the native build via Xcode's own build phases.
+      /[\\/]ios[\\/]build[\\/].*/,
+    ],
   },
   watchFolders: [SDK_PATH],
 };

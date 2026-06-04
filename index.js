@@ -1,19 +1,11 @@
-// Bridgeless-mode startup race fix.
-//
-// Reanimated requires new architecture (bridgeless). In bridgeless mode,
-// when a legacy native module (notifee/firebase/razorpay/etc.) fires an
-// event during early init, the bridge tries to call into the JS module
-// `RCTEventEmitter` — but RN's renderer (which registers it) hasn't loaded
-// yet because index.js's import chain is still resolving. The thrown error
-// aborts the whole bundle evaluation, AppRegistry.registerComponent is
-// never called, and the app boots to a blank white screen.
-//
-// Pre-registering a no-op RCTEventEmitter handler before any other import
-// runs absorbs those early events safely, letting App.js finish loading.
-require('react-native/Libraries/EventEmitter/RCTEventEmitter').register({
-  receiveEvent: () => {},
-  receiveTouches: () => {},
-});
+// NOTE: a previous version of this file installed a no-op RCTEventEmitter
+// handler (receiveEvent + receiveTouches) to absorb early native events in
+// Bridgeless / New Architecture mode before App.js finished loading. It is
+// removed now that the project runs on the classic bridge — the no-op
+// `receiveTouches` was silently discarding every user tap, making every
+// button on screen unresponsive on iOS. If we re-enable New Architecture in
+// the future, restore the workaround for `receiveEvent` only (NOT
+// `receiveTouches`).
 
 import { AppRegistry, AppState, LogBox } from 'react-native';
 

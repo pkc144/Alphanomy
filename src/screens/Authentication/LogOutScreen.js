@@ -31,7 +31,10 @@ const LogoutScreen = ({ navigation }) => {
 
     useEffect(() => {
         if (config?.googleWebClientId) {
-            GoogleSignin.configure({ webClientId: config.googleWebClientId });
+            GoogleSignin.configure({
+                webClientId: config.googleWebClientId,
+                iosClientId: '713385591555-kffitn2ee2c7kr6j66bqaf8hr72fcp58.apps.googleusercontent.com',
+            });
         }
     }, [config?.googleWebClientId]);
 
