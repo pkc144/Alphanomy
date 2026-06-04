@@ -13,3 +13,6 @@
 # need persistence, move them to a per-machine ~/.gradle/gradle.properties
 # (which gradle merges automatically) — never put plaintext signing
 # passwords in a tracked file.
+
+# Kotlin build-daemon session cache — local, regenerated on every build.
+.kotlin/

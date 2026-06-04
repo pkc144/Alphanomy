@@ -4,6 +4,36 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ---
 
+## [unreleased] - 2026-06-04 (folios-icon-refresh + v1.0.7)
+
+### Update — App launcher icon regenerated from new "folios by alphanomy" logo + version bump for Play Store release
+
+Replaced every Android `mipmap-*` launcher asset and every iOS
+`AppIcon.appiconset` PNG with images generated from the new source
+`folos RGB_ logo_1 (1).png`. The visible delta is the lowercase "i" in
+"folios": old asset had a rounded italic tail, the new one is a clean
+slanted parallelogram with a separate slanted dot, gradient blue→purple.
+Source PNG is RGBA; flattened onto a white background before resizing
+(white matches Android `iconBackground = #FFFFFF` and the iOS solid-tile
+spec). `mipmap-anydpi-v26/ic_launcher.xml` already routes to
+`@mipmap/ic_foreground` + `@color/iconBackground`, so adaptive icon
+output is unchanged structurally — only the foreground PNG bytes are new.
+Verified end-to-end on Pixel_API_34 emulator (debug APK install + app
+drawer screenshot, zoomed to confirm the new "i" rendering).
+
+Same commit bumps `versionCode 44 → 45` and `versionName "1.0.6" → "1.0.7"`
+in `android/app/build.gradle` so the resulting AAB can be uploaded to the
+Play Store as a new release.
+
+Files touched:
+- `android/app/build.gradle` — versionCode + versionName bump
+- `android/app/src/main/res/mipmap-{ldpi,mdpi,hdpi,xhdpi,xxhdpi,xxxhdpi}/ic_launcher.png` (6 files) — legacy launcher PNGs (pre-Oreo path)
+- `android/app/src/main/res/mipmap-{ldpi,mdpi,hdpi,xhdpi,xxhdpi,xxxhdpi}-v26/ic_foreground.png` (6 files) — adaptive icon foreground (Oreo+ path, referenced from `mipmap-anydpi-v26/ic_launcher.xml`)
+- `android/app/src/main/res/mipmap-{mdpi,hdpi,xhdpi,xxhdpi,xxxhdpi}/ic_launcher_{foreground,background,adaptive_fore,adaptive_back,monochrome}.png` (25 files) — kept in sync with the v26 foreground even though the active `ic_launcher.xml` doesn't reference them; avoids stale Zamzam-era assets sitting in the APK
+- `ios/AlphaQuark/Images.xcassets/AppIcon.appiconset/icon-*.png` (21 files referenced by `Contents.json`) + legacy bare-numeric `{16,20,…,1024}.png` (~38 files) — every iOS asset density covered
+
+Not touched: `mipmap-anydpi-v26/ic_launcher.xml` (already pointed at the right resources), `colors-icon.xml` (already `#FFFFFF`), `AndroidManifest.xml` (still `@mipmap/ic_launcher`), `LaunchScreen.storyboard` (does not reference the logo).
+
 ## [unreleased] - 2026-05-18 (update-modal)
 
 ### Fix — Update modal sources version from backend config, not Play Store scrape
