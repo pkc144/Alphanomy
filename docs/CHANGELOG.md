@@ -4,6 +4,14 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ---
 
+## [unreleased] - 2026-06-04 (v1.0.8 republish)
+
+### Chore — versionCode 45 → 46, versionName 1.0.7 → 1.0.8
+
+Re-bump for a fresh Play Store upload. Same icon refresh and same
+`folios by alphanomy` branding as v1.0.7; only the version metadata
+changes. No code or asset deltas vs the v1.0.7 build.
+
 ## [unreleased] - 2026-06-04 (folios-icon-refresh + v1.0.7)
 
 ### Update — App launcher icon regenerated from new "folios by alphanomy" logo + version bump for Play Store release
