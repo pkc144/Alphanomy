@@ -38,6 +38,7 @@ import {
 } from '../tokens';
 
 const Glogo = require('../../../src/assets/GLogo.png');
+const ALPHANOMY_LOGO = require('../../../src/assets/AppLogo/alphanomy-logo.png');
 
 const TRUST_ICON_MAP = {
     check: Check,
@@ -50,7 +51,7 @@ const TRUST_ICON_MAP = {
 const resolveTrustIcon = (key) => TRUST_ICON_MAP[key] || Check;
 
 const FALLBACK_TAGLINES = {
-    brandSubtag: 'Folios · Research',
+    brandSubtag: 'by alphanomy',
     heroTitle: 'Your Alpha,\nEngineered.',
     heroSubtitle:
         'Research-backed investment plans curated by SEBI-registered advisors.',
@@ -84,7 +85,10 @@ const LoginScreen = ({ viewModel, actions }) => {
         onNavigateToSignup = () => {},
     } = actions || {};
 
-    const brandLabel = whiteLabelText || 'Alphanomy';
+    // Alphanomy variant's hero renders the canonical brand mark
+    // ("folios" + "by alphanomy") to match the web; `whiteLabelText`
+    // continues to drive the app name elsewhere (settings, broker help).
+    const brandLabel = 'folios';
 
     const t = {
         brandSubtag: taglines?.brandSubtag || FALLBACK_TAGLINES.brandSubtag,
@@ -129,9 +133,7 @@ const LoginScreen = ({ viewModel, actions }) => {
                         <View style={styles.orbMid} />
 
                         <View style={styles.logoRow}>
-                            <View style={styles.logoMark}>
-                                <View style={styles.logoBolt} />
-                            </View>
+                            <Image source={ALPHANOMY_LOGO} style={styles.logoMark} resizeMode="contain" />
 
                             <View>
                                 <View style={styles.logoNameWrap}>
@@ -586,19 +588,6 @@ const styles = StyleSheet.create({
         width: 38,
         height: 38,
         borderRadius: 12,
-        backgroundColor: 'rgba(255,255,255,0.18)',
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.28)',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-
-    logoBolt: {
-        width: 12,
-        height: 18,
-        backgroundColor: '#FFFFFF',
-        transform: [{ skewY: '-12deg' }],
-        borderRadius: 2,
     },
 
     logoNameWrap: {

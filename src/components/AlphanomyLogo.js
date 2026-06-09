@@ -1,56 +1,30 @@
 /**
- * AlphanomyLogo — JS-drawn brand mark for the alphanomy variant.
+ * AlphanomyLogo — brand mark for the alphanomy variant.
  *
- * Mirrors the gradient logo used by `designs/alphanomy/screens/_AppHeader.js`
- * (a brand-blue → purple gradient square containing a white skewed bolt
- * shape). Drawn from primitives so we don't need a PNG asset checked into
- * the repo — Alphanomy doesn't yet ship a finalized logo file.
+ * Renders the finalized gradient "i" mark shipped at
+ * `src/assets/AppLogo/alphanomy-logo.png`. Used by splash, login,
+ * and `BrandLogo` callsites on the alphanomy fork.
  *
  * Sized via the `size` prop (square). Pass `style` to add positioning,
  * margins, etc.
  */
 
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
-import LinearGradient from 'react-native-linear-gradient';
+import { Image, StyleSheet } from 'react-native';
 
-const ALPHANOMY_GRADIENT = ['#1246F0', '#7C3AED'];
+const ALPHANOMY_LOGO = require('../assets/AppLogo/alphanomy-logo.png');
 
-const AlphanomyLogo = ({ size = 56, style }) => {
-    // Bolt is ~45% the height of the mark so it reads at small sizes.
-    const boltH = Math.round(size * 0.45);
-    const boltW = Math.max(2, Math.round(boltH * 0.32));
-    const radius = Math.round(size * 0.22);
-
-    return (
-        <View style={[{ width: size, height: size }, style]}>
-            <LinearGradient
-                colors={ALPHANOMY_GRADIENT}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={[styles.frame, { borderRadius: radius }]}
-            >
-                <View
-                    style={[
-                        styles.bolt,
-                        { width: boltW, height: boltH },
-                    ]}
-                />
-            </LinearGradient>
-        </View>
-    );
-};
+const AlphanomyLogo = ({ size = 56, style }) => (
+    <Image
+        source={ALPHANOMY_LOGO}
+        style={[{ width: size, height: size }, style, styles.logo]}
+        resizeMode="contain"
+    />
+);
 
 const styles = StyleSheet.create({
-    frame: {
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    bolt: {
-        backgroundColor: '#FFFFFF',
-        transform: [{ skewY: '-12deg' }],
-        borderRadius: 2,
+    logo: {
+        // resizeMode set via prop; keeps layout-affecting style overridable.
     },
 });
 

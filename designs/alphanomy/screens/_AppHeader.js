@@ -13,8 +13,10 @@
  */
 
 import React from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, Image, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
+
+const ALPHANOMY_LOGO = require('../../../src/assets/AppLogo/alphanomy-logo.png');
 import { Bell } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import {
@@ -117,14 +119,7 @@ const AppHeader = ({ userEmail = '', userName = '', config, tickers }) => {
         <View style={styles.header}>
             <View style={styles.row1}>
                 <View style={styles.logoWrap}>
-                    <LinearGradient
-                        colors={GRADIENTS.brand}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        style={styles.headMark}
-                    >
-                        <View style={styles.bolt} />
-                    </LinearGradient>
+                    <Image source={ALPHANOMY_LOGO} style={styles.headMark} resizeMode="contain" />
                     <View>
                         <Text style={styles.greeting}>Hello, {greeting} 👋</Text>
                         <Text style={styles.subDate}>{todayLabel()}</Text>
@@ -207,15 +202,6 @@ const styles = StyleSheet.create({
         width: 44,
         height: 44,
         borderRadius: 13,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    bolt: {
-        width: 14,
-        height: 20,
-        backgroundColor: '#FFFFFF',
-        transform: [{ skewY: '-12deg' }],
-        borderRadius: 2,
     },
     greeting: { ...TYPOGRAPHY.bodyEmphasis, fontSize: 17, color: COLORS.text.primary },
     subDate: { ...TYPOGRAPHY.caption, fontSize: 11, color: COLORS.text.muted, marginTop: 2 },

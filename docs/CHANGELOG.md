@@ -4,6 +4,63 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ---
 
+## [unreleased] - 2026-06-09 (alphanomy-login-brand-mark)
+
+### Branding — auth hero now renders canonical "folios by alphanomy" brand mark
+
+Login + Signup heroes previously rendered "Alphanomy" (from
+`whiteLabelText`) with the subtag "Folios · Research" / "Create
+account". Web brand mark is "folios" (big) over "by alphanomy" (sub),
+so the mobile hero is now aligned.
+
+- `designs/alphanomy/screens/LoginScreen.js`:
+  - `brandLabel` hardcoded to `'folios'` (no longer reads `whiteLabelText`)
+  - `FALLBACK_TAGLINES.brandSubtag` → `'by alphanomy'`
+- `designs/alphanomy/screens/SignupScreen.js`:
+  - Hero JSX hardcodes "folios" / "by alphanomy" directly. The
+    `brandLabel` variable is retained for the terms-of-use string
+    ("I agree to ${brandLabel}'s ...") because "I agree to folios's"
+    would be ungrammatical.
+
+`REACT_APP_WHITE_LABEL_TEXT=Alphanomy` in `.env` is untouched — it
+still drives the AccountSettings app-version string ("Alphanomy
+v1.0.8") and all broker help-text fallbacks. Only the auth-hero brand
+presentation block was tenant-decoupled.
+
+## [unreleased] - 2026-06-09 (alphanomy-logo-png)
+
+### Branding — replace JS-drawn placeholder with finalized alphanomy logo PNG
+
+`AlphanomyLogo` was previously a JS-drawn gradient square + skewed bolt
+placeholder because the alphanomy fork didn't ship a finalized PNG.
+Now ships the real gradient "i" mark at
+`src/assets/AppLogo/alphanomy-logo.png` (400×400). Swapped at every
+known callsite (both the shared `<AlphanomyLogo>` component and the
+inline `logoMark + bolt` placeholders that bypassed it):
+
+Component-based callsites (auto-updated via `AlphanomyLogo.js`):
+- `src/components/SplashScreen.js` — splash 150×150
+- `src/components/LogoSection.js` — login form heading 80×80
+- `src/components/BrandLogo.js` — variant-aware shared renderer
+
+Inline placeholders rewritten to render the PNG:
+- `designs/alphanomy/screens/_AppHeader.js` — app header mark 44×44
+  (used by HomeScreen, OrderScreen, PortfolioScreen, ModelPortfolioScreen)
+- `designs/alphanomy/screens/LoginScreen.js` — hero logoMark 38×38
+- `designs/alphanomy/screens/SignupScreen.js` — hero logoMark 38×38
+
+Files touched:
+- `src/assets/AppLogo/alphanomy-logo.png` (new)
+- `src/components/AlphanomyLogo.js` (placeholder → `<Image>` render)
+- `designs/alphanomy/screens/_AppHeader.js` (inline gradient+bolt → `<Image>`; removed `bolt` style)
+- `designs/alphanomy/screens/LoginScreen.js` (inline mark+bolt → `<Image>`; removed `logoBolt` style + frosted frame)
+- `designs/alphanomy/screens/SignupScreen.js` (inline mark+bolt → `<Image>`; removed `logoBolt` style + frosted frame)
+
+Note: the frosted-glass white-translucent frame around the bolt on
+Login/Signup hero is dropped — the new PNG is itself a gradient brand
+mark, so wrapping it in another translucent frame looked muddy. Logo
+sits directly on the hero gradient now.
+
 ## [unreleased] - 2026-06-04 (v1.0.8 republish)
 
 ### Chore — versionCode 45 → 46, versionName 1.0.7 → 1.0.8

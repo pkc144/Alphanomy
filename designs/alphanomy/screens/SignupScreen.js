@@ -8,8 +8,11 @@ import {
     Platform,
     TouchableOpacity,
     TextInput,
+    Image,
     ScrollView,
 } from 'react-native';
+
+const ALPHANOMY_LOGO = require('../../../src/assets/AppLogo/alphanomy-logo.png');
 
 import LinearGradient from 'react-native-linear-gradient';
 import Toast from 'react-native-toast-message';
@@ -102,18 +105,14 @@ const SignupScreen = ({ viewModel, actions }) => {
                         <View style={styles.orbMid} />
 
                         <View style={styles.logoRow}>
-                            <View style={styles.logoMark}>
-                                <View style={styles.logoBolt} />
-                            </View>
+                            <Image source={ALPHANOMY_LOGO} style={styles.logoMark} resizeMode="contain" />
 
                             <View>
-                                <RNText style={styles.brandText}>
-                                    {brandLabel}
-                                </RNText>
-
-                                <RNText style={styles.subText}>
-                                    {t.brandSubtag}
-                                </RNText>
+                                {/* Canonical "folios by alphanomy" brand mark — matches the
+                                    web. `brandLabel` continues to drive the terms-of-use
+                                    text ("I agree to ${brandLabel}'s...") below. */}
+                                <RNText style={styles.brandText}>folios</RNText>
+                                <RNText style={styles.subText}>by alphanomy</RNText>
                             </View>
                         </View>
 
@@ -446,19 +445,6 @@ const styles = StyleSheet.create({
         width: 38,
         height: 38,
         borderRadius: 12,
-        backgroundColor: 'rgba(255,255,255,0.18)',
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.28)',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-
-    logoBolt: {
-        width: 12,
-        height: 18,
-        backgroundColor: '#FFFFFF',
-        transform: [{ skewY: '-12deg' }],
-        borderRadius: 2,
     },
 
     brandText: {
