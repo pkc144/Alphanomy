@@ -80,12 +80,19 @@ const APP_VARIANTS = {
   // `appadvisors` doc with `subdomain: 'alphanomy'` populated with the
   // tenant's logo/appName/advisorRaCode/etc. Until the backend record
   // exists, this variant inherits sharedUIConfig values for theming
-  // BUT explicitly nulls out `logo`/`toolbarlogo` — consumers must
-  // route image rendering through `<BrandLogo>`, which detects
-  // `DESIGN_VARIANT=alphanomy` and renders the JS-drawn gradient mark
-  // (`AlphanomyLogo`) instead of leaking the SharedDefaultLogo
-  // (Zamzam-branded PNG) or the legacy AlphaQuark `logo.png` asset.
+  // BUT explicitly nulls out `logo`/`toolbarlogo` — consumers route image
+  // rendering through `<BrandLogo>` / `useTokens().assets.logoPng`, which
+  // resolves the variant's own brand mark from
+  // `designs/alphanomy/tokens/assets.js` (the finalized PNG) instead of
+  // leaking the SharedDefaultLogo (Zamzam-branded PNG) or the legacy
+  // AlphaQuark `logo.png`. See docs/DESIGN_SYSTEM_ARCHITECTURE.md § Variant assets.
   alphanomy:     {...sharedUIConfig, subdomain: 'alphanomy',       advisorRaCode: 'ALPHANOMY', logo: null, toolbarlogo: null,
+    // iOS Google Sign-In needs the project's OWN iosClientId (NOT the web
+    // client ID) or GIDSignIn raises an NSException and crashes on signIn().
+    // Sourced from the alphanomy Firebase project's GoogleService-Info.plist
+    // CLIENT_ID. Consumed via config.googleIosClientId in Login/LogOutScreen;
+    // the backend appadvisors doc can override it (apiData.googleIosClientId).
+    googleIosClientId: '713385591555-kffitn2ee2c7kr6j66bqaf8hr72fcp58.apps.googleusercontent.com',
     mainColor: '#1246F0',
     secondaryColor: '#FFFFFF',
     gradient1: '#1246F0',

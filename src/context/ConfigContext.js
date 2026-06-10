@@ -104,7 +104,41 @@ export const ConfigProvider = ({ children }) => {
                     'aq-encrypted-key': headers['aq-encrypted-key'] ? 'SET' : 'MISSING',
                 });
 
+                // D3 (docs/WEB_PARITY_MIGRATION_2026-06.md §4.1): the RIA / NBA /
+                // Portfolio-Health / Transition flags are NOT in /api/app-advisor/get —
+                // they live in advisor_config and are served by /api/admin/frontend-config
+                // (no admin auth; reads the advisor from the X-Advisor-Subdomain header,
+                // which `headers` already carries). Kick it off BEFORE awaiting the main
+                // config so the two fetches run in PARALLEL (no serial cold-start cost).
+                // Never throws — a failure leaves every new flag at its default (false).
+                const parityFlagsPromise = (async () => {
+                    try {
+                        // HARD timeout: this fetch must NEVER block the advisor
+                        // branding/config from applying. If frontend-config is slow or
+                        // hangs, bail fast and leave the parity flags at default-OFF —
+                        // the main app-advisor/get config (theme, logo, gradients) still
+                        // applies. (Without this, a stalled flags call would leave the UI
+                        // on bare defaults: red #ff0000 accent + missing logo.)
+                        const ff = await axios.get(`${baseUrl}api/admin/frontend-config`, {
+                            headers,
+                            timeout: 6000,
+                        });
+                        const d = ff?.data?.data || ff?.data || {};
+                        return {
+                            riaBillingEnabled:       d.riaBillingEnabled === true,
+                            nbaHomeEnabled:          d.nbaHomeEnabled === true,
+                            portfolioHealthEnabled:  d.portfolioHealthEnabled === true,
+                            transitionEngineEnabled: d.transitionEngineEnabled === true,
+                            portfolioHealth:         d.portfolioHealth || undefined,
+                        };
+                    } catch (e) {
+                        console.warn('[ConfigContext] frontend-config flags unavailable, defaulting OFF:', e?.message);
+                        return {};
+                    }
+                })();
+
                 const response = await axios.get(apiUrl, { headers });
+                const parityFlags = await parityFlagsPromise;
 
                 console.log('API Response:', response.data);
 
@@ -168,6 +202,16 @@ export const ConfigProvider = ({ children }) => {
                                 : apiData.googleWebClientId) ||
                             initialConfig.googleWebClientId,
 
+                        // iOS-only Google Sign-In client ID (per-tenant Firebase
+                        // project). Same backend-over-variant precedence + defensive
+                        // .trim() as googleWebClientId. Consumed by Login/LogOutScreen;
+                        // only applied on iOS (undefined is a harmless no-op elsewhere).
+                        googleIosClientId:
+                            (typeof apiData.googleIosClientId === 'string'
+                                ? apiData.googleIosClientId.trim()
+                                : apiData.googleIosClientId) ||
+                            initialConfig.googleIosClientId,
+
                         // ============================================================================
                         // DIGIO CONFIGURATION
                         // Backend stores in nested digioConfig object, so we extract from there
@@ -202,6 +246,27 @@ export const ConfigProvider = ({ children }) => {
                         allowAfterHoursOrders: apiData.featureFlags?.allowAfterHoursOrders !== undefined
                             ? apiData.featureFlags.allowAfterHoursOrders
                             : (apiData.allowAfterHoursOrders !== undefined ? apiData.allowAfterHoursOrders : true),
+
+                        // Courses + Webinars per-advisor gates. Source of truth on
+                        // the server is AdvisorConfig.{courses_enabled,webinars_enabled}
+                        // surfaced as camelCase by /api/app-advisor/get's AdvisorConfig
+                        // lookup block (mirrors web's AppConfigContext default-false).
+                        // Drawer entries + webinar screens consume these.
+                        coursesEnabled:  apiData.coursesEnabled  ?? false,
+                        webinarsEnabled: apiData.webinarsEnabled ?? false,
+
+                        // RIA AUM-billing / NBA / Portfolio-Health / Transition per-advisor
+                        // gates (D3). Source of truth: advisor_config.{aum_billing.enabled,
+                        // nba_home_enabled, portfolio_health_enabled, transition_engine_enabled,
+                        // portfolio_health}, served by /api/admin/frontend-config (fetched in
+                        // parallel above → `parityFlags`). Default OFF — nothing renders until
+                        // an advisor opts in from supportAQ (AdvisorConfigPage). Toggles already
+                        // exist there for nba/health/transition.
+                        riaBillingEnabled:       parityFlags.riaBillingEnabled       ?? false,
+                        nbaHomeEnabled:          parityFlags.nbaHomeEnabled          ?? false,
+                        portfolioHealthEnabled:  parityFlags.portfolioHealthEnabled  ?? false,
+                        transitionEngineEnabled: parityFlags.transitionEngineEnabled ?? false,
+                        portfolioHealth:         parityFlags.portfolioHealth         ?? undefined,
 
                         // ============================================================================
                         // PAYMENT CONFIGURATION
@@ -337,7 +402,9 @@ export const ConfigProvider = ({ children }) => {
 
                         // ============================================================================
                         // APP UPDATE — set this field in MongoDB to trigger the update modal
-                        // db.appadvisors.updateOne({subdomain:'alphanomy'},{$set:{latestAppVersion:'1.0.5'}})
+                        // db.appadvisors.updateOne({subdomain:'<tenant>'},{$set:{latestAppVersion:'1.0.5'}})
+                        // Consumed by AppUpdateChecker (UpdateAppModal) as the authoritative
+                        // version; falls back to Play Store / App Store scraping when null.
                         // ============================================================================
                         latestAppVersion: apiData.latestAppVersion || null,
                     };
@@ -352,6 +419,7 @@ export const ConfigProvider = ({ children }) => {
                         homeScreenLayout: newConfig.homeScreenLayout,
                         // Authentication
                         googleWebClientId: newConfig.googleWebClientId,
+                        googleIosClientId: newConfig.googleIosClientId,
                         // Digio Config
                         digioCheck: newConfig.digioCheck,
                         digioEnabled: newConfig.digioEnabled,
@@ -377,6 +445,14 @@ export const ConfigProvider = ({ children }) => {
                                     REACT_APP_BROKER_CONNECT_REDIRECT_URL: newConfig.REACT_APP_BROKER_CONNECT_REDIRECT_URL,
                                     REACT_APP_ANGEL_ONE_API_KEY: newConfig.REACT_APP_ANGEL_ONE_API_KEY,
                                     REACT_APP_ZERODHA_API_KEY: newConfig.REACT_APP_ZERODHA_API_KEY,
+                                    // D3 / Codex T5: persist the parity flags into the same
+                                    // AsyncStorage blob TradeContext reads, so useConfig() and
+                                    // configData never disagree on a gate.
+                                    riaBillingEnabled: newConfig.riaBillingEnabled,
+                                    nbaHomeEnabled: newConfig.nbaHomeEnabled,
+                                    portfolioHealthEnabled: newConfig.portfolioHealthEnabled,
+                                    transitionEngineEnabled: newConfig.transitionEngineEnabled,
+                                    portfolioHealth: newConfig.portfolioHealth,
                                 },
                             };
                             await AsyncStorage.setItem('@app:advisorConfig', JSON.stringify(updatedStored));

@@ -33,7 +33,11 @@ const LogoutScreen = ({ navigation }) => {
         if (config?.googleWebClientId) {
             GoogleSignin.configure({
                 webClientId: config.googleWebClientId,
-                iosClientId: '713385591555-kffitn2ee2c7kr6j66bqaf8hr72fcp58.apps.googleusercontent.com',
+                // iOS-only client ID, sourced per-tenant from config (see
+                // LoginScreen for the full rationale). No-op when unset.
+                ...(config.googleIosClientId
+                    ? { iosClientId: config.googleIosClientId }
+                    : {}),
             });
         }
     }, [config?.googleWebClientId]);

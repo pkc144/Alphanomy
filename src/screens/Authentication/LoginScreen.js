@@ -63,11 +63,15 @@ const LoginScreen = () => {
         if (config?.googleWebClientId) {
             GoogleSignin.configure({
                 webClientId: config.googleWebClientId,
-                // iOS GoogleSignIn SDK requires its own clientID set explicitly
-                // (NOT the web client ID) or it raises GIDSignIn.m:530 NSException
-                // and crashes the app on signIn(). Sourced from GoogleService-Info.plist
-                // CLIENT_ID for the alphanomy Firebase project.
-                iosClientId: '713385591555-kffitn2ee2c7kr6j66bqaf8hr72fcp58.apps.googleusercontent.com',
+                // iOS GoogleSignIn needs the project's OWN client ID (NOT the web
+                // client ID) or GIDSignIn raises an NSException and crashes on
+                // signIn(). Sourced per-tenant from config.googleIosClientId
+                // (backend appadvisors.googleIosClientId or the variant's
+                // googleIosClientId). Omitted when unset — a harmless no-op on
+                // Android and for tenants without an iOS build.
+                ...(config.googleIosClientId
+                    ? { iosClientId: config.googleIosClientId }
+                    : {}),
             });
         }
     }, [config?.googleWebClientId]);

@@ -4,6 +4,106 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ---
 
+## [unreleased] - 2026-06-10 (drift cleanup — logo→designs, iosClientId→config)
+
+Eliminated the fork's shared-`src/` divergences by either upstreaming the
+generic fixes to `Alphab2bapp` or moving tenant-specifics into the
+variant/config layer. After this, the fork's `src/` carries **no**
+alphanomy-specific patches; tenant identity lives only in
+`designs/alphanomy/`, `whitelabel/appVariants.js`, and `.env`.
+
+### Brand logo → design-system asset token (closes the `useTokens` gap)
+
+- `src/theme/useTokens.js` — `assets` slot is now variant-aware: reads the
+  active variant's `buildAssets` via `DesignContext` (falls back to default
+  outside a provider). Closes the gap documented in `SYNC.md`.
+- `src/components/BrandLogo.js`, `LogoSection.js`, `SplashScreen.js` —
+  removed the hardcoded `if (DESIGN_VARIANT === 'alphanomy')` branches; they
+  now render `useTokens().assets.logoPng` (per-variant; default = AlphaQuark,
+  alphanomy = `designs/alphanomy/assets/logo.png`).
+- **Deleted `src/components/AlphanomyLogo.js`** (the JS-drawn gradient mark).
+  The finalized PNG is surfaced through `designs/alphanomy/tokens/assets.js`.
+- `whitelabel/appVariants.js` — comment updated to reflect the token path.
+- These four `src/` files are now byte-identical to upstream — the same
+  edits were made in `Alphab2bapp` (the JS-drawn `AlphanomyLogo` leak is
+  removed from the default repo too).
+
+### Google `iosClientId` → config (removed the hardcode from shared src/)
+
+- `src/screens/Authentication/LoginScreen.js`, `LogOutScreen.js` — read
+  `config.googleIosClientId` (conditional spread; no-op when unset) instead
+  of a hardcoded ID. Now byte-identical to upstream.
+- `src/context/ConfigContext.js` — exposes `googleIosClientId`
+  (backend `apiData.googleIosClientId` → variant fallback).
+- `whitelabel/appVariants.js` — alphanomy entry supplies the iOS client ID
+  value (backend `appadvisors.googleIosClientId` can override).
+
+### Doc surfaces
+
+`SYNC.md` (gap closed + history), `DESIGN_SYSTEM_ARCHITECTURE.md`,
+`DESIGN_MIGRATION_PROGRESS.md`.
+
+---
+
+## [unreleased] - 2026-06-10 (upstream-sync — full src/ + new features)
+
+### Synced `src/` from upstream `Alphab2bapp@feature/sdk-plus-config_forkv2`
+
+Content-port sync (the fork has unrelated git history with upstream — see
+`SYNC.md`). Brought the parent's `src/` to parity while preserving every
+Alphanomy-specific edit. Breakdown:
+
+- **32 take-upstream files** copied verbatim (Alphanomy had never touched
+  them since the `10e39c9` byte-identical baseline) — incl.
+  `TradeContext.js`, `rebalanceHelpers.js`, `Phase3SdkBrokerModal.js`,
+  `brokerRegistry.js`, the `fetchBroker*`/`fetchFunds` calls,
+  `MPPerformanceScreen.js` (now consumes the new shared
+  `utils/subscriptionStatus.js`), etc.
+- **24 three-way merges** (base = `10e39c9`, ours = Alphanomy HEAD, theirs =
+  upstream HEAD) — all conflict-free. Alphanomy edits preserved: iOS
+  shadows/Android elevations across the 6 broker `*ConnectUI` files,
+  HomeScreen `checkForAppUpdate(config?.latestAppVersion)` backend-version
+  fix, `UpdateAppModal` backend-version sourcing, branded `AlphanomyLogo`,
+  Navigation provider-wrapper hoist, ConfigContext/RebalanceModal/
+  MPReviewTradeModal upstream improvements layered in.
+- **28 new files** for new features now shipped in Alphanomy: Courses +
+  Webinars (`src/screens/Courses/*`, wired into `Navigation.js` drawer +
+  Stack), `CoursePurchaseSheet`, `BuyWebinarTicketSheet`, services
+  (`CashFreeOrderService`, `LiveKitService`, `GumletService`,
+  `CouponService`, `RiaBillingService`, `SubscriptionMandateService`,
+  `WebinarReminderHandler`), `utils/nba/*`, `utils/subscriptionStatus.js`,
+  `utils/validateChargeableAmount.js`, `utils/cashfreeEnv.js`,
+  `utils/courseAuthHeaders.js`, and two new brokers — **Arihant** &
+  **DefinEdge** (`*ConnectModal.js` + icons; registered via the synced
+  `brokerRegistry.js`).
+
+### Preserved (NOT overwritten) — Alphanomy-specific divergences
+
+- `App.js` — kept module-hoisted `SdkOn`/`CustomStatusBar` +
+  `MarketDataProvider` + inline `sdkOn` JSX (the deliberate fix for the
+  upstream inline-`SdkRootWrapper` remount bug that wiped TextInput state).
+- `index.js` — kept classic-bridge setup (RCTEventEmitter no-op shim
+  removed; Alphanomy runs New Arch **off**).
+- `package.json` — kept `react-native-reanimated@3.19.5` (Alphanomy's
+  intentional downgrade from upstream's `4.1.0`); did **not** add
+  upstream's `react-native-worklets` (reanimated-4 only).
+- `metro.config.js` — kept Alphanomy's `../alphaquark-mobile-sdk` SDK path
+  (parent uses `../../`; different repo depth).
+- `app.json` — kept Alphanomy brand name/displayName.
+- `.env` — no changes needed (new features read config from backend
+  `appadvisors` + `serverConfig`; no new `REACT_APP_*` vars).
+- `designs/` (incl. `designs/alphanomy/`), native shell, brand assets —
+  untouched.
+
+### Docs
+
+- 13 architecture docs three-way-merged from upstream; brought
+  `COURSES_WEBINARS_MOBILE_PORTING.md` + `LIVE_CLASS_INTEGRATION.md`.
+  `TENANT_TAGLINES.md` (Alphanomy-only) preserved. See `SYNC.md`
+  § Sync history → 2026-06-10.
+
+---
+
 ## [unreleased] - 2026-06-09 (alphanomy-login-brand-mark)
 
 ### Branding — auth hero now renders canonical "folios by alphanomy" brand mark

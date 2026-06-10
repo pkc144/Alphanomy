@@ -1,260 +1,6 @@
 # Design System Migration — Progress Log
 
 > **Chronological work log for the swappable-UI design-system migration.** Companion to `DESIGN_SYSTEM_ARCHITECTURE.md` (design source of truth) and `DESIGN_COMPONENT_AUDIT.md` (per-surface inventory). Mirrors `PHASE3_PROGRESS.md` in spirit.
-
----
-
-## 2026-05-07 — alphanomy Home section subtitles wired to `taglines.home`
-
-- **Why**: closes the only MEDIUM finding from the 2026-05-07 hardcoded-data audit on the alphanomy variant. The Home section subtitles ("Bespoke Active Recommendations" under Recommendations, "Ranked by user feedback" duplicated under Model Portfolios and Top Bespoke Plans) were baked into the alphanomy presentation, with no per-tenant override path. Same problem the auth screens had before `taglines.login` / `taglines.signup` shipped on 2026-05-05.
-- **Solution**: extend the existing `appadvisors.taglines` schema with a `home: { recommendationsSubtitle, modelPortfoliosSubtitle, bespokePlansSubtitle }` block. Same per-field-fallback contract as login/signup — a tenant can override one field and the others stay on the alphanomy default.
-- **What shipped (code)**:
-  - `src/screens/Home/HomeScreen.js` — container forwards `configData?.config?.taglines?.home || null` into the `home` prop bag as `home.taglines`. Same plumbing pattern as `tickers` / `pnlSummary` / `userName` already use. Default presentation ignores the new field.
-  - `designs/alphanomy/screens/HomeScreen.js` — defined `FALLBACK_HOME_TAGLINES` constant (mirroring `FALLBACK_TAGLINES` on auth screens), destructured `taglines` from `home`, derived `homeCopy` via per-field merge, replaced the three hardcoded subtitle JSX nodes with `{homeCopy.<key>}`.
-- **What shipped (docs, same commit per the design-system blocking rule)**:
-  - `src/context/ConfigContext.js § TENANT TAGLINES` — schema comment now lists the `home` block.
-  - `docs/TENANT_TAGLINES.md` — schema section, "Why this exists" now mentions Home, client-passthrough section now references the Home container + presentation, related-docs section adds the Home presentation file.
-  - `docs/DESIGN_MIGRATION_PROGRESS.md` — this entry.
-  - `docs/CHANGELOG.md` — entry.
-- **What was NOT changed**:
-  - Backend schema — same as the auth taglines: the `appadvisors` collection does not yet carry a `taglines` field. Until the backend ships it, every tenant on alphanomy sees the variant defaults ("Bespoke Active Recommendations" / "Ranked by user feedback"). This is correct legacy behaviour, not a bug — the client side is forward-compatible.
-  - Default variant — unaffected. `default/screens/HomeScreen.js` doesn't render these subtitles in the same form.
-  - LoginScreen / SignupScreen taglines wiring — already-shipped (2026-05-05); only the doc was updated to mention the new sibling.
-- **Visual QA**: ⏳ no on-device verification needed for this pass — fallback copy is byte-identical to the previous hardcoded strings, so absent a backend override the rendered Home is unchanged. Verification will happen when a tenant actually sets `taglines.home.modelPortfoliosSubtitle` to test that the override flows through.
-- **Audit verdict update**: the alphanomy hardcoded-data audit's only MEDIUM Home finding ("Ranked by user feedback" hardcoded subtitle, duplicated) is now resolved. The remaining MEDIUM (`SignupScreen.js:76` quantitative claim) is purely a backend-data-entry task — no code change pending.
-- **Next** (when the backend ships the field):
-  1. Add `taglines.home` to the `appadvisors` Mongoose schema (`aq_backend_github/Models/appAdvisorModel.js`).
-  2. Update `support.alphaquark.in` admin form to allow per-tenant editing of the three Home subtitles.
-  3. Compliance review skipped for Home subtitles (no quantitative claims). Per-tenant tone control only.
-
----
-
-## 2026-05-06 — alphanomy MPPerformanceScreen pass 1 (chrome + locked state)
-
-- **Reported**: user tapped "View More" on a Model Portfolio plan card from the alphanomy variant and landed on the legacy `MPPerformanceScreen` chrome — partial dark-blue gradient bleed at the top, green-pill Portfolio/OverView/Research tabs, red lock icon on the "Premium Access Required" empty state. None of the alphanomy palette applied.
-- **Root cause**: the container at `src/screens/Drawer/MPPerformanceScreen.js` was already presentation-split via `useComponent('screens.MPPerformanceScreen')`, but the alphanomy variant only registered overrides for the seven entry-point screens (Login / Signup / Home / Order / ModelPortfolio / Account / Portfolio / Notification). MPPerformanceScreen was reachable from alphanomy navigation but resolved through the default registry.
-- **Phase**: I (Model Portfolio surfaces — in scope as of 2026-05-01).
-- **Pass 1 scope** (this commit): hero header chrome + tab strip + locked Portfolio empty state. Pass 2 (later commit) themes the unlocked tab bodies (DistributionGrid, PerformanceChart, methodology blocks, research list).
-- **What shipped (code)**:
-  - `designs/alphanomy/screens/MPPerformanceScreen.js` — variant presentation. Indigo→purple gradient hero card with back button, plan logo, title, GST-aware price + strike-through original + green "SAVE %" pill, pricing-pill row, transparent stat grid (Min. Investment / Volatility / CAGR), rebalance row. Sticky bottom CTA (gradient Subscribe Now / black "Subscribed" pill). Research WebView modal preserved with alphanomy-themed close header. ViewModel + actions + slots contract identical to default — no container change.
-  - `designs/alphanomy/composites/EmptyStateMP.js` — variant lock-state empty view. Indigo Lock icon on a soft halo ring (vs default's flat red lock). Indigo title, muted subtitle. ViewModel contract identical (`title` / `subtitle` / `themeColor` / `mainColor`); the alphanomy override intentionally ignores `themeColor` / `mainColor` so every tenant on this variant gets the same indigo treatment.
-  - `designs/alphanomy/composites/CustomTabbarMPPerformance.js` — variant tab strip. Pill-tab pattern matching `screens/ModelPortfolioScreen.js` (subtle base, gradient fill on the active tab, indigo lock icon when the first tab is disabled because subscription isn't active). Flat-prop contract identical to default (`navigationState` / `jumpTo` / `isSubscriptionActive`).
-  - `designs/alphanomy/index.js` — registered three new keys: `screens.MPPerformanceScreen`, `composites.EmptyStateMP`, `composites.CustomTabbarMPPerformance`. Created `designs/alphanomy/composites/` folder.
-- **What was NOT changed**:
-  - Container `src/screens/Drawer/MPPerformanceScreen.js` — untouched. ViewModel + slots contract was already correct.
-  - `BespokePerformanceScreen` — separate screen, separate "View More" path for bespoke plans. Not yet ported. If the user hits "View More" on a bespoke plan they'll still see the legacy chrome until that override ships.
-  - Tab body slots (PortfolioTabSlot / OverviewTabSlot / ResearchTabSlot) — still rendered through the legacy chrome inside the alphanomy host. The DistributionGrid (Portfolio scene), PerformanceChart + methodology (Overview scene), and research list (Research scene) keep their default styling. Pass 2.
-  - Default variant — untouched. Tenants on `default` get the same legacy MPPerformanceScreen they had before.
-- **Verdict changes** (`DESIGN_COMPONENT_AUDIT.md`):
-  - `MPPerformanceScreen` row: `needs-logic-extraction` → migrated for default (already complete since Phase I) + alphanomy override pass 1 shipped. Note added.
-  - `CustomTabbarMPPerformance` row: same — alphanomy override shipped.
-  - `EmptyStateMP` row: same — alphanomy override shipped.
-- **Test plan / Visual QA**: ⏳ pending on-device verification. After app restart, "View More" → MPPerformanceScreen should render: indigo→purple gradient hero, alphanomy back chevron, alphanomy pill tabs, indigo Lock + halo on the locked Portfolio empty state, gradient Subscribe Now CTA. Tab body content (when subscribed) will still look legacy until pass 2.
-- **Next**: pass 2 — alphanomy DistributionGrid restyle + PerformanceChart container restyle + methodology block restyle. Then BespokePerformanceScreen pass 1.
-
----
-
-## 2026-05-06 — Bugfix: alphanomy Profile "Edit" pill was a dead button
-
-- **Reported**: user tapped the gradient profile card's Edit pill on the alphanomy Profile (More tab) and nothing happened.
-- **Root cause**: the alphanomy presentation rendered the Edit pill as `<TouchableOpacity style={styles.editBtn} activeOpacity={0.7}>` with no `onPress` handler. The ports of the HTML mockup focused on visuals; the interaction wiring was deferred and never picked up.
-- **Fix** (presentation + container, both updated):
-  - `src/screens/Home/AccountSettingsScreen.js` — added a `showProfileModal` state, pulled `getUserDeatils` from `useTrade()`, mounted the existing `<ProfileModal>` (same modal the legacy Drawer at `Navigation.js:963` renders) alongside the resolved presentation, exposed `actions.onEditProfile = () => setShowProfileModal(true)`. ProfileModal handles the form, save, and post-save refresh internally — we just give it somewhere to be opened from on the alphanomy fork.
-  - `designs/alphanomy/screens/AccountSettingsScreen.js` — destructured `onEditProfile` from `actions`, wired it onto the Edit pill's `onPress`, added a `hitSlop` for easier tapping.
-- **What was NOT changed**: `<ProfileModal>` body is unchanged; the legacy Drawer's render of the same modal still works. The default presentation doesn't surface an Edit affordance and silently ignores the new action.
-
----
-
-## 2026-05-06 — Live notification data wired through NotificationListScreen
-
-- **Why**: closing the open follow-up logged when `screens.NotificationListScreen` shipped. Until today the alphanomy variant rendered the `FALLBACK_ITEMS` sample list permanently because the container forwarded `notifications: []`.
-- **New file**: `src/screens/Home/hooks/useNotificationFeed.js` (~270 lines).
-  - Reads from `TradeContext` (`allNotifications`, `getAllNotifcations`, `isNotificationLoading`, `userEmail`, `configData`) — the same hook surface `src/screens/Home/PushNotificationScreen.js` (1800-line legacy production screen) consumes. No new backend endpoint introduced; the same `GET /api/sendnotification/get-user-notifications/{userEmail}` feed powers both screens.
-  - Normalizes the three legacy notification shapes that PushNotificationScreen's `sortNotificationsByDate` handles, into the flat `{ id, section, kind, title, message, time, unread, _raw }` rows the design system expects:
-    - **inApp** — each `notification.inAppNotifications[i]` becomes a separate row.
-    - **rebalance** — `notification.modelName` set, single row, `kind = 'advisory'`.
-    - **stock** — `notification.symbolPrice[]` non-empty, single row, `kind = 'order'`.
-  - Section labels: `Today` / `Yesterday` / `Earlier` (sorted in that order, newest first within each section).
-  - `kind` classifier: keyword scan of the row title + body picks one of `order` / `advisory` / `reminder` / `message` / `alert` — maps directly to the alphanomy variant's `KIND_MAP` icon palette.
-  - Time formatting: relative (`just now`, `Xm ago`, `Xh ago`) for today; `Yesterday`; otherwise short month-day (`Apr 27`).
-  - `markRead(rowOrId)` — recovers the raw mongo `_id` from a built row (`inapp-<id>-N` / `rebalance-<id>` / `stock-<id>`) and calls `PUT /api/sendnotification/mark-notification-read-by-id` with the same body PushNotificationScreen uses.
-  - `markAllRead()` — fans out per-id PUTs in parallel (deduplicates by raw mongo id so an inApp parent with multiple sub-rows is only PUT once), then refreshes. No bulk endpoint exists today; comment in the hook documents where to swap when one lands.
-- **Container update** (`src/components/NotificationListScreen.js`): now calls `useNotificationFeed()` and forwards `viewModel = { notifications, isLoading }` + `actions = { onBack, onRefresh, onMarkAllRead, onNotificationPress }`. `onNotificationPress` marks the row read (no detail-view yet — same parity the alphanomy fallback offered).
-- **Presentation updates**:
-  - `designs/alphanomy/screens/NotificationListScreen.js` — wired pull-to-refresh via `RefreshControl` on the `<ScrollView>`, `<ActivityIndicator>` for the initial-load empty state, and the `Mark all read` button is now a no-op when only `FALLBACK_ITEMS` are showing (so users can't accidentally fire mark-as-read PUTs against fake mongo ids). The `FALLBACK_ITEMS` ships only when the container's `notifications` is empty AND `isLoading === false` — i.e. there's nothing in flight, so the design preview is shown at boot / for unauthenticated demo. Memoized via `useMemo` so the grouping memo's input is stable.
-  - `designs/default/screens/NotificationListScreen.js` — wired the same `RefreshControl` (when the container exposes `onRefresh`).
-- **What was NOT changed**:
-  - The legacy `src/screens/Home/PushNotificationScreen.js` — left as-is. Route still registered at `Navigation.js:1174-1177` for deep-link / push-tap reachability, but no in-app bell on the alphanomy fork points at it.
-  - `TradeContext.getAllNotifcations` — same body, same endpoint. Sharing the same hook surface means PushNotificationScreen and NotificationListScreen both reflect any read-state mutation either makes.
-  - Detail-view modal (per-notification tap → modal/full screen). PushNotificationScreen has a 700-line modal with stock-detail, rebalance-detail, etc. — not ported in this commit. `onNotificationPress` currently just marks the row read.
-- **Test plan / Visual QA**: ⏳ pending on-device emulator capture. With a live Firebase session the alphanomy variant should render the user's real notifications in the alphanomy chrome (sections / icon tiles / unread rail / mark-all-read fan-out) — fallback only shown for unauthenticated boot.
-
----
-
-## 2026-05-06 — Bugfix: redirect alphanomy Profile + ChangeAdvisor bell taps to NotificationListScreen
-
-- **Reported**: user said "I am getting old notification page only" after the NotificationListScreen migration shipped. Repro: tapping the bell on the alphanomy Profile (More tab) screen still routed to the legacy 1800-line `src/screens/Home/PushNotificationScreen.js`, not the newly-migrated `NotificationListScreen`. Same on `ChangeAdvisor`.
-- **Root cause**: I migrated the `screens.NotificationListScreen` design-system key and wired the `_AppHeader` bell to navigate to `'NotificationListScreen'`, but the existing `actions.onNavigateNotifications` callbacks in two CONTAINERS still hardcoded `navigation.navigate('PushNotificationScreen')` — the legacy route. The alphanomy Profile screen calls `onNavigateNotifications` from its bell tile, so on the alphanomy fork the bell on Profile was opening the legacy production screen rather than the new HTML § 08 design.
-  - `src/screens/Home/AccountSettingsScreen.js:169` — `onNavigateNotifications: () => navigation?.navigate('PushNotificationScreen')`.
-  - `src/screens/AccountSettingScreen/ChangeAdvisor.js:195` — `onOpenNotifications: () => navigation.navigate('PushNotificationScreen')`.
-- **Fix**: redirected both callbacks to `'NotificationListScreen'`. Added inline comments explaining the reroute and pointing at this progress entry. The legacy `PushNotificationScreen` route is still registered in `Navigation.js:1174-1177` (untouched) so it remains reachable via deep-link / push tap, but no in-app bell points at it on the alphanomy fork.
-- **NOT changed**: `src/components/CustomToolbar.js:247` still navigates to `PushNotificationScreen`. CustomToolbar is gated to the default variant (`Navigation.js:361 const showLegacyToolbar = !Config?.DESIGN_VARIANT || Config.DESIGN_VARIANT === 'default'`), so the alphanomy fork doesn't render it. Leaving the default toolbar's bell untouched preserves the default variant's existing routing.
-- **Open follow-up**: long-term, the real notifications data (currently only available inside `PushNotificationScreen`'s 1800-line container — Firebase + axios + RebalanceNotificationComponent) needs to flow through `NotificationListScreen`'s viewModel. Either migrate `PushNotificationScreen`'s data layer to the container at `src/components/NotificationListScreen.js`, or replace the alphanomy variant's `FALLBACK_ITEMS` with a hook that reads the same backend feed. Tracked separately — for now the alphanomy variant shows the sample list matching the HTML mockup.
-
----
-
-## 2026-05-06 — Phase J follow-up: NotificationListScreen + bell wiring (HTML § 08)
-
-- **Phase**: J follow-up.
-- **Why**: user asked to "make one notification screen ... see HTML § 08 ... and when someone clicks on notification icon on home screen it should open this screen". The bell icon on every alphanomy bottom-tab header (Home / Orders / Plans / More) was a static View with no `onPress` — tapping it did nothing.
-- **Surfaces touched**:
-  - `src/components/NotificationListScreen.js` — collapsed from 116 lines (legacy chrome inline) to ~40 lines (thin design-resolver). Calls `useComponent('screens.NotificationListScreen')` and forwards `viewModel = { notifications: [], isLoading: false }` + `actions = { onBack, onMarkAllRead, onNotificationPress }`.
-  - `designs/default/screens/NotificationListScreen.js` (new, ~110 lines) — preserves the legacy chrome verbatim (back-chevron + "Notification Screen" title + simple FlatList + empty state). No visual diff for non-alphanomy variants.
-  - `designs/alphanomy/screens/NotificationListScreen.js` (new, ~280 lines) — port of `alphanomy-improved.html § "08 · Notifications"`. Sticky header (back chevron + "Notifications" title + brand-blue "Mark all read" link, greyed when no unread). Body grouped by `section` field. Each row: 38×38 colored icon tile via `KIND_MAP` (`order`/`advisory`/`reminder`/`message`/`alert` → blue/green/amber/purple/red, matching the HTML's `si-blue` / `si-green` / `si-amber` / `si-purple` / `si-red` palette), title + description body, timestamp on the right. Unread rows: pale-blue `#F0F4FF` background + 3px brand-blue left rail (matches HTML's `.notif-item.unread::before`). Ships a `FALLBACK_ITEMS` sample list (Order Executed / Advisory Alert / Market Closure / Advisor Message / Stop-Loss Triggered) so the design preview renders before any real notifications feed exists.
-  - `designs/alphanomy/screens/_AppHeader.js` — converted the bell `<View style={styles.iconCircle}>` into a `<TouchableOpacity onPress={() => navigation.navigate('NotificationListScreen')}>`. Reads `useNavigation()` and guards the call (returns null outside a NavigationContainer — e.g. tests / Storybook). The `notifDot` red badge is preserved.
-  - `designs/default/index.js` + `designs/alphanomy/index.js` — registered the new `screens.NotificationListScreen` key in both. Default is the contract floor.
-- **Routing**: `Stack.Screen name="NotificationListScreen"` was already registered in `src/components/Navigation.js:1133-1137` pointing at `src/components/NotificationListScreen.js` — no Navigation.js change needed. The thin container now resolves the design rather than rendering the legacy chrome inline.
-- **Verdict change** (`DESIGN_COMPONENT_AUDIT.md § NotificationListScreen`): added as new ✅ Migrated row.
-- **Risks discharged / NOT in this commit**:
-  - **No real notification feed** — container ships `notifications: []`. Alphanomy variant falls back to `FALLBACK_ITEMS` so the design preview matches the HTML mockup; default variant renders its empty state. Wiring a real feed (push notifications / `/api/notifications` endpoint / unread-count from backend) is an open task — when it lands, populate `viewModel.notifications` and the variant fallback stops being shown automatically.
-  - **No "mark all read" backend** — `onMarkAllRead: () => {}` is a noop. The alphanomy variant button is wired to call it (so visual interactivity is present), but until the container exposes a real handler, it does nothing. Same shape; container update only.
-  - **Bell wiring is alphanomy-only**. The default variant's bottom-tab headers (`CustomToolbar`) already had their own bell handling (legacy path, untouched in this commit). Only the alphanomy `_AppHeader` was wired to `NotificationListScreen` — that's the variant the user is on.
-- **Visual QA status**: ⏳ pending on-device emulator capture. Ship-ready visual is provable by token / palette match against the HTML mockup; the standard Pixel_6_API35 capture mirrors the prior alphanomy slice's QA flow.
-
----
-
-## 2026-05-06 — Bugfix: alphanomy LoginScreen — preemptive wrapper-removal (mirrors SignupScreen fix)
-
-- **Why**: same defect pattern as SignupScreen (entry below). The user explicitly asked us to apply the SignupScreen fix to LoginScreen rather than wait to hit it in production.
-- **Root cause** (alphanomy `screens.LoginScreen`): identical to SignupScreen — `<TouchableWithoutFeedback onPress={dismissKeyboard}>` wrapping the `<ScrollView>`. The container's `dismissKeyboard` calls `Keyboard.dismiss()` + `setErrorShow(false)`; on Android the wrapper's press event races the TextInput focus event, so keystrokes can fail to land or the keyboard flickers.
-- **Fix**:
-  - Removed the `<TouchableWithoutFeedback>` wrapper from `designs/alphanomy/screens/LoginScreen.js`.
-  - `<ScrollView>` keeps `keyboardShouldPersistTaps="handled"` and gains `keyboardDismissMode="on-drag"`.
-  - Removed the now-unused `TouchableWithoutFeedback` import.
-- **What was NOT changed**: the container (`src/screens/Authentication/LoginScreen.js`) is unchanged. `dismissKeyboard` is still wired into the `actions` bag and is a stable noop when nothing calls it — no behavioural drift. The CTA buttons (Sign In / Google / Apple) were already only `disabled={isLoading}` so no equivalent of the SignupScreen "dead-button" fix is needed here.
-- **Open follow-up cleared**: the SignupScreen entry below noted "apply the same wrapper-removal fix to alphanomy LoginScreen proactively" — done in this commit.
-- **Still open**: the same wrapper pattern exists on `designs/default/screens/SignupScreen.js` and `designs/default/screens/LoginScreen.js`. Default isn't the alphanomy fork's active variant so the user-facing impact is zero today, but we should sweep both default presentations in a follow-up commit once we have time to verify no other tenant relies on the wrapper for some reason.
-
----
-
-## 2026-05-06 — Bugfix: alphanomy SignupScreen — inputs unresponsive on Android
-
-- **Reported**: user could not fill the Name / Email / Password fields on the alphanomy SignupScreen variant — typing didn't register reliably and the Create Account button felt dead.
-- **Root cause** (alphanomy `screens.SignupScreen`): the form was wrapped in `<TouchableWithoutFeedback onPress={dismissError}>` directly around the `<ScrollView>`. The container's `dismissError` action calls both `setErrorShow(false)` AND `Keyboard.dismiss()`. On Android, the `TouchableWithoutFeedback`'s press event races the underlying `TextInput`'s focus event when the user taps an input — `Keyboard.dismiss()` fires before the TextInput finishes focusing, so the keyboard flashes open and immediately closes (or never gets through), and keystrokes don't land in the input. The same wrapper exists on the alphanomy `LoginScreen` calling `dismissKeyboard` (identical body); LoginScreen has historically had the same fragility but the user hadn't yet tried filling the signup form. Same defect, different exposure.
-- **Secondary issue**: the Create Account button was hard-disabled (`disabled={isLoading || !isChecked}`) when the Terms checkbox was unchecked. The container's `handleSignup` already toasts "Please agree to the Terms & Conditions" when `!isChecked`, but the disabled button blocked that path entirely — users got no feedback explaining why the button did nothing.
-- **Fix**:
-  - Removed the `<TouchableWithoutFeedback>` wrapper from `designs/alphanomy/screens/SignupScreen.js`. The `<ScrollView>` retains `keyboardShouldPersistTaps="handled"` and gains `keyboardDismissMode="on-drag"` so users dismiss the keyboard by scrolling — no race against TextInput focus.
-  - Changed the Create Account button to `disabled={isLoading}` only (was `disabled={isLoading || !isChecked}`). The visual disabled style still applies when the checkbox is unchecked (`(!isChecked || isLoading) && styles.primaryBtnDisabled`), but presses now fall through to `handleSignup` which toasts the Terms requirement.
-  - Removed the now-unused `TouchableWithoutFeedback` import.
-- **What was NOT changed**: the container (`src/screens/Authentication/SignupScreen.js`) is unchanged. `dismissError` still does the right thing when called explicitly (e.g. by the error banner's tap-to-dismiss). The default presentation still uses the same wrapper pattern internally — it has the same fragility but the default variant is not the user's active variant, and changing default would be a wider regression risk; left as-is for a future commit.
-- **Follow-up status**: ✅ closed by the LoginScreen entry above (2026-05-06).
-
----
-
-## 2026-05-06 — Phase J: PortfolioScreen container/presentation split + alphanomy variant
-
-- **Phase**: J (new — bottom-tab Portfolio screen).
-- **Why now**: PortfolioScreen was the last bottom-tab still rendered with its legacy chrome on the alphanomy fork — Home / Orders / Plans / More all swapped to alphanomy in the previous slice, but the Portfolio tab kept the original navy `PortfolioCard` hero with the Bespoke / Model Portfolios toggle and grey-on-white tabs. The user asked to "make this dynamically inside design" so it slots into the same registry / variant override pattern.
-- **Surfaces touched**:
-  - `src/screens/PortfolioScreen/PortfolioScreen.styles.js` (new, ~620 lines) — extracted the 620-line `StyleSheet.create({...})` block from the legacy container verbatim. Lifted as-is (no semantic edits) so the default presentation re-renders pixel-identically.
-  - `src/screens/PortfolioScreen/PortfolioScreen.js` (-~940 lines net) — converted from a 2.4k-line monolith into a ~1.5k-line container. Removed: the local `StyleSheet.create` block (now in `.styles.js`), the local `return (...)` JSX tree (now in the design file). Kept: every `useEffect`, every broker-conditional position-fetch branch, every WebSocket subscribe / EventEmitter listener / portfolio-events wiring, the `panResponder` gesture handler, and the three FlatList row renderers (`renderAllHoldings` / `renderPositions` / `renderModalPFCard`). End-of-component now builds a flat `portfolio` prop bag (~25 keys) and renders `useComponent('screens.PortfolioScreen')`. The renderer closures are passed through the bag so the WebSocket-driven `<HoldingDynamicText>` / `<PortfolioPositionText>` cells keep resolving against container scope — no contract change to `useTrade` / `MultiBrokerContext`.
-  - `designs/default/screens/PortfolioScreen.js` (new, ~330 lines) — pixel-faithful re-render of the legacy chrome. Imports the extracted styles + `PortfolioCard` + `RenderEmptyMessage` + `HoldingScoreModal` from their existing locations. Same JSX tree the container had inline pre-extraction; only the data source changed (now via the prop bag). No visual diff intended — verified by line-for-line equivalence with the pre-edit `return (...)` block.
-  - `designs/alphanomy/screens/PortfolioScreen.js` (new, ~520 lines) — alphanomy-improved.html § "05 · Portfolio" port: shared `_AppHeader` (greeting + ticker strip — same helper Home / Orders / Plans / More variants use), gradient `pl-hero` P&L card with grid-line texture + glow circles + "Total Returns" floating badge (positive=mint #3DFFA0, negative=coral #FFA8A8), pill-tabs for Model Portfolios vs All Holdings (active fill = brand gradient via `LinearGradient` matching HTML's `active-grad`), an under-tabs row for Holdings vs Positions (mirrors the legacy `tabIndex` toggler), a restyled plan picker dropdown + Modal, and alphanomy `EmptyCard` blocks with gradient "Connect Broker" CTA. Lists reuse the renderer closures from the prop bag so individual rows look identical to default — only the chrome around them is re-skinned.
-  - `designs/default/index.js` — added `import PortfolioScreen from './screens/PortfolioScreen'` (Phase J group) and `'screens.PortfolioScreen': PortfolioScreen` in the components map. The default registry is the contract floor; this is the new key.
-  - `designs/alphanomy/index.js` — added `import PortfolioScreen from './screens/PortfolioScreen'` and `'screens.PortfolioScreen': PortfolioScreen` to the variant override map. With `DESIGN_VARIANT=alphanomy` in `.env` (already set), the bottom-tab Portfolio renders the alphanomy chrome; with the variable unset, default renders unchanged.
-- **Verdict change** (`DESIGN_COMPONENT_AUDIT.md § PortfolioScreen`): `needs-logic-extraction` → ✅ **Migrated (Phase J)**. The audit row's open-follow-ups list reduced to just the optional `formatCurrency` pre-formatting nice-to-have; nothing blocks subsequent design work.
-- **Risks discharged / NOT in this commit**:
-  - **WebSocket + EventEmitter cleanup paths** — untouched. Container still owns every cleanup branch (`OrderPlacedReferesh`, `cartUpdated`, `portfolioEvents`, WebSocket subscribe in `useEffect`), so production behavior is identical.
-  - **10+ broker-conditional position fetchers** (`getAllPositionsData`) — untouched. Container still owns the IIFL/ICICI/Upstox/Angel/Zerodha/Kotak/HDFC/Dhan/AliceBlue/Fyers/Groww/Motilal branches; the `setpositionsData` writes flow through to `PositionsData` which lands in the prop bag.
-  - **Repair-trade flow** — untouched. `processedData` (with `latest`, `repair` markers) and the `<ModelPFCard>` row come from container scope; the design files only render whatever rows the renderer closure produces.
-  - **MP-pending policy** — explicitly deferred. The Phase I MP screens (`screens.ModelPortfolioScreen`, `screens.MPPerformanceScreen`, `screens.MPInvestNowModal`) and the `<ModelPFCard>` composite already migrated under their own audit rows. PortfolioScreen consumes `<ModelPFCard>` but doesn't re-design it — same separation of concerns.
-- **Visual QA status**: ⏳ pending on-device emulator capture (default + alphanomy). The default presentation is a verbatim JSX extraction so pixel parity is provable by diff; the alphanomy presentation needs the standard Pixel_6_API35 capture once Metro is started. **Open-action**: capture on-device screenshots and append to this entry, mirroring the Visual QA blocks in the 2026-05-04 alphanomy entries.
-- **Files changed** (5):
-  - `src/screens/PortfolioScreen/PortfolioScreen.js` (-940 net, container slimmed + prop-bag wired)
-  - `src/screens/PortfolioScreen/PortfolioScreen.styles.js` (new, +620)
-  - `designs/default/screens/PortfolioScreen.js` (new, +330)
-  - `designs/alphanomy/screens/PortfolioScreen.js` (new, +520)
-  - `designs/default/index.js` + `designs/alphanomy/index.js` (registry hookups, +5 lines each)
-- **Docs updated this commit** (per the BLOCKING design-system rule):
-  - `docs/DESIGN_COMPONENT_AUDIT.md § PortfolioScreen` — verdict promoted to Migrated, full prop-bag contract documented; variant-override note updated to call out the new key.
-  - `docs/DESIGN_MIGRATION_PROGRESS.md` — this entry.
-  - `docs/CHANGELOG.md` — Phase J row.
-
----
-
-## 2026-05-04 — `alphanomy` variant: + OrderScreen, ModelPortfolioScreen, AccountSettingsScreen
-
-- **Phase**: post-I (continuation of the alphanomy variant slice).
-- **Surfaces touched**:
-  - `designs/alphanomy/screens/_AppHeader.js` (new, ~190 lines) — internal helper (gradient logo + greeting + bell + avatar + ticker strip) shared by HomeScreen / OrderScreen / ModelPortfolioScreen. Underscore prefix signals "private to variant"; not registered in the design-system registry. Sample ticker data hardcoded (Nifty 50 / Sensex / BankNifty); accepts a `tickers` prop for future live binding.
-  - `designs/alphanomy/screens/OrderScreen.js` (new, ~270 lines) — variant override for `screens.OrderScreen`. Pill tabs (Orders Placed / Rejected) + soft search bar + alphanomy empty state OR a stripped-down order row list when `viewModel.orders` is non-empty. Same contract as default; no basket-grouping in this preview. Search/tab filters are local UI state (matches default's behaviour).
-  - `designs/alphanomy/screens/ModelPortfolioScreen.js` (new, ~330 lines) — variant override for `screens.ModelPortfolioScreen` (the Plans bottom-tab). Pill tabs (Bespoke Plans / Model Portfolio) with the active tab filled by a brand gradient (matches HTML `active-grad` style). Below: a stack of plan cards in alphanomy style (Save % badge, original-price strikethrough, frequency pill — including amber variant for Weekly, View More + gradient Subscribe Now CTA). Sample plan data matches the HTML mockup; live binding to `viewModel.routes` / TabView deferred.
-  - `designs/alphanomy/screens/AccountSettingsScreen.js` (new, ~270 lines) — variant override for `screens.AccountSettingsScreen`. Gradient profile card (avatar + name + email + Edit pill) followed by grouped settings sections rendered from `viewModel.menuItems`. Each row has a soft-tinted icon tile (palette cycles brand→purple→green→amber by index) + label + chevron. Logout rows use the danger color. Trailing version line "Alphanomy v2.4.1 · Build 241". `actions` (onGoBack / onNavigateNotifications) intentionally not consumed because the alphanomy layout doesn't render a back/bell header — those affordances aren't in the mockup.
-  - `designs/alphanomy/index.js` — registered three new screen keys.
-- **Verdict changes**: none — all three screens stay `migrated`; the variant adds second presentations.
-- **What's NOT in this commit (and why)**:
-  - **Onboarding (HTML § 03)** — no existing container in `src/screens/`, and no entry for it in `designs/default/index.js`. Per the architecture rule "variants can only override keys that exist in default", an onboarding variant requires (a) a container, (b) a default presentation, and (c) registration in `designs/default/index.js` *first*. That's a separate Phase J/K addition outside this variant slice.
-  - **Notifications (HTML § 08)** — same reason. No container, no default presentation, no registry key.
-  - **Portfolio (HTML § 05)** — `PortfolioScreen` (`src/screens/PortfolioScreen/`) has not been migrated to the design system (verdict in `DESIGN_COMPONENT_AUDIT.md` is open). Until it lands in default, no `screens.PortfolioScreen` key exists for the variant to override.
-- **Visual QA status**: ✅ **all 3 verified on Pixel_6_API35 emulator** (after freeing ~9 GB host disk by clearing `~/.npm` cache). OrderScreen renders the empty-state card with the alphanomy pill tabs + soft search bar; Plans tab (ModelPortfolioScreen) renders the gradient-fill active pill + 3 plan cards (Momentum Weekly with amber WEEKLY pill, Sanjana Premium with green SAVE 14% badge + strikethrough price + brand-blue current price, Recurring Growth) and gradient Subscribe Now CTAs; AccountSettingsScreen (reached via More tab) renders the gradient profile card + 3 sections (ACCOUNT / INSIGHTS / LEGAL) with cycling brand→purple→green→amber icon tiles and the danger-colored Log Out row, plus the "Alphanomy v2.4.1 · Build 241" footer.
-- **QA bypass cleanup**: re-enabled `QA_BYPASS_AUTH` + the SplashScreen bypass for visual capture, then reverted both before this commit. Verified `grep -n QA_BYPASS .env src/components/SplashScreen.js` returns 0 matches.
-- **Follow-up fix (same day) — AccountSettingsScreen back button + bell**: initial port omitted the top-bar header because the HTML mockup imagined Profile as a bottom-tab (no chrome needed). The actual app routes `AccountSettingsScreen` as `Stack.Screen name="More"` reached from the bottom-tab "More" listener (`Navigation.js:1205-1208`), so once you land on it the BottomTab bar disappears AND there's no back affordance — user is stuck unless they trigger the system back gesture. Added a minimal alphanomy-styled top bar above the gradient profile card: 36px back-chevron circle (wired to `actions.onGoBack`) + centered "Profile" title + 36px bell circle with notif dot (wired to `actions.onNavigateNotifications`). The bottom-tab visibility issue itself is unfixable from the design-system layer — it's a Navigation.js routing decision (Stack vs Tab); the variant can only theme what's inside the screen. Verified on device: back button navigates back to Home, where the BottomTab reappears.
-- **Follow-up fix (2026-05-05) — wire LoginScreen + SignupScreen taglines through ConfigContext**: replaced the alphanomy variant's hardcoded marketing copy ("Folios · Research", "Your Alpha, Engineered.", "Research-backed investment plans curated by SEBI-registered advisors.", "SEBI Registered" / "256-bit Encrypted" trust badges, "Create account", "Start investing smarter today.", "Join 50,000+ investors getting institutional-grade advice.") with backend-overridable taglines. The "50,000+ investors" claim is the compliance hazard that motivated this change — a tenant-fixed copy that may be inaccurate per-tenant; surfacing via backend lets compliance vary it. Wired the full client passthrough: `src/context/ConfigContext.js` reads `apiData.taglines` (additive, optional) and exposes `config.taglines` (`{login, signup}`); `src/screens/Authentication/LoginScreen.js` + `SignupScreen.js` containers spread `config?.taglines?.login/.signup` into `viewModel.taglines`; `designs/alphanomy/screens/LoginScreen.js` + `SignupScreen.js` consume with per-field fallback to `FALLBACK_TAGLINES` constants (the prior hardcoded copy, renamed). Trust badge `icon` strings (`check`/`shield`/`lock`/`award`/`sparkles`) map to lucide components via `TRUST_ICON_MAP` in LoginScreen — unknown keys fall back to `Check`. Created `docs/TENANT_TAGLINES.md` documenting the full backend schema (`appadvisors.taglines.{login,signup}`), per-tenant override semantics, compliance notes on quantitative claims, and remaining backend work (extend Mongoose model in `aq_backend_github/Models/`, expose in `/api/app-advisor/get`, build admin form in `support.alphaquark.in`). Backend has NOT yet shipped — every tenant currently sees the alphanomy hardcoded copy. On-device verified: with no backend value, LoginScreen renders identically to before (visual parity). The moment a tenant gets `appadvisors.taglines` populated, those values flow through automatically — no client code change needed.
-- **Follow-up fix (2026-05-05) — wire AccountSettingsScreen version label to live BuildConfig**: replaced the alphanomy variant's hardcoded `"Alphanomy v2.4.1 · Build 241"` footer with a live-derived string. Container `src/screens/Home/AccountSettingsScreen.js` now imports `react-native-device-info` (already a dep, used by `UpdateAppModal` and `LoginLoggingService`), reads `DeviceInfo.getVersion()` + `DeviceInfo.getBuildNumber()` (both sync from cached BuildConfig — no async wait), composes `appVersion = '${whiteLabelText} v${version} · Build ${build}'` using `Config.REACT_APP_WHITE_LABEL_TEXT`, and exposes it on `viewModel.appVersion`. Default presentation ignores the field (additive). Variant `designs/alphanomy/screens/AccountSettingsScreen.js` reads `viewModel.appVersion` with a `'Alphanomy'` fallback for test/preview environments where the container isn't supplying it. On-device verified: footer now reads "Alphanomy v1.0.0 · Build 1" — pulled from `android/app/build.gradle` (versionCode 1, versionName "1.0.0") + `.env` REACT_APP_WHITE_LABEL_TEXT=Alphanomy. When the version bumps in build.gradle and the APK is rebuilt, the label updates automatically.
-- **Follow-up fix (2026-05-05) — wire ModelPortfolioScreen SAMPLE_PLANS to live catalog**: replaced the alphanomy variant's hardcoded `SAMPLE_PLANS = { bespoke, mp }` arrays with live data from the MP container's existing `allStrategy` / `allBespoke` state. Extracted plan-shape helpers into `src/utils/alphanomyPlanShape.js` (~140 lines, pure functions: `resolvePrimaryPricing`, `formatINR`, `formatVolatility`, `formatCagr`, `formatMinInvest`, `shapeMpPlan`, `shapeBespokePlan`) so both `useHomePlanSummary` (top-1 case for HomeScreen) and the MP container (full lists for the Plans tab) use the same logic. Container `src/screens/Drawer/ModelPortfolioScreen.js` now memoizes `alphanomyPlans = { mp: allStrategy.map(shapeMpPlan), bespoke: allBespoke.map(shapeBespokePlan) }` and exposes it in `viewModel`. Default presentation ignores the field — additive only. Variant `designs/alphanomy/screens/ModelPortfolioScreen.js` reads `viewModel.alphanomyPlans` with `FALLBACK_PLANS` (the prior hardcoded values, renamed) as fallback when either array is empty (boot, no auth, no advisor config). PlanCard's flat-price branch updated to use `priceNow || price` so both shapes (MP uses `price + priceSuffix`, bespoke uses `priceNow`) render uniformly. `useHomePlanSummary` simplified to call the shared shapers. On-device verified: with no live auth the fallback list renders unchanged from before (visual parity — same 3 bespoke cards + 1 MP card). Removed ~22 hardcoded plan-data values from the live path.
-- **Follow-up fix (2026-05-05) — wire HomeScreen HEROIC_PLAN + BESPOKE_PLAN to live catalog**: replaced the alphanomy variant's hardcoded `HEROIC_PLAN` / `BESPOKE_PLAN` constants with live data from the MP and bespoke catalog endpoints. New file `src/screens/Home/hooks/useHomePlanSummary.js` (~190 lines) calls the same endpoints `src/screens/Drawer/ModelPortfolioScreen.js` already uses (`api/admin/plan/{advisorTag}/model portfolio/{userEmail}` + `.../bespoke/{userEmail}`) but stops at the top plan from each list — no need to render the full catalog from Home. Hook handles pricing-option resolution mirroring `MPCard.getPricingOptions` (preferring monthly → quarterly → half-yearly → yearly), volatility classification (number → Low/Medium/High), CAGR formatting, min-invest in lakh format, and bespoke discount detection (originalAmount vs current). Returns null entries when no auth / no advisor / empty catalog so callers fall back gracefully. Container `src/screens/Home/HomeScreen.js` calls hook with `{ userEmail, advisorTag, headerName }` from existing `configData`, exposes `heroPlan` + `bespokePlan` in the `home` prop bag. alphanomy `HomeScreen.js` reads `home.heroPlan` / `home.bespokePlan` with `FALLBACK_HERO` / `FALLBACK_BESPOKE` (the prior hardcoded values, renamed) as fallbacks. The bespoke save badge + strikethrough price now render conditionally (hidden when no discount). On-device verified: with no live auth the fallbacks render exactly as before (visual parity); when the user authenticates with a real Firebase session the live catalog data flows automatically — no further code changes needed. Removed ~15 hardcoded plan-data values from the live path.
-- **Follow-up fix (same day) — wire HomeScreen tickers + P&L hero to live data**: replaced the alphanomy variant's hardcoded `TICKERS` array and `₹0.00` P&L placeholders with live data from existing contexts. New file `src/screens/Home/hooks/useHomeMarketSummary.js` (~190 lines) reads `MarketDataContext` (LTPs for NIFTY 50 / SENSEX / BANKNIFTY via WebSocket subscription) + does a one-shot POST to `${ccxtServer}misc/indices-previous-close` for change indicators, and reads `MultiBrokerContext.aggregatedHoldings` to sum invested + currentValue → `pnlSummary = { currentPnl, invested, currentValue, returnsPct }`. Hook uses `useContext(...Context)` directly so it silently no-ops when no provider is mounted (still the case on the alphanomy fork — no `MarketDataProvider` / `MultiBrokerProvider` in `App.js` yet). Three containers updated to call the hook and surface results: `HomeScreen.js` (tickers + pnlSummary in `home`), `OrderScreen.js` (tickers in `viewModel`), `ModelPortfolioScreen.js` (tickers in `viewModel`). Three alphanomy presentations updated: `_AppHeader` consumes `tickers` prop with smart fallback (uses live data only when at least one row has a real LTP, otherwise SAMPLE_TICKERS so the strip never looks empty during WebSocket warmup); `HomeScreen` reads `home.pnlSummary` and renders P&L amount + invested + returns percent dynamically (positive/negative/zero arrows + bright-green / coral colors); `OrderScreen` and `ModelPortfolioScreen` pass `viewModel.tickers` through to `_AppHeader`. **Net effect today**: with no providers mounted, the values match the previous hardcoded display (FALLBACK_TICKERS + ₹0.00 from the empty `pnlSummary`) — visual parity. **Effect when providers are mounted**: tickers update in real time via WebSocket; P&L reflects connected brokers' aggregated holdings, no further code changes needed. Removed ~50 hardcoded sample-data values from the live path.
-- **Follow-up fix (same day) — suppress legacy `<CustomToolbar />` for non-default variants**: every Tab.Screen (Home / Orders / Portfolio / Plans) was wrapped by `<CustomToolbar />` in `MainTabNavigator` (`Navigation.js:357`) — the legacy dark-blue header with greeting + cart + bell + avatar + ticker strip ("Loading…" chips). For the alphanomy variant, which ships its own in-screen header via `_AppHeader`, this produced a visible duplicate-header look. Added a single-line guard in `MainTabNavigator`: `const showLegacyToolbar = !Config?.DESIGN_VARIANT || Config.DESIGN_VARIANT === 'default'`. The toolbar renders only when no design variant is set or the default variant is active, so existing tenants on default are unchanged. (Briefly tried making the More tab a real bottom-tab — replacing the `tabPress` listener with `component={AccountSettingsScreen}` — but the user preferred the original Stack-routed More + standalone Profile screen, so the routing change was reverted; only the toolbar gate stays.)
-
----
-
-## 2026-05-04 — `alphanomy` variant: + HomeScreen (design preview)
-
-- **Phase**: post-I (continuation of the alphanomy variant slice).
-- **Surfaces touched**:
-  - `designs/alphanomy/screens/HomeScreen.js` (new, ~610 lines) — variant override for `screens.HomeScreen`.
-  - `designs/alphanomy/index.js` — registered `screens.HomeScreen`.
-- **Verdict changes**: none — HomeScreen stays `migrated`; the variant adds a second presentation.
-- **What shipped**: a **design-preview** rendering of the alphanomy HomeScreen, matching alphanomy-improved.html § "04 · Home". Renders: header (gradient logo mark + greeting derived from `userEmail` + today's date + bell icon with notif dot + gradient avatar circle with email-derived initials), horizontal ticker strip (Nifty 50 / Sensex / BankNifty), P&L hero card (gradient with "Returns" badge), Model Portfolios section with one hero-style plan card (gradient bg, TOP 100 badge, price, freq pill, 3-up meta grid: Min Invest / Volatility / CAGR, View More + Subscribe buttons), Top Bespoke Plans section with one white plan card (Save 14% badge, original price strikethrough, current price in brand blue, gradient Subscribe Now CTA). Live data binding to the container's `allTabData` is **intentionally deferred** — the preview uses sample data matching the HTML mockup so the visual look can be approved before wiring real data. Two "View All" links toggle the container's existing overlay flags (`setSeeAllMPplan`, `setSeeAllBespokeplan`) so existing legacy lists still open.
-- **What's NOT in this slice**: the default presentation's overlay screens (seeAllBespoke, seeAllMP, seeAllBlogs, seeAllVideos, seeAllPDFs), modal renders (ethical list / video / blog / PDF), `allTabData` FlatList rendering, app-update modal. The alphanomy preview is a flat, non-FlatList render — when an overlay flag is set by the user (e.g. tapping View All), control passes back to the existing overlay UX which still renders via legacy paths the variant didn't override.
-- **Visual QA status**: NOT yet verified on emulator. Reaching HomeScreen requires Firebase auth (`auth().onAuthStateChanged()` gate in SplashScreen.js). adb's `input text` doesn't reliably reach React Native `TextInput`s, so manual signup-on-emulator is impractical. Options for QA documented in the chat: (a) human signs in with real creds, (b) add a temporary `QA_BYPASS_AUTH` env-gated bypass in SplashScreen, or (c) drive signup via uiautomator's `setText`.
-
----
-
-## 2026-05-04 — `alphanomy` variant: + SignupScreen
-
-- **Phase**: post-I (continuation of the alphanomy variant slice).
-- **Surfaces touched**:
-  - `designs/alphanomy/screens/SignupScreen.js` (new, ~330 lines) — variant override for `screens.SignupScreen`.
-  - `designs/alphanomy/index.js` — registered `screens.SignupScreen`.
-- **Verdict changes**: none — `SignupScreen` stays `migrated`; the variant adds a second presentation.
-- **What shipped**: SignupScreen presentation matching alphanomy-improved.html § "02 · Sign Up". Reuses the LoginScreen layout (gradient hero + overlapping white card) but with the gradient reversed (`GRADIENTS.brandReverse` = purple→blue) so signup reads visually distinct from sign-in. Drops the trust badges; adds Full Name input + Terms-of-Service checkbox row with linked "Terms of Service" / "Privacy Policy". CTA is gradient "Create Account" with `UserPlus` icon and disabled state when the terms checkbox is unchecked. viewModel/actions contract identical to default's, so the container is unchanged. Verified end-to-end on Pixel_6_API35 emulator: tapped Sign Up footer link from the alphanomy LoginScreen → navigated to alphanomy SignupScreen with all elements rendering as designed.
-- **Rebuild needed**: none beyond JS reload — variant overrides are JS-only changes once the variant is registered. Metro picked up the new screen on app restart.
-
----
-
-## 2026-05-04 — `alphanomy` variant: foundation + LoginScreen
-
-- **Phase**: post-I (new-variant work, not part of the default-variant phase plan).
-- **Surfaces touched**:
-  - `designs/alphanomy/tokens/index.js` (new, 264 lines) — full token bundle for the 2026 redesign.
-  - `designs/alphanomy/screens/LoginScreen.js` (new, ~430 lines) — variant override for `screens.LoginScreen`.
-  - `designs/alphanomy/index.js` (new, 27 lines) — variant root with one `components` entry.
-  - `designs/registry.js` — registered `alphanomy` variant alongside `default`.
-  - `.env` — added `DESIGN_VARIANT=alphanomy` (commented-out fallback documented in the line comment).
-- **Verdict changes**: none — `LoginScreen` stays `migrated` (Phase F batch 2 verdict unchanged); the variant adds a second presentation, doesn't alter the contract.
-- **What shipped**: thin slice to validate the new look. Tokens cover the alphanomy-improved.html palette (blue `#1246F0` → purple `#7C3AED` gradient, soft lavender-tinted surfaces `#F4F6FD` / `#EEF1FB` / `#E6EAFC`, ink `#0B1628` / muted `#8B96B0` text, `#00B37E` profit / `#E53935` loss). Typography intent is DM Sans + DM Mono; binding is Poppins (full weight set already shipped at `android/app/src/main/assets/fonts/`) until the DM Sans .ttf files are added — see header comment in `tokens/index.js`. LoginScreen presentation matches the HTML's hero-card layout: gradient top with three soft orbs, brand mark + tagline + trust badges, white card with 28px corners overlapping the gradient by 30px, soft-tinted form fields with focus highlight, gradient CTA with arrow icon, divider, Google button, optional Apple button, sign-up footer link. Reads tokens directly from `../tokens` (the v1 `useTokens()` hook is not yet variant-aware — see `tokens/index.js` header for the gap notes).
-- **Follow-up (same day)**: refactored `designs/alphanomy/tokens/index.js` from non-canonical `COLORS / TYPOGRAPHY / …` named exports to the canonical `DEFAULT_COLORS + buildColors`, `DEFAULT_TYPOGRAPHY + buildTypography`, etc. shape that `designs/default/tokens/index.js` exports. Every default-contract key tree is preserved (added missing `chart.series`, `emptyState.*`, `SHADOWS.elevated/floating`); variant extras (`SHADOWS.cta/xs`, `TYPOGRAPHY.display/overline/mono`, `RADII.xxl/sheet`, `SPACING.xxs/huge`, `GRADIENTS`) are additive. `buildColors` carries the same `applyLegacyBranding` + `colorTokens` deep-merge as `src/theme/colors.js` so backend advisor overrides keep working. LoginScreen import was aliased (`DEFAULT_COLORS as COLORS`, etc.) — no body changes required.
-- **Regressions / rollbacks**: none. Reverting to the default look = remove or comment out `DESIGN_VARIANT=alphanomy` in `.env`.
-- **Follow-up #2 (same day) — `useTokens()` is now variant-aware**: edited `src/theme/useTokens.js` to read the active variant's `build*` builders from `DesignContext.tokens` (via `useContext(DesignContext)` directly so the hook still works in test environments without a provider). Falls back to default builders when (a) the variant doesn't ship a particular builder or (b) the hook is called outside `<DesignProvider>`. Memoization deps now include `variantTokens` (referentially stable per provider lifetime). `useDesign().tokens` and `useColors()` docstrings updated to reflect the new resolution order. `docs/DESIGN_SYSTEM_ARCHITECTURE.md § Tokens` gained a new "useTokens() resolution" sub-section + a "When to update this doc" trigger row. **Effect**: every primitive / migrated screen / component using `useTokens()` now picks up the alphanomy palette automatically when `DESIGN_VARIANT=alphanomy`. Variant-owned screens that imported tokens directly (LoginScreen) still work — the direct-import pattern is preserved as the way to bypass `ConfigContext`'s legacy-branding overlay (useful pre-auth or for variant-locked screens).
-- **Implication for the Alphanomy fork**: `APP_VARIANT=alphaquark` + `DESIGN_VARIANT=alphanomy` means alphaquark's advisor record from backend will overlay its `mainColor / gradient1 / gradient2 / etc.` on top of the alphanomy variant's defaults via `applyLegacyBranding`. To see pure alphanomy colors across migrated screens, either clear those legacy fields on the alphaquark advisor, set `appadvisors.colorTokens` explicitly, or import variant tokens directly (LoginScreen pattern). LoginScreen is unaffected because it imports tokens directly.
-- **Regressions / rollbacks**: none. Reverting to the default look = remove or comment out `DESIGN_VARIANT=alphanomy` in `.env`. To revert (b) specifically, restore the prior `useTokens.js` (no `useContext(DesignContext)` import; direct default builders).
-- **Next**:
-  1. Visual QA on emulator/device (`DESIGN_VARIANT=alphanomy npx react-native start --reset-cache`). Verify hero overlap on LoginScreen, form focus states, button gradient. Then sweep migrated screens (Home/Order/MP) for any contrast/legibility regressions caused by the alphanomy palette overlaying default's spacing/typography across components that weren't designed for it.
-  2. If approved, port the remaining 8 screens from alphanomy-improved.html in order: SignupScreen → HomeScreen → PortfolioScreen (currently MPPerformanceScreen) → OrderScreen → AccountSettingsScreen (Profile) → Onboarding (new — needs container or env-gated route) → Plans (likely MPInvestNowModal) → Notifications (new — no container yet; deferred until a container exists).
-  3. Optional follow-up: also make `useColors()` variant-aware so color-only consumers pick up alphanomy without migrating to `useTokens()`. Same pattern (read from `DesignContext.tokens.buildColors`, fall back to default).
-
----
 >
 > Every commit that touches design-system surfaces gets an entry here. Same rule as Phase 3 — undocumented deltas block the next delta.
 
@@ -270,6 +16,71 @@
 - **Regressions / rollbacks**: anything that didn't go to plan
 - **Next**: what unblocks
 ```
+
+---
+
+## 2026-06-10 — `useTokens()` asset slot made variant-aware; brand logo extracted from shared src/
+
+- **Phase**: Tokens (closes the deferred "useTokens variant-awareness" follow-up noted on 2026-05-04 and in `SYNC.md`).
+- **Surfaces touched**: `src/theme/useTokens.js`, `src/components/BrandLogo.js`, `src/components/LogoSection.js`, `src/components/SplashScreen.js`; **deleted** `src/components/AlphanomyLogo.js`. (Same edits applied in both this repo and upstream `Alphab2bapp` — these `src/` files are now byte-identical.)
+- **Verdict changes**: `BrandLogo` / `LogoSection` / `SplashScreen`: hardcoded-`'alphanomy'`-branch → token-driven (clean). `AlphanomyLogo`: removed (was a tenant-brand leak in shared src/).
+- **What shipped**: `useTokens()` now resolves the `assets` slot from the active variant's `buildAssets` via `DesignContext` (`design.tokens.buildAssets`, from `resolveDesign`'s token-namespace merge), falling back to the default builder outside a provider. The three brand-logo consumers now read `useTokens().assets.logoPng` instead of branching on `DESIGN_VARIANT === 'alphanomy'`. The alphanomy mark is now the PNG at `designs/alphanomy/assets/logo.png` via `designs/alphanomy/tokens/assets.js`. Default-variant `logoPng` is the same `src/assets/logo.png` as before → no AlphaQuark visual change. Only `assets` was made variant-aware (colors/typography already vary via ConfigContext legacy-branding).
+- **Regressions / rollbacks**: none observed; all changed files babel-parse clean. Visual verification on the alphanomy emulator pending (logo should now render the finalized PNG on splash, login, plan card, and the faded watermark on RebalanceCard/BasketCard).
+- **Next**: optionally make the remaining token families (colors/typography) consume the variant builder via the same `DesignContext` path, for variants that don't fully express their palette through ConfigContext legacy fields.
+
+## 2026-05-09 — Whitelabel Phase 3: variant-overlay model formalized (docs-only)
+
+- **Phase**: meta — codifies the upstream-default + per-tenant fork-repo pattern.
+- **Surfaces touched**:
+  - `docs/WHITELABEL_RECIPE.md` (NEW) — canonical playbook. Covers what stays upstream vs in the fork, the native shell delta, the conventional `designs/registry.js` 2-line merge-conflict strategy (chosen over a `registry.local.js` extension point and over npm-package variants — rationale documented), the step-by-step "add a new whitelabel" procedure, the upstream sync workflow, and a `SYNC.md` template each fork ships.
+  - `docs/DESIGN_SYSTEM_ARCHITECTURE.md` — new "Where variant folders live — upstream-default + per-tenant fork repos" subsection under § Variant selection. Documents the conventional merge-conflict registry strategy with reasons. Asserts: a fork that edits any `src/` file is drift, not customization.
+  - `docs/DESIGN_COMPONENT_AUDIT.md` — added a scope note at the top: this audit covers upstream `designs/default/` only; per-fork audits live in fork repos. Upstream's job is the container-side viewModel + actions contract; widening verdicts (e.g. `clean-extract` → `needs-logic-extraction`) is the upstream side of a fork's override needing more data.
+  - `docs/CHANGELOG.md` — entry 13.
+  - (NOT done in this commit, intentionally) `CLAUDE.md` pointer — the recipe doc is referenced from arch + audit + this log; no need to add it to the top-level blocking-doc list yet because there's no _ongoing_ surface change rule attached to it. If WHITELABEL_RECIPE.md grows surfaces that need same-commit doc updates (similar to Phase 3 / SDK orchestration), revisit then.
+- **Verdict changes**: none — Phase 3 is docs-only.
+- **What shipped**: a written contract for whitelabeling. Anyone bootstrapping a new tenant fork can now follow `WHITELABEL_RECIPE.md` step-by-step. Anyone editing this repo knows what's the upstream's responsibility (the contract, the default variant, the infrastructure) vs the fork's responsibility (the variant folder, the native shell, the `.env`, the registry patch). The Alphanomy fork — which today still carries `src/assets/*` overwrites and lacks a `SYNC.md` — gets cleaned up in a separate session against that repo.
+- **Why a 2-line merge conflict on `designs/registry.js` instead of a `registry.local.js` extension point**: predictable, no infrastructure, no Metro-bundler dependency on conditional-require behavior, no "is the variant in the bundle or not" silent footgun. The conflict resolution is mechanical (keep both upstream's default and the fork's variant lines). The trade-off is real but small.
+- **Backend / ccxt**: no changes.
+- **Behavior change in app**: zero. Docs-only.
+- **Validation**: docs cross-link cleanly (CHANGELOG → arch + audit + recipe; recipe → arch + audit + progress + CLAUDE; arch + audit reference the recipe).
+- **Next**: cleanup pass against the Alphanomy fork repo (separate session): rebase fork onto upstream so it picks up Phase 1 + 2 + 3, revert its `src/assets/*` overwrites, add `designs/alphanomy/tokens/assets.js` pointing at `designs/alphanomy/assets/*` for its own logos, add a `SYNC.md`, and verify `designs/alphanomy/index.js` still resolves cleanly through the inherited registry shape.
+
+---
+
+## 2026-05-09 — Whitelabel Phase 2: logo asset-token slot (default-only)
+
+- **Phase**: A-extension (token bundle gains an `assets` family — same shape as `colors` / `spacing` / `typography` / `radii` / `shadows`)
+- **Surfaces touched**:
+  - `src/theme/assets.js` (NEW) — `DEFAULT_ASSETS = { logoPng, logoFadedPng }` + `buildAssets(config)` (config arg ignored, kept for builder symmetry).
+  - `src/theme/useTokens.js` — `useTokens()` now exposes `.assets`. Memo deps include `config.assetTokens` for future-symmetry (the field doesn't exist on `ConfigContext` today; resolution falls to defaults).
+  - `designs/default/tokens/index.js` — re-exports `DEFAULT_ASSETS` + `buildAssets`.
+  - `designs/default/screens/LoginScreen.js` — module-scope `const AlphaQuarkLogo = require(...)` removed; `renderLogo()` now takes `defaultLogo` as a third arg, fed by `tokens.assets.logoPng`.
+  - `designs/default/screens/SignupScreen.js` — same pattern.
+  - `designs/default/screens/ResetPassword.js` — same pattern.
+  - `designs/default/screens/ChangeAdvisor.js` — module-scope `const logo = require(...)` removed; component reads `tokens.assets.logoFadedPng` directly.
+  - `designs/default/composites/BasketCard.js` — top-level `import logo from ...` removed; component reads `tokens.assets.logoFadedPng` directly.
+- **Verdict changes**: new Section 7c in `DESIGN_COMPONENT_AUDIT.md` enumerates the asset slots and per-consumer status. No screen verdicts flipped.
+- **What shipped**: A variant overlay repo can now ship `designs/<variant>/tokens/assets.js` re-exporting `DEFAULT_ASSETS` with the variant's own logo paths, and the 5 design-side logo consumers above will pick up the variant's logo without any further code change. Closes the Phase 2 leak Alphanomy ran into when it overwrote `src/assets/AppLogo/logo.png`, `src/assets/logo.png`, and `src/assets/fadedlogo.png` directly — both repos can keep their own brand without stomping each other's shared files.
+- **Why these 5 consumers, not all 12 logo callsites**: `src/`-side consumers (SplashScreen, PlanCard, RebalanceCard, Config.js, ConfigContext.js) sit outside the variant-resolution surface. SplashScreen renders before providers; PlanCard and RebalanceCard already theme via `configData.logo` from `ConfigContext` (a parallel theming path that predates the design system). Migrating those without first splitting them into container + presentation would either crash (SplashScreen pre-providers) or redundantly theme (PlanCard / RebalanceCard already config-driven). Out of Phase 2 scope.
+- **Backend / ccxt**: no changes.
+- **Behavior change in app**: zero for default variant. A custom variant overlay gains the ability to swap the two logos without overwriting shared `src/assets/*` files.
+- **Validation**: grep confirms zero remaining direct logo imports in `designs/`. Default variant's `tokens.assets.logoPng` resolves to the same `src/assets/logo.png` that the old module-scope require did — byte-identical render output.
+- **Next**: Phase 3 — formalize the variant-overlay pattern in `docs/WHITELABEL_RECIPE.md`, document the conventional merge-conflict registry strategy in `DESIGN_SYSTEM_ARCHITECTURE.md`, and update audit docs to reflect that variant folders live in overlay repos, not upstream.
+
+---
+
+## 2026-05-09 — Whitelabel Phase 1: Navigation.js Plans-tab wrapper hoist
+
+- **Phase**: G-adjacent (Navigation surface is `clean-extract`-eligible plumbing, not a screen migration)
+- **Surfaces touched**:
+  - `src/components/Navigation.js` — hoisted `PlansTabWrapper` (`() => <ModelPortfolioScreen type="tab" />`) to module scope. The Plans `<Tab.Screen>` now passes `component={PlansTabWrapper}` instead of an inline render-prop child. Pure cleanup.
+- **Verdict changes**: `src/components/Navigation.js` is unaffected by the design-system migration scope (it's a navigator, not a UI surface), but the wrapper hoist is a generic perf cleanup that any variant benefits from.
+- **What shipped**: Inline render functions on `<Tab.Screen>` create a fresh component identity on every parent render → React Navigation remounts the nested screen tree every time. Hoisting to module scope makes the reference stable. Zero behavior change.
+- **Origin**: cherry-picked from the Alphanomy fork's `feature/prince` (commit `f30695a`). The other four pieces of Alphanomy's Phase 1 plumbing changes (HomeScreen viewModel enrichment, useHomePlanSummary raw exports, useHomeMarketSummary debug silencing, ModelPortfolioScreen tab-switch fix) all sit on top of a *prior* hook-extraction refactor (`src/screens/Home/hooks/useHomeMarketSummary.js`, `useHomePlanSummary.js`, `useNotificationFeed.js`) that exists only in Alphanomy. Those changes are deliberately deferred — backporting them without the hook extraction base is meaningless.
+- **Whitelabel context**: This is the first commit of the whitelabel-sync work. The model is: upstream (this repo) ships the `default` variant + design-system infrastructure only; each whitelabel (Alphanomy, future variants) lives in a fork repo containing its own `designs/<variant>/` folder + native shell. The pattern is being formalized in Phase 3 of the sync work; see `docs/WHITELABEL_RECIPE.md` (TBD).
+- **Validation**: change is a 5-line transformation; render-stable Tab.Screen `component` prop is a documented React Navigation idiom.
+- **Behavior change in app**: zero for default variant; eliminates a Plans-tab remount on every MainTabNavigator parent render.
+- **Next**: Phase 2 — logo asset-token slot in `designs/default/tokens/assets.js`. Phase 3 — formalize the variant-overlay pattern in `WHITELABEL_RECIPE.md` and update arch docs.
 
 ---
 

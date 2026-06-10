@@ -9,9 +9,9 @@ you're new here.
 
 - **Repo**: `https://github.com/.../Alphab2bapp` (local clone at
   `/home/pk/Alphaquark_docs/AlphaQuark/codes/github/Alphab2bapp`)
-- **Tracked branch**: `feature/ios2.6`
-- **Last sync attempt**: 2026-05-13 — content port (not git merge), see
-  § "Sync history" below.
+- **Tracked branch**: `feature/sdk-plus-config_forkv2`
+- **Last sync attempt**: 2026-06-10 — full `src/` + new-features content
+  port (not git merge), see § "Sync history" below.
 
 ## ⚠️ This fork has unrelated git history with upstream
 
@@ -47,36 +47,38 @@ Per the recipe contract, an overlay should contain:
 6. `.env` with `DESIGN_VARIANT=alphanomy` (or equivalent).
 7. This `SYNC.md`.
 
-## Known gap — `useTokens()` is not yet variant-aware upstream
+## ✅ CLOSED 2026-06-10 — `useTokens()` is now variant-aware (asset slot)
 
-`src/theme/useTokens.js` (upstream) imports the default builders directly.
-It does **NOT** consume the variant's `tokens.buildAssets` even when
-`DESIGN_VARIANT=alphanomy`. This means:
+**Previously** `src/theme/useTokens.js` imported the default `buildAssets`
+directly, so `useTokens().assets.*` always returned the AlphaQuark logos
+even under `DESIGN_VARIANT=alphanomy`. The fork worked around this with a
+hardcoded `if (variant === 'alphanomy')` branch + a JS-drawn `AlphanomyLogo`
+component living in shared `src/` (`BrandLogo`, `LogoSection`, `SplashScreen`).
 
-| Surface | Renders correctly when DESIGN_VARIANT=alphanomy? |
-|---|---|
-| `designs/alphanomy/screens/*` (variant overrides — Login, Signup, Home, etc.) | YES — they're the variant's own screens. |
-| `designs/default/composites/BasketCard.js` (falls through if not overridden) | NO — calls upstream's `useTokens().assets.logoFadedPng` which returns the AlphaQuark logo, not Alphanomy. |
-| `designs/default/screens/ChangeAdvisor.js` (default fall-through) | NO — same reason. |
-| `src/components/SplashScreen.js` (renders pre-providers) | NO — direct require of `src/assets/logo.png` which was reverted to AlphaQuark. |
-| `src/components/HomeScreenComponents/PlanCard.js` | NO — direct require of `src/assets/logo.png`. |
-| `src/UIComponents/RebalanceAdvicesUI/RebalanceCard.js` | NO — direct require of `src/assets/fadedlogo.png`. |
-| `src/utils/Config.js` (`SharedDefaultLogo` / `AlphaQuarkLogo`) feeding `configData.logo` | NO — direct imports. |
+**Fixed upstream (and ported here) on 2026-06-10:** `useTokens()` now reads
+the active variant's `buildAssets` via `DesignContext`
+(`design.tokens.buildAssets`, resolved by `resolveDesign`'s token-namespace
+merge), falling back to the default builder when outside a `DesignProvider`.
+Consequences:
 
-**The proper fix is upstream**: make `useTokens()` consume variant tokens
-via the `DesignProvider` instead of importing default builders directly.
-Until then, the alphanomy variant's runtime appearance will be a mix of
-alphanomy-branded surfaces (variant-overridden screens) and AlphaQuark-
-branded surfaces (default fall-through, plus the variant-blind `src/`-side
-consumers above).
+- `BrandLogo`, `LogoSection`, `SplashScreen` are now **generic** — they read
+  `useTokens().assets.logoPng` and have **no hardcoded `'alphanomy'` branch**.
+- The JS-drawn `src/components/AlphanomyLogo.js` was **deleted from both
+  this fork and upstream** (it was a tenant-brand leak in the default repo).
+- The alphanomy brand mark is now the finalized PNG at
+  `designs/alphanomy/assets/logo.png`, surfaced through
+  `designs/alphanomy/tokens/assets.js` → `useTokens().assets.logoPng`.
+- Default-fall-through surfaces (BasketCard, ChangeAdvisor) and the former
+  variant-blind `src/` consumers (PlanCard, RebalanceCard) now render the
+  **correct per-variant** logo automatically.
 
-This is a known and accepted regression of the 2026-05-09 cleanup compared
-to the previous state, where the fork worked around the gap by overwriting
-shared `src/assets/*` files. That workaround was the leak — it broke the
-default variant's appearance for anyone running `DESIGN_VARIANT=default` in
-this repo. The cleanup trades a partial visual mix for a clean separation
-that's ready to flip to fully variant-aware once upstream fixes
-`useTokens()`.
+Only `assets` was made variant-aware; colors/typography/spacing already vary
+per-tenant via ConfigContext legacy-branding (the alphanomy `appVariants`
+entry sets `mainColor`/`gradient1`/etc.), so they needed no change.
+
+The fork carries **no** `AlphanomyLogo`/`BrandLogo` `src/` divergence anymore
+— those files are byte-identical to upstream. The only fork-specific value is
+`googleIosClientId` + the brand PNGs under `designs/alphanomy/`.
 
 ## Always-tracked files that aren't obvious
 
@@ -153,6 +155,52 @@ from `WHITELABEL_RECIPE.md` works as designed. The 2-line conflict on
 merge.
 
 ## Sync history
+
+### 2026-06-10 — Full src/ + new-features sync from feature/sdk-plus-config_forkv2 (content port)
+
+Largest sync since the fork's seed. Both sides had diverged since the
+2026-05-13 byte-identical baseline (`10e39c9`): upstream gained ~50 commits
+(Courses/Webinars, Cashfree, coupon/RIA-billing, plan/draft fixes, two new
+brokers, the recent `fix(plans|courses|payment|rebalance|auth)` series) while
+Alphanomy gained its own `src/` edits (iOS shadows, HomeScreen ANR fix,
+backend-version UpdateAppModal, reanimated downgrade, branding). So this was a
+true 3-way reconciliation, not a copy.
+
+**Method.** Classified every differing `src/` file via
+`git diff --name-only 10e39c9..HEAD -- src/`:
+
+- **32 "take-upstream" files** (Alphanomy never touched since baseline) →
+  copied verbatim from upstream.
+- **24 "both-changed" files** → `git merge-file` 3-way merge with
+  base = `10e39c9:<path>`, ours = Alphanomy HEAD, theirs = upstream HEAD.
+  **All 24 merged conflict-free** (Alphanomy edits and upstream edits hit
+  disjoint line regions). Verified each merged output kept the Alphanomy
+  edit (vs upstream) AND pulled the upstream delta (vs current Alphanomy).
+- **28 new files** copied verbatim (Courses/Webinars screens + services +
+  `utils/nba/*` + Arihant/DefinEdge brokers + new shared utils). The
+  new Courses/Webinar routes arrived wired through the `Navigation.js`
+  merge (drawer items + Stack screens).
+
+**Files deliberately KEPT as Alphanomy's (upstream NOT applied):**
+
+| File | Why kept |
+|---|---|
+| `App.js` | Module-hoisted `SdkOn`/`CustomStatusBar` + `MarketDataProvider` + inline `sdkOn` JSX — the documented fix for upstream's inline-`SdkRootWrapper` remount bug (wiped TextInput state). Upstream had nothing Alphanomy lacked. |
+| `index.js` | Classic-bridge setup; New Arch is off here, so the RCTEventEmitter no-op shim (and its `receiveTouches` tap-swallowing bug) stays removed. |
+| `package.json` | `react-native-reanimated@3.19.5` (intentional downgrade vs upstream `4.1.0`); upstream's `react-native-worklets` NOT added (reanimated-4 only). New feature files introduced no new direct deps (`lodash.debounce` already transitively installed, as upstream). |
+| `metro.config.js` | SDK path `../alphaquark-mobile-sdk` (parent uses `../../` — different repo depth). |
+| `app.json` | Alphanomy brand `name`/`displayName`. |
+| `.env` | No new vars — new features read config from backend `appadvisors` + `serverConfig`. |
+| `designs/`, native shell, brand assets | Out of sync scope by contract. |
+
+**Docs.** 13 architecture docs 3-way-merged (clean); `CHANGELOG.md` kept
+Alphanomy's with a new 2026-06-10 entry prepended; brought
+`COURSES_WEBINARS_MOBILE_PORTING.md` + `LIVE_CLASS_INTEGRATION.md`;
+`TENANT_TAGLINES.md` (Alphanomy-only) preserved; upstream's gitignored
+`CLAUDE_NAV.md` and scratch `SCOPE_*`/spike docs intentionally skipped.
+
+**Post-sync `src/` state:** the only files differing from upstream are the
+24 carrying intentional Alphanomy edits. No stray conflict markers anywhere.
 
 ### 2026-05-13 — Full src/ sync from feature/ios2.6 (content port)
 
