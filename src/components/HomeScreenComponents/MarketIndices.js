@@ -137,7 +137,15 @@ const MarketIndices = () => {
           });
 
           if (Object.keys(previousClosePrices).length > 0) {
-            setBasePrices(previousClosePrices);
+            // MERGE, don't replace. This effect re-runs whenever `configData`
+            // changes, re-fetching prev-close. If a re-fetch intermittently
+            // omits a symbol (the endpoint occasionally returns NIFTY missing),
+            // replacing the whole object would DROP that symbol's already-known
+            // base → the tick callback falls into the else-branch
+            // (basePrice = live value) → change flickers to 0.00 while the
+            // price stays correct. Merging preserves every known base.
+            // (Observed on NIFTY, 2026-06-10.)
+            setBasePrices(prev => ({ ...prev, ...previousClosePrices }));
             setComparisonType("prevClose");
             setHasInitializedBasePrices(true);
           } else {
@@ -215,12 +223,37 @@ const MarketIndices = () => {
                 const currentData = prev[key];
                 const newPrice = parseFloat(ltp);
 
-                let basePrice;
                 const currentComparisonType = comparisonTypeRef.current;
                 const currentBasePrices = basePricesRef.current;
 
-                if (currentComparisonType === "prevClose" && currentBasePrices[key]) {
+                // In prevClose mode the change MUST be measured against the
+                // fetched prev_close. If this key's base is transiently
+                // unavailable, do NOT fall through to `basePrice = live value`
+                // (that renders a bogus 0.00 change while the price is still
+                // correct — the NIFTY flicker). Update the price, keep the
+                // last good change, and wait for the base to arrive.
+                if (currentComparisonType === "prevClose" && !currentBasePrices[key]) {
+                  if (newPrice !== currentData.value) {
+                    return {
+                      ...prev,
+                      [key]: { ...currentData, value: newPrice, loading: false },
+                    };
+                  }
+                  return prev;
+                }
+
+                let basePrice;
+                if (currentComparisonType === "prevClose") {
                   basePrice = currentBasePrices[key];
+                  // Spurious-echo guard: a live LTP virtually never lands
+                  // EXACTLY on prev_close to full float precision. When a tick
+                  // does, it's almost always a server auto_sync snapshot
+                  // echoing prev_close (common after market hours / between
+                  // real ticks) — it flashes change=0.00 then recovers on the
+                  // next real frame. Ignore it; keep the last good reading.
+                  if (newPrice === basePrice) {
+                    return prev;
+                  }
                 } else if (currentComparisonType === "opening") {
                   if (!currentBasePrices[key]) {
                     setBasePrices(prevBases => ({
