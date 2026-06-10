@@ -181,17 +181,19 @@ const SectionHeader = ({ label }) => (
 const NotificationListScreen = ({ viewModel, actions }) => {
     const containerItems = viewModel?.notifications;
     const isLoading = !!viewModel?.isLoading;
-    // Show the design-mockup fallback only on the very first paint when the
-    // container is empty AND not actively loading. Once a real fetch is in
-    // flight (or a refresh has resolved with zero rows) the empty state is
-    // honest about the user having no notifications. Memoized so the
-    // groupBySection useMemo below has a stable input across renders.
+    // Demo mock rows (FALLBACK_ITEMS: "Sanjana / Maharashtra Day …") are for
+    // the DESIGN PREVIEW ONLY — shown only when there is no container wiring
+    // at all (Storybook / standalone render), detected by the container not
+    // supplying a `notifications` ARRAY. In the real app the container
+    // (`src/components/NotificationListScreen.js` via `useNotificationFeed`)
+    // ALWAYS passes an array — possibly empty — so an empty feed renders the
+    // honest "No notifications yet" empty state below, NEVER the fake mock
+    // rows. (Previously `|| length === 0` made a real, empty/un-normalized
+    // feed show the demo data — the "stale notifications" bug.)
     const items = useMemo(() => {
-        const isContainerEmpty =
-            !Array.isArray(containerItems) || containerItems.length === 0;
-        if (isContainerEmpty && !isLoading) {return FALLBACK_ITEMS;}
-        return containerItems || [];
-    }, [containerItems, isLoading]);
+        if (!Array.isArray(containerItems)) {return FALLBACK_ITEMS;}
+        return containerItems;
+    }, [containerItems]);
     const isShowingFallback = items === FALLBACK_ITEMS;
 
     const onBack = actions?.onBack || (() => {});
@@ -273,6 +275,19 @@ const NotificationListScreen = ({ viewModel, actions }) => {
                         {gi < groups.length - 1 ? <View style={styles.gap} /> : null}
                     </View>
                 ))}
+
+                {/* Honest empty state — a real, fetched feed with zero rows.
+                    (Never the demo mock rows: those only render in design
+                    preview when no container array is supplied.) */}
+                {!isLoading && items.length === 0 ? (
+                    <View style={styles.emptyWrap}>
+                        <Text style={styles.emptyTitle}>No notifications yet</Text>
+                        <Text style={styles.emptySub}>
+                            Order executions, advisory alerts and reminders will
+                            show up here.
+                        </Text>
+                    </View>
+                ) : null}
             </ScrollView>
         </SafeAreaView>
     );
@@ -312,6 +327,25 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingVertical: SPACING.md + 4,
         backgroundColor: COLORS.surface.base,
+    },
+
+    emptyWrap: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingTop: SPACING.xxl * 2,
+        paddingHorizontal: SPACING.xl,
+    },
+    emptyTitle: {
+        ...TYPOGRAPHY.subtitle,
+        color: COLORS.text.primary,
+        fontWeight: '700',
+        marginBottom: 6,
+    },
+    emptySub: {
+        ...TYPOGRAPHY.body,
+        color: COLORS.text.muted,
+        textAlign: 'center',
+        lineHeight: 18,
     },
 
     sectionHeader: {
