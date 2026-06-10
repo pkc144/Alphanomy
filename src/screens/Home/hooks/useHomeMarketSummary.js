@@ -27,7 +27,7 @@
  * arrays / zero values. Consumers fall back to design-preview placeholders.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { useTrade } from '../../TradeContext';
 import server from '../../../utils/serverConfig';
@@ -129,60 +129,36 @@ export default function useHomeMarketSummary() {
     //                 no change indicator at all.
     const [comparisonType, setComparisonType] = useState('prevClose');
     const [openingPrices, setOpeningPrices] = useState({});
-    // Per-index lock: the FIRST alias that delivers data for a canonical
-    // symbol wins; ticks from every other alias for that index are ignored.
-    // The server can emit MULTIPLE aliases for the same index (NIFTY publishes
-    // both "NIFTY" and "NIFTY 50") with different / stale values; collapsing
-    // them all onto ltps[canonical] made the value flip-flop, so the change
-    // flashed to 0.00 (when the stale alias == prev_close) then recovered —
-    // the NIFTY flicker. Mirrors the single-active-symbol gate that
-    // MarketIndices.js adopted in commit e443fdd. canonicalSymbol -> alias.
-    const wonSourceRef = useRef({});
 
-    // Subscribe + listen via WebSocketManager. Each index is registered
-    // with both its primary symbol and its alts so the LTP arrives
-    // regardless of which name the server emits. Mirrors the legacy
-    // `<MarketIndices>` flow:
-    //   - DO NOT call `WebSocketManager.initialize(...)` — that overwrites
-    //     the singleton's `configData` / `userEmail` and breaks every
-    //     other subscriber. `websocketInitializer.js` owns the lifecycle.
-    //   - Subscribe to every (primary + alt) symbol pair eagerly. The
-    //     server emits whichever name it knows; we accept all of them and
-    //     normalize back to the canonical symbol.
+    // Subscribe + listen via WebSocketManager. Subscribe to the PRIMARY
+    // symbol ONLY — exactly like the legacy `<MarketIndices>` (which uses
+    // alternativeSymbols: [] and renders the correct live values on every
+    // other screen). Subscribing to the alts too and collapsing them onto one
+    // canonical key was the bug: the server publishes both "NIFTY" and
+    // "NIFTY 50", and "NIFTY 50" carried a STALE snapshot value with no live
+    // ticks — so the home header locked onto / flip-flopped to 23,242.1 while
+    // the live "NIFTY" stream (and every other screen) read 23,215.0, and the
+    // stale value's change rounded to 0.00 (then got suppressed → blank).
+    // The primary symbol is the reliably-live stream for all three indices.
+    //   - DO NOT call `WebSocketManager.initialize(...)` — that overwrites the
+    //     singleton's configData/userEmail and breaks every other subscriber.
+    //     `websocketInitializer.js` owns the lifecycle.
     useEffect(() => {
         if (!configData) return undefined;
         const ws = WebSocketManager.getInstance();
         if (!ws) return undefined;
 
-        const pairs = [];
         INDICES.forEach((cfg) => {
-            pairs.push({ canonicalSymbol: cfg.symbol, name: cfg.symbol, exchange: cfg.exchange });
-            cfg.alts.forEach((alt) =>
-                pairs.push({ canonicalSymbol: cfg.symbol, name: alt, exchange: cfg.exchange }),
-            );
-        });
-
-        pairs.forEach(({ canonicalSymbol, name, exchange }) => {
             const cb = ({ ltp }) => {
                 const num = Number(ltp);
                 if (!Number.isFinite(num) || num <= 0) return;
-                // Lock the canonical index to the first alias that delivers.
-                // Primary symbols are subscribed before their alts (see
-                // `pairs` build order), and WebSocketManager replays the
-                // cached LTP synchronously on subscribe, so the primary wins
-                // by default; a stale second alias ("NIFTY 50") can no longer
-                // overwrite the live value and flicker the change to 0.00.
-                if (!wonSourceRef.current[canonicalSymbol]) {
-                    wonSourceRef.current[canonicalSymbol] = name;
-                }
-                if (wonSourceRef.current[canonicalSymbol] !== name) return;
                 setLtps((prev) =>
-                    prev[canonicalSymbol] === num
+                    prev[cfg.symbol] === num
                         ? prev
-                        : { ...prev, [canonicalSymbol]: num },
+                        : { ...prev, [cfg.symbol]: num },
                 );
             };
-            ws.subscribe(name, exchange, cb);
+            ws.subscribe(cfg.symbol, cfg.exchange, cb);
         });
         // WebSocketManager doesn't expose a per-callback unsubscribe API —
         // the legacy MarketIndices accepts the leak too. The closures are
