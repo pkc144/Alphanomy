@@ -3,7 +3,7 @@
 > **Status:** Spec / pre-implementation. Phase A (architectural alignment) precedes this doc; Phase B (this doc) starts after Phase A lands and is dual-write-soaked.
 > **Created:** 2026-05-01
 > **Owner:** pratik@alphaquark.in
-> **Related:** `docs/PHASE3_ARCHITECTURE.md` (broker-connect SDK migration — same pattern), `docs/APP_ARCHITECTURE.md`, `docs/MODEL_PORTFOLIO.md`, `docs/REBALANCING.md`
+> **Related:** `docs/PHASE3_ARCHITECTURE.md` (broker-connect SDK migration — same pattern), `docs/APP_ARCHITECTURE.md`, `docs/MODEL_PORTFOLIO_ARCHITECTURE.md` (canonical MP doc; `docs/MODEL_PORTFOLIO.md` is now a pointer stub as of 2026-05-11), `docs/REBALANCING.md`
 
 ---
 

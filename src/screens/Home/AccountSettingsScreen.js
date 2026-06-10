@@ -19,6 +19,8 @@ import {
     Tags,
     LogOut,
     Bookmark,
+    BookOpen,
+    Video,
 } from 'lucide-react-native';
 import { getAuth } from '@react-native-firebase/auth';
 import DeviceInfo from 'react-native-device-info';
@@ -114,6 +116,32 @@ const AccountSettingsScreen = ({ navigation }) => {
                     label: 'Knowledge Hub',
                     onPress: () => handleMenuPress('KnowledgeHub'),
                 },
+                // Courses + Webinars surfaced here (under Insights) because
+                // the legacy right-drawer (Navigation.js:1040) has
+                // swipeEnabled:false and no openDrawer caller anywhere in
+                // src/, so the drawer entries added in commit bf33977 are
+                // unreachable. Account Settings is the existing
+                // bottom-tab-reachable home for ancillary navigation.
+                // Same coursesEnabled / webinarsEnabled gating as the
+                // drawer rows (Navigation.js:893-917).
+                ...(config?.coursesEnabled
+                    ? [
+                        {
+                            icon: BookOpen,
+                            label: 'Courses',
+                            onPress: () => handleMenuPress('MyCourses'),
+                        },
+                    ]
+                    : []),
+                ...(config?.webinarsEnabled
+                    ? [
+                        {
+                            icon: Video,
+                            label: 'Webinars',
+                            onPress: () => handleMenuPress('WebinarsList'),
+                        },
+                    ]
+                    : []),
             ],
         },
         {

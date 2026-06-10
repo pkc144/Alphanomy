@@ -140,7 +140,9 @@ const ModelPortfolioScreen = ({type = '', onDataLoaded}) => {
           },
         },
       );
-      setAllBespoke(response.data.data);
+      // Hide draft (unpublished) plans — matches web parity.
+      const published = (response.data.data || []).filter(plan => !plan?.draft);
+      setAllBespoke(published);
     } catch (error) {
       console.error('Error fetching bespoke:', error);
     } finally {
@@ -164,7 +166,9 @@ const ModelPortfolioScreen = ({type = '', onDataLoaded}) => {
           },
         },
       );
-      setAllStrategy(response.data.data);
+      // Hide draft (unpublished) plans — matches web parity.
+      const published = (response.data.data || []).filter(plan => !plan?.draft);
+      setAllStrategy(published);
     } catch (error) {
       console.error('Error fetching strategy:', error);
     } finally {

@@ -3,6 +3,8 @@
 > **Per-surface inventory + verdict matrix for the design-system migration.** Companion to `DESIGN_SYSTEM_ARCHITECTURE.md` (the design source of truth) and `DESIGN_MIGRATION_PROGRESS.md` (the chronological work log). Mirrors `PHASE3_BROKER_AUDIT.md` in spirit.
 >
 > **The migration order is derived from this table, not the other way around.** A row only moves to "in-flight" or "done" after its verdict is locked here. Don't migrate without a row.
+>
+> **Scope: this audit covers upstream `designs/default/` only.** As of Phase 3 of the whitelabel-sync work (2026-05-09), variant folders for non-default tenants live in per-tenant fork repos (Alphanomy, Zamzam, RGX, etc.), not upstream — so their per-surface verdict tables live in the fork repo's own audit doc, if any. Upstream's job is to ensure the **container-side viewModel + actions contract** is rich enough that any variant override can render the screen it needs. If a fork's variant override needs data the upstream container doesn't currently expose, that's an upstream change first (typically a row's verdict moves from `clean-extract` → `needs-logic-extraction` to widen the viewModel), then the fork's override consumes it. See `WHITELABEL_RECIPE.md`.
 
 ## How to read this doc
 
@@ -176,56 +178,29 @@ ViewModel sketches captured in the audit-task pass (2026-05-01). The `viewModel`
 - **Proposed actions:** `switchTab(id)`, `openSearch` / `closeSearch` / `updateSearchQuery` / `selectSearchSuggestion` / `addToWatchlist`, `deleteStock` / `confirmDeleteStock` / `cancelDeleteStock`, `moveStock(from, to)` / `editStockTab` / `confirmEditStock`, `goBack`, `toggleFullScreen`, `dismissAlert` / `dismissToast`.
 - **Risks:** AsyncStorage persistence in two `useEffect` blocks — container owns. WebSocket subscription is via `WebSocketManager` singleton (shared service) — read-only `useLTPStore` hook in `WatchlistRow` is safe to keep in presentation. Symbol search axios stays in container. Toast feedback is scattered — unify into one `{ message, type, visible }` state.
 
-### PortfolioScreen ✅ Migrated (Phase J, 2026-05-06)
+### PortfolioScreen
 
-- **File:** `src/screens/PortfolioScreen/PortfolioScreen.js` (now ~1.5k lines, was ~2.4k pre-extraction).
-- **Verdict:** `needs-logic-extraction` → ✅ migrated (default + alphanomy presentations registered as `screens.PortfolioScreen`).
-- **Phase:** J (2026-05-06).
-- **Migration shape (Phase E.3-style prop bag):** the container builds a flat `portfolio` prop bag and renders `useComponent('screens.PortfolioScreen')`. The bag includes the three list-row renderers (`renderAllHoldings`, `renderPositions`, `renderModalPFCard`) as closures over container scope, so the WebSocket-driven `<HoldingDynamicText>` / `<PortfolioPositionText>` cells and the 10+ broker-specific position-fetch branches stay anchored to the container's `useEffect` chains — no contract change to `useTrade` / `useWebSocketCurrentPrice` / `MultiBrokerContext`.
-- **Default presentation:** `designs/default/screens/PortfolioScreen.js` — pixel-faithful re-render of the legacy chrome (`PortfolioCard` hero + Bespoke/Model Portfolios toggle + plan picker modal + Holdings/Positions tabs + lists with `RenderEmptyMessage`). Imports the extracted `src/screens/PortfolioScreen/PortfolioScreen.styles.js` (lifted unchanged from the legacy `StyleSheet.create` block) so non-alphanomy variants render identically to the pre-migration build.
-- **Alphanomy presentation:** `designs/alphanomy/screens/PortfolioScreen.js` — alphanomy-improved.html § "05 · Portfolio" chrome: shared `_AppHeader` (greeting + ticker strip), gradient `pl-hero` P&L card with grid-lines + glow circles + "Total Returns" floating badge, pill-tabs (Model Portfolios vs All Holdings), under-tabs (Holdings vs Positions), restyled plan picker, alphanomy empty-state cards with gradient "Connect Broker" CTA. Reuses the same renderer closures so list rows look identical to default.
-- **Final prop-bag contract (~25 keys):**
+- **File:** `src/screens/PortfolioScreen/PortfolioScreen.js` (~600+ lines)
+- **Verdict:** `needs-logic-extraction`
+- **Phase:** F or G
+- **Data deps:** `useTrade()` (`userDetails`, `getAllBrokerSpecificHoldings`, `BrokerHoldingsData`, `allHoldingsData`, `getAllHoldings`, `configData`), `useConfig`, `useNavigation`, 11+ `useState` declarations, 3+ `useEffect` blocks (WebSocket subscribe, model-portfolio strategy fetch, EventEmitter `OrderPlacedReferesh` listener), inline axios `axios.get` for MP strategies + `axios.request` for rebalance repair, Firebase `getAuth()`, `WebSocketManager` singleton, `formatCurrency` utility.
+- **Render outputs:** Safe-area + gesture-handler-root wrapper, PortfolioCard (P&L + invested + returns), sticky tab switcher (Bespoke / Model Portfolio) via PortFolioCard2, Holdings `FlatList` with refresh control, conditional empty state, `HoldingScoreModal` bottom-sheet, 10+ broker-specific position-fetch branches (IIFL/ICICI/Upstox/Zerodha/Kotak/HDFC/Dhan/AliceBlue/Fyers/Groww/Motilal), live-price dynamic-text components.
+- **Proposed viewModel:**
   ```js
   {
-    selectedInnerTab, setSelectedInnerTab,        // Bespoke vs Model Portfolios
-    tabIndex, setTabIndex,                        // Holdings vs Positions
-    Loading, effectiveHoldingsData,               // P&L hero
-    profitAndLoss, pnlPercentage, pnlposneg,
-    modelPortfolioStrategy, processedData,        // catalogs
-    BrokerHoldingsData, PositionsData, planHoldings, planHoldingsLoading,
-    showPlanPicker, setShowPlanPicker, selectedPlan, setSelectedPlan, broker,
-    refreshing, onRefresh, panResponder,
-    renderAllHoldings, renderPositions, renderModalPFCard,
-    mainColor, navigation, modelPortfolioEnabled,
-    userEmail, config,                            // additive — alphanomy-only
-    modalVisible, scoreSymbol, setModalVisible,   // HoldingScoreModal
+    user: { email, brokerStatus: 'connected' | 'pending' | null, connectedBroker },
+    holdings: [{ symbol, quantity, buyPrice, currentPrice, pl, plPercent, status }],
+    summary: { totalInvested, totalCurrent, totalPL, totalPLPercent },
+    availableFunds,
+    subscribedModels: [{ modelName, advisor, repairTrades: [...] }],
+    selectedTab: 0 | 1,
+    isRefreshing,
+    isLoadingScores,
+    scoreModal: { visible, symbol },
   }
   ```
-- **Risks discharged:** WebSocket subscription + `OrderPlacedReferesh` EventEmitter cleanup stay in container (unchanged). 10+ broker-conditional position-fetch branches stay in container (unchanged). The 620-line StyleSheet was extracted as-is — no semantic edits, the legacy default presentation is a faithful re-render. Repair-trade flow (MP-pending) is untouched: `processedData` + `<ModelPFCard>` come from container scope; the design files only render those rows.
-- **Open follow-ups:** none for this commit. Future phases may pre-format `formatCurrency(...)` in the viewModel (currently called inside both presentations) to allow variants without `react-native-linear-gradient`/`Poppins`/`Satoshi` fonts to override formatting; not needed today since all current variants share the same money/locale stack.
-
-### NotificationListScreen ✅ Migrated (Phase J follow-up, 2026-05-06)
-
-- **File**: `src/components/NotificationListScreen.js` (~40 lines, container).
-- **Verdict**: ✅ migrated (default + alphanomy presentations registered as `screens.NotificationListScreen`). The legacy 116-line component was reduced to a thin container that resolves `useComponent('screens.NotificationListScreen')` and forwards a viewModel.
-- **Phase**: J follow-up (2026-05-06).
-- **Default presentation** (`designs/default/screens/NotificationListScreen.js`): preserves the legacy chrome — back-chevron + "Notification Screen" title + simple FlatList of rows + empty state. Reads `notifications` from viewModel; behavior identical to pre-migration.
-- **Alphanomy presentation** (`designs/alphanomy/screens/NotificationListScreen.js`): port of HTML § "08 · Notifications". Sticky header with back chevron + "Notifications" title + brand-blue "Mark all read" link (greys out when no unread items). Body is a ScrollView grouped by `section` field (e.g. "Today" / "Yesterday"); each row has a 38×38 colored icon tile (KIND_MAP for `order` / `advisory` / `reminder` / `message` / `alert` → blue / green / amber / purple / red — matches HTML's `si-*` palette), title + description body, time on the right; `unread: true` rows get the pale-blue background and 3px brand-blue left rail. Ships a `FALLBACK_ITEMS` list matching the HTML mockup so the design preview renders before any real notifications feed is wired.
-- **Contract**:
-  ```js
-  viewModel = {
-    notifications: [{ id, section?, kind, title, message, time, unread }],
-    isLoading?: boolean,
-  }
-  actions = {
-    onBack: () => void,
-    onMarkAllRead?: () => void,        // alphanomy variant only
-    onNotificationPress?: (item) => void,
-  }
-  ```
-- **Bell wiring**: `designs/alphanomy/screens/_AppHeader.js` bell tile is a `<TouchableOpacity onPress={() => navigation.navigate('NotificationListScreen')}>` — same route name `Stack.Screen` already registers in `Navigation.js:1133-1137`. Tapping the bell on Home / Orders / Plans / More variants opens this screen.
-- **Live data wired (2026-05-06)**: `src/screens/Home/hooks/useNotificationFeed.js` reads `TradeContext.allNotifications` (the same `GET /api/sendnotification/get-user-notifications/{userEmail}` feed `PushNotificationScreen` consumes), normalizes the three legacy notification shapes (inApp / rebalance / stock) into the `{ id, section, kind, title, message, time, unread, _raw }` rows the design system expects, and exposes `{ notifications, isLoading, refresh, markRead, markAllRead }`. The container at `src/components/NotificationListScreen.js` calls the hook and forwards everything through `viewModel` + `actions`. Pull-to-refresh wired on both presentations. `markAllRead` fans out per-id `PUT /api/sendnotification/mark-notification-read-by-id` calls in parallel (no bulk endpoint today) then refreshes — replace with a single bulk PUT when the backend exposes one.
-- **Open follow-ups**: alphanomy variant's `FALLBACK_ITEMS` still ships and is shown only when `notifications` is empty AND the feed isn't currently loading (so the design preview keeps rendering at boot / for unauthenticated demo). When a real bulk "mark all read" endpoint lands, swap the body of `markAllRead` in the hook. Detail-view (per-notification tap → modal or full screen) is not implemented in either variant — current `onNotificationPress` handler only marks the row read.
+- **Proposed actions:** `onRefresh`, `onTabChange`, `onHoldingPress(symbol)`, `onViewScore(symbol)` / `onCloseScoreModal`, `onExecuteRepairTrade(trade)`.
+- **Risks:** WebSocket subscription + EventEmitter listener cleanup must move with container. 10+ broker conditionals locked to container. Inline `formatCurrency` calls — pre-format in viewModel so presentation receives strings. Repair-trade flow brushes against MP-freeze; verify the **execution** path stays in container (or in MP-frozen surface) rather than in `designs/`.
 
 ### Authentication screens
 
@@ -242,26 +217,6 @@ ViewModel sketches captured in the audit-task pass (2026-05-01). The `viewModel`
 
 **Phase F migration order (recommended):** ResetPassword → EmailScreenAppleLogin + TermsModal → LogOutScreen → LoginScreen + SignupScreen (paired) → SignUpRADetails + PhoneNumberScreen (paired) → ChangeAdvisor (Account section).
 
-> **Variant override note (2026-05-04):** Six screens have second
-> presentations under `designs/alphanomy/screens/` (alphanomy 2026
-> redesign): `screens.LoginScreen`, `screens.SignupScreen`,
-> `screens.HomeScreen`, `screens.OrderScreen`,
-> `screens.ModelPortfolioScreen`, `screens.AccountSettingsScreen`,
-> `screens.PortfolioScreen` (added 2026-05-06),
-> `screens.NotificationListScreen` (added 2026-05-06).
-> viewModel / actions contracts are identical to the default
-> presentations; switching variants does not change audit row verdicts.
-> HomeScreen / ModelPortfolioScreen / OrderScreen are *design previews* —
-> they use sample data matching the HTML mockup; live data binding
-> (`allTabData` / `viewModel.routes` / live order rows) is deferred.
-> PortfolioScreen alphanomy override is **live-data wired** end-to-end
-> (reuses the container's renderer closures unchanged). NotificationListScreen
-> alphanomy override is a *design preview* — it ships a `FALLBACK_ITEMS`
-> list matching HTML § 08; container currently passes `notifications: []`
-> until a real feed is wired. Onboarding still has no variant override —
-> it needs a new default key + container first. See
-> `DESIGN_MIGRATION_PROGRESS.md § 2026-05-06`.
-
 ### Account Settings screen
 
 | Screen | File | Verdict | Phase | viewModel highlights |
@@ -275,9 +230,9 @@ ViewModel sketches captured in the audit-task pass (2026-05-01). The `viewModel`
 | Surface | File | Verdict (provisional) | Phase | Notes |
 |---|---|---|---|---|
 | ModelPortfolioScreen | `src/screens/Drawer/ModelPortfolioScreen.js` | `needs-logic-extraction` | I | Calls `ModelPortfolioService` + likely `useTrade`. ViewModel sketch needed before migration. |
-| MPPerformanceScreen | `src/screens/Drawer/MPPerformanceScreen.js` | `needs-logic-extraction` (default migrated, alphanomy override pass 1 shipped 2026-05-06) | I | Performance data + chart fetching in container. Alphanomy override at `designs/alphanomy/screens/MPPerformanceScreen.js` themes hero + locked tab strip + sticky CTA; tab body scenes (DistributionGrid / PerformanceChart / methodology / research) still resolve through legacy chrome — pass 2 pending. |
-| CustomTabbarMPPerformance | `src/screens/Drawer/CustomTabbarMPPerformance.js` | `needs-logic-extraction` (default migrated, alphanomy override shipped 2026-05-06) | I | Tab navigation + per-tab data dispatch. Alphanomy override at `designs/alphanomy/composites/CustomTabbarMPPerformance.js` recasts the green/grey segmented control to gradient pill tabs with indigo Lock on the disabled-while-locked first tab. |
-| EmptyStateMP | `src/screens/Drawer/EmptyStateMP.js` | `clean-extract` (default migrated, alphanomy override shipped 2026-05-06) | I | Static empty-state UI; only consumes config theme. Alphanomy override at `designs/alphanomy/composites/EmptyStateMP.js` swaps the red Lock for a brand-indigo Lock on a soft halo. |
+| MPPerformanceScreen | `src/screens/Drawer/MPPerformanceScreen.js` | `needs-logic-extraction` | I | Performance data + chart fetching in container. |
+| CustomTabbarMPPerformance | `src/screens/Drawer/CustomTabbarMPPerformance.js` | `needs-logic-extraction` | I | Tab navigation + per-tab data dispatch. |
+| EmptyStateMP | `src/screens/Drawer/EmptyStateMP.js` | `clean-extract` | I | Static empty-state UI; only consumes config theme. |
 | ModelPFCard | `src/screens/PortfolioScreen/ModelPFCard.js` | `needs-logic-extraction` | I | MP card on Portfolio screen; calls `ModelPortfolioService`. |
 
 **Reminder**: if the SDK MP plan firms up before Phase I starts, these flip back to `SDK-pending` and Phase I is dropped instead. The risk is acknowledged; see `DESIGN_SYSTEM_ARCHITECTURE.md § Note on MP and the SDK`.
@@ -442,6 +397,33 @@ Most modals are independent surfaces. Modal-shell consolidation is **deferred to
 **Net for ModelPortfolioComponents:** 9 `clean-extract`, 11 `needs-logic-extraction`. Zero frozen.
 
 If the SDK MP plan firms up before Phase I starts (or mid-flight), affected rows flip to `SDK-pending` and the migration unwinds for those surfaces.
+
+---
+
+## Section 7c — Asset tokens (Phase 2 — whitelabel sync, 2026-05-09)
+
+Variant-overridable static images. Implementation at `src/theme/assets.js`; registry surface at `designs/default/tokens/index.js`; consumed via `useTokens().assets.<key>`.
+
+| Slot | Default value | Status | Consumers (designs/-side) |
+|---|---|---|---|
+| `logoPng` | `src/assets/logo.png` (AlphaQuark) | live (Phase 2) | LoginScreen, SignupScreen, ResetPassword |
+| `logoFadedPng` | `src/assets/fadedlogo.png` | live (Phase 2) | ChangeAdvisor, BasketCard |
+| (future) `splashPng` | TBD | not yet shipped | SplashScreen — out of Phase 2 scope |
+| (future) `appIconPreviewPng` | TBD | not yet shipped | — |
+
+`src/`-side direct imports of the same files (`src/components/SplashScreen.js`, `src/components/HomeScreenComponents/PlanCard.js`, `src/UIComponents/RebalanceAdvicesUI/RebalanceCard.js`, `src/utils/Config.js`, `src/context/ConfigContext.js`) intentionally NOT migrated in Phase 2 — those sit either outside the variant-resolution path (SplashScreen renders pre-providers) or already theme via `configData.logo` from ConfigContext. They migrate in a later pass if/when split into container + presentation.
+
+---
+
+## Section 7b — `src/components/Navigation.js` (out-of-scope plumbing)
+
+`Navigation.js` is the React Navigation root (Stack + Drawer + Tab). It is NOT a UI surface in the design-system sense — variants don't override the navigator structure, they override the screens *behind* it.
+
+| File | Verdict | Notes |
+|---|---|---|
+| `src/components/Navigation.js` | **`out-of-scope-plumbing`** (not in `designs/`) | Render-stable Tab.Screen `component` prop convention applies. Inline render-prop children are forbidden — they remount the nested screen tree on every parent render and would manifest as state-loss in variant presentations. See `DESIGN_SYSTEM_ARCHITECTURE.md § Navigator convention`. The `PlansTabWrapper` hoist (2026-05-09) was the first enforcement of this rule. |
+
+Adding a new tab/screen to `Navigation.js` does NOT require a design-audit row — but the navigator-convention check above is mandatory at code-review time.
 
 ---
 

@@ -307,6 +307,108 @@ See `docs/APP_ARCHITECTURE.md § 4.5.2 Trade variant field` for the full contrac
 
 The connect route (`aq_backend_github/Routes/Broker/Kotak.js`) calls ccxt's `/kotak/login/totp` directly, which uses Kotak's new `/login/1.0/tradeApiLogin` endpoint and never goes through `normalize_credentials_for_broker`. That's why the bug-report screenshot showed a green "Kotak Broker Connected" card with cash + phone + PAN populated, but rebalance (which DOES go through the normalizer + `KotakBroker`) failed at Step 3.
 
+## Kite Publisher polling fallback — WebView callback recovery (2026-05-12)
+
+Bespoke rebalance via Zerodha runs through Kite Publisher in a WebView. The expected flow is:
+
+1. User completes Kite's hosted form
+2. Kite redirects to a status URL
+3. WebView intercepts the redirect → app sets `zerodhaStatus='success'`
+4. `useEffect` watching `zerodhaStatus` fires the post-success ingestion chain (record-orders → DB update → events)
+
+Step 3 can fail silently in three known scenarios:
+
+- **Cross-domain intercept loss** — some Android WebView versions don't honor `shouldOverrideUrlLoading` for server-side 302s on URLs outside the configured `baseUrl` origin (the Kite SDK Referer-check workaround in `getPublisherWebViewBaseUrl` mitigates but doesn't eliminate this)
+- **App backgrounded mid-flow** — user switches to Kite app to complete authentication; OS may suspend the WebView before the redirect lands
+- **AsyncStorage race** — WebView callback fires before AsyncStorage has hydrated `zerodhaStockDetails`, causing `checkZerodhaStatus` to short-circuit and never re-run
+
+The result is "WebView returned but app never noticed" — the user is left on the loading spinner with no status. Two recovery layers exist.
+
+### Layer 1 — client-side order-book polling (shared hook)
+
+Canonical implementation lives in `src/hooks/useKitePublisherPolling.js`. Constants are sourced from `PUBLISHER_POLL_CONFIG` in `src/utils/brokerPublisher.js` (single source of truth). Three consumers as of 2026-05-12: `RebalanceModal.js` (bespoke rebalance), `MPReviewTradeModal.js` (MP rebalance — added in Phase E), `ReviewZerodhaTradeModal.js` (stock-advice basket via Kite Publisher — added in Phase E). `AddtoCartModal.js` does NOT integrate the hook because its publisher path is dead code (the `setOpenZerodhaModel(true)` setter is never invoked from the cart flow; the cart routes all execution through the REST path).
+
+```
+POLL_INTERVAL_MS = 5000        // poll every 5s
+POLL_TIMEOUT_MS  = 90000       // give up after 90s
+
+startOrderPolling():
+  // Capture baseline BEFORE the WebView opens, so any later order with an
+  // ID not in the baseline is by definition a publisher-placed order.
+  baseline = fetchOrderBook(broker, creds)
+  baselineOrderIdsRef = Set(baseline.map(o => o.orderId))
+
+  setInterval(POLL_INTERVAL_MS):
+    if (publisherProcessedRef) { stopOrderPolling(); return }
+    current = fetchOrderBook(broker, creds)
+    newOrders = current.filter(o => !baselineOrderIdsRef.has(o.orderId))
+    if (newOrders.length > 0):
+      publisherProcessedRef = true     // guards against double-fire
+                                       // with the WebView callback
+      stopOrderPolling()
+      setWebView(false)
+      setZerodhaStatus('success')      // drives the same useEffect the
+      setZerodhaRequestType('rebalance')// callback would have driven
+
+  setTimeout(POLL_TIMEOUT_MS):
+    if (!publisherProcessedRef):
+      // 90s expired — fall through to success with no detected orders.
+      // The status-check-queue (layer 2) catches anything that arrived later.
+      setZerodhaStatus('success')
+```
+
+**Double-fire protection.** `publisherProcessedRef.current` is the gate. Either polling-detects-orders OR WebView-callback-fires sets it to `true`; the other path's setter then short-circuits. Without this guard, both the callback and the polling loop would race to call `setZerodhaStatus('success')` and `checkZerodhaStatus` could run the entire post-success chain twice (double DB writes, duplicate event emissions).
+
+**Cleanup contract.** Polling timers MUST be cleared on:
+- success path (whichever of the two recovery paths wins)
+- timeout path
+- modal unmount (the `useEffect` cleanup at L220-222 holds the contract)
+- new submit (the next `startOrderPolling` call captures a fresh baseline)
+
+### Layer 2 — server-side `status-check-queue` (all publisher consumers)
+
+Enrolled by every publisher consumer in the post-success chain (or in the catch block if the publisher chain fails). Lives in ccxt-india.
+
+```
+POST /rebalance/add-user/status-check-queue
+Body: { userEmail, modelName, advisor, broker }
+
+Backend behavior:
+  Enrolls the user in a periodic reconciliation job
+  Job polls broker's order book + recent fills
+  Updates traderecos / model_portfolio_user records when matches found
+  Eventual consistency — typical delay 1-5 minutes
+```
+
+This layer always runs regardless of whether the client callback or polling fired. It's the last-resort safety net for cases where:
+- both client recovery paths failed (e.g. user killed the app mid-WebView)
+- orders were placed in Kite but client never received any signal
+
+**Latency trade-off.** Layer 1 (client polling) detects placed orders within 5s of placement. Layer 2 catches everything else within 1-5 minutes. The combination gives sub-5s UX when client polling is present, and eventual consistency when it isn't.
+
+### Consumers and their recovery posture (mobile, after Phase E 2026-05-12)
+
+| Caller | Path | Client polling? | Server queue? | portfolioEvents on Zerodha success? | Variant tagged on publisher payload? |
+|--------|------|-----------------|---------------|-------------------------------------|--------------------------------------|
+| `RebalanceModal.js` | bespoke rebalance | ✅ via `useKitePublisherPolling` hook | ✅ | ✅ | ✅ |
+| `MPReviewTradeModal.js` | MP rebalance | ✅ via hook (Phase E) | ✅ | ✅ (Phase C) | ✅ (Phase B) |
+| `ReviewZerodhaTradeModal.js` | stock-advice basket via Kite Publisher (opened by StockAdvices) | ✅ via hook (Phase E) | ✅ (via backend record-orders) | ❌ (non-MP flow — uses `getAllTrades` + `updatePortfolioData` instead; `REBALANCE_EXECUTED` event semantically doesn't apply) | ✅ (Phase B — belt-and-braces tag at L420) |
+| `AddtoCartModal.js` | cart-based execution | N/A — publisher path is dead code | ✅ (REST path) | ❌ (same rationale as ReviewZerodhaTradeModal) | N/A (publisher path unused) |
+
+**Phase B / C / E rollout summary:**
+- Phase A (2026-05-12) — docs alignment, `BASKETS_ARCHITECTURE.md` corrections, this section created
+- Phase B (2026-05-12) — variant threading in five publisher-using mobile callers
+- Phase C (2026-05-12) — `portfolioEvents.emit` added to MP Zerodha publisher success path
+- Phase D (2026-05-12) — `PUBLISHER_POLL_CONFIG` single source of truth in `brokerPublisher.js`
+- Phase E (2026-05-12) — `useKitePublisherPolling` shared hook; RebalanceModal refactored to use it; MPReviewTradeModal + ReviewZerodhaTradeModal added as new consumers; GTT-in-publisher silent-failure guard in `StockAdvices.js` (Zerodha branch falls through to REST when basket contains GTT orders)
+
+### Cross-references
+
+- Failure-mode taxonomy: `docs/BASKETS_ARCHITECTURE.md § 9 — WebView callback missed`
+- Server-side reconciler architecture: `docs/MODEL_PORTFOLIO_ARCHITECTURE.md § 9 — Refresh & Status Polling`
+- Symbol conversion + market protection helpers: `src/utils/brokerPublisher.js`
+- WebView baseUrl rationale (why we can't use `REACT_APP_BROKER_CONNECT_REDIRECT_URL`): `getPublisherWebViewBaseUrl` JSDoc in `brokerPublisher.js`
+
 ## Known pitfalls — MPReviewTradeModal.js `placeOrder` error-handling (2026-05-06)
 
 `MPReviewTradeModal.js:placeOrder` is an `async` function called without `await` or `.catch()` from the Place Order button's `onPress`. Any unhandled exception inside `placeOrder` that occurs before `setLoading(true)`, or any exception that escapes the try-catch, becomes a silent promise rejection — `setLoading(false)` never fires, the spinner sticks forever, and no HTTP request reaches the server.

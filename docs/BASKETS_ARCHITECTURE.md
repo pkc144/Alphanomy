@@ -1,7 +1,7 @@
 # Baskets Architecture
 
-> **Last updated:** 2026-05-07  
-> **Branch:** feature/sdk-plus-config-ui  
+> **Last updated:** 2026-05-12 (Zerodha Kite Publisher path on mobile documented; § 13 publisher row corrected; § 9 WebView-callback-missed failure mode added)  
+> **Branch:** feature/sdk-plus-config_forkv2  
 > **Covers:** Mobile app (Alphab2bapp), Web frontend (prod-alphaquark-github), Backend (aq_backend_github)
 
 ---
@@ -61,16 +61,39 @@ screens/TradeContext.js
              isValidSymbolExpiry, filterConflictingOrders
 
 components/AdviceScreenComponents/
-└── StockAdvices.js             # Main advice screen — renders basket cards
-    AddtoCartModal.js           # (if applicable) add basket to cart before execution
-    OrderService.js             # Order management service
+├── StockAdvices.js             # Main advice screen — renders basket cards.
+│                               # Zerodha branch (L578) routes basket execution
+│                               # through Kite Publisher WebView (see § 7 Mobile
+│                               # Zerodha Publisher fork). Non-Zerodha brokers
+│                               # go through the REST path at L619 onward.
+├── AddtoCartModal.js           # Cart-based execution. Same Zerodha-publisher
+│                               # fork as StockAdvices (handleZerodhaRedirect
+│                               # at L1059); REST otherwise.
+└── OrderService.js             # Order management service
+
+components/ModelPortfolioComponents/
+└── MPReviewTradeModal.js       # MP rebalance review modal. Has its own Zerodha
+                                # Publisher fork (handleZerodhaRedirect at L838)
+                                # — same Kite SDK pattern as StockAdvices.
+
+components/
+└── KitePublisherModal.js       # WebView wrapper hosting the Kite Publisher
+                                # form. Every Zerodha-publisher fork mounts
+                                # this. baseUrl set per `getPublisherWebViewBaseUrl`
+                                # so the Kite SDK's Referer check passes.
 
 utils/
 ├── basketUtils.js              # Pure utility functions (no side effects)
 │   ├── parseExpiryFromSymbol() # "NIFTY16DEC25" → Date
 │   ├── isBasketExpired()       # Any leg past expiry?
 │   └── netBasketTrades()       # Consolidate BUY/SELL pairs
-└── ProcessTrades.js            # Trade execution across all brokers
+├── brokerPublisher.js          # Kite Publisher helpers — `PUBLISHER_SUPPORTED_BROKERS`
+│                               # (Zerodha only on mobile; Fyers retired
+│                               # 2026-04-26 — see file header for context),
+│                               # `convertSymbolsToZerodha`, `resolveZerodhaSymbol`,
+│                               # `applyKiteMarketProtection`, `validateStockExchanges`,
+│                               # `getPublisherWebViewBaseUrl`, `PUBLISHER_POLL_CONFIG`.
+└── ProcessTrades.js            # Trade execution across all brokers (REST path)
 ```
 
 ### Web (`src/`)
@@ -393,7 +416,23 @@ isBasketEdited(basket):
 
 ## 7. Order Placement Flow
 
-### Mobile (`ProcessTrades.js` + `StockAdvices.js`)
+### Mobile — Broker-dependent fork
+
+Mobile execution has **two distinct paths** depending on the connected broker:
+- **Zerodha** → Kite Publisher WebView (see "Mobile Zerodha Publisher fork" below)
+- **Everything else** → REST path through `ProcessTrades.js` / ccxt-india `/{broker}/process-trades`
+
+The fork happens in `StockAdvices.js:578` (and the parallel handler in `AddtoCartModal.js:1059`):
+
+```js
+if (broker === 'Zerodha') {
+  // Kite Publisher path — handleZerodhaRedirect → WebView → record-orders
+  return;
+}
+// fall through to REST path
+```
+
+### Mobile REST path (`ProcessTrades.js` + `StockAdvices.js`)
 
 ```
 User taps "Accept Basket" on BasketCard
@@ -424,6 +463,67 @@ STEP 4 — DB update
 STEP 5 — Emit refresh
   portfolioEvents.emit(PORTFOLIO_EVENTS.HOLDINGS_REFRESH)
 ```
+
+### Mobile Zerodha Publisher fork (`StockAdvices.handleZerodhaRedirect`)
+
+Used when the connected broker is Zerodha. The Kite Publisher SDK is the **only** way mobile can submit baskets to Kite — Kite blocks raw REST basket submissions without the SDK origin. Same overall structure used in:
+
+- `StockAdvices.js:1206` — stock-advice basket fork
+- `AddtoCartModal.js:1059` — cart-based fork
+- `MPReviewTradeModal.js:838` — MP rebalance fork
+- `RebalanceModal.js:690` — bespoke rebalance fork (this one also implements client-side polling fallback — see § 9)
+
+```
+STEP 1 — Pre-flight validation (synchronous)
+  validateStockExchanges(stockDetails)       — reject if any exchange missing
+                                                (Kite silently drops items)
+  EDIS pre-check (Zerodha only):
+    canSell = userDetails.is_authorized_for_sell
+              || ddpi_status in ['physical', 'ddpi']
+  Tag variant on stockDetails BEFORE storing to AsyncStorage
+  (variant: "AMO" | "REGULAR" per § 4.5.2 APP_ARCHITECTURE.md;
+   the AsyncStorage payload is what flows back into record-orders)
+
+STEP 2 — Persist outgoing payload + open WebView
+  Store stockDetails (variant-tagged) to AsyncStorage key 'stockDetailsZerodhaOrder'
+  POST /api/zerodha/model-portfolio/update-reco-with-zerodha-model-pf
+    (MP path only — marks recos as placed-pending in DB)
+  Build Kite basket items via resolveZerodhaSymbol + applyKiteMarketProtection
+    — applyKiteMarketProtection: MARKET → LIMIT-IOC with 1% buffer +
+      Kite tick rounding (required to avoid silent drops on GSM/T2T/BE)
+  generateHtmlForm(basket, apiKey) — Kite Publisher submission form
+  Mount KitePublisherModal (WebView) with baseUrl from
+    getPublisherWebViewBaseUrl(configData)
+
+STEP 3 — User completes in Kite (in WebView)
+  Submits orders inside Kite's hosted form
+  Kite redirects to status URL → WebView intercepts
+  setZerodhaStatus('success'), setZerodhaRequestType('basket' | 'rebalance')
+
+STEP 4 — Post-success ingestion (driven by useEffect on zerodhaStatus)
+  POST /api/zerodha/publisher/record-orders
+    Payload: { stockDetails: <from AsyncStorage>, publisherResults, broker, userEmail }
+    Backend fetches Kite order book + matches against stockDetails
+    Returns: per-leg orderStatus/orderId/message
+  POST /api/model-portfolio-db-update  (MP path only)
+  POST /zerodha/user-portfolio          (refresh holdings from Kite)
+  PUT  /rebalance/update/subscriber-execution  (MP path: executed | partial | pending)
+  POST /rebalance/record-publisher-results     (MP path: model_portfolio_user)
+  POST /rebalance/add-user/status-check-queue  (server-side fallback enroll)
+
+STEP 5 — Emit refresh
+  portfolioEvents.emit(PORTFOLIO_EVENTS.HOLDINGS_REFRESH)
+  portfolioEvents.emit(PORTFOLIO_EVENTS.REBALANCE_EXECUTED)   (MP path only)
+  setOrderPlacementResponse + open RecommendationSuccessModal
+  Cleanup AsyncStorage 'stockDetailsZerodhaOrder'
+```
+
+**WebView callback failure recovery:** the Kite WebView callback can fail to fire in cross-domain / app-backgrounded / 302-intercept-missed scenarios. Two recovery layers exist:
+
+1. **Client-side polling** (RebalanceModal only as of 2026-05-12) — polls the broker order book every 5s for 90s, detects new orders by diffing baseline order IDs. See `RebalanceModal.js:148-217`.
+2. **Server-side `status-check-queue`** (all four modals) — enrolled in STEP 4, picked up by a backend reconciler that polls the broker for the user's recent orders.
+
+See § 9 "WebView callback missed" for details.
 
 ### Web (`BasketModal.js`)
 
@@ -542,6 +642,62 @@ trailingStopLoss: {
 | Symbol expired | `isBasketExpired() = true` | Disable "Accept", show "Expired" badge |
 | Insufficient margin | `/margin/basket-estimate` returns `canExecute: false` | Show margin shortfall UI (web only) |
 | LIMIT order conflict | Open LIMIT for same symbol | Auto-cancel before placing (web) |
+| Missing exchange | `validateStockExchanges` returns invalid | Block submission, synthetic rejection per leg, error toast (Zerodha publisher path) |
+| Kite SDK API key absent | `zerodhaApiKey` falsy at submit | Synthetic rejection, "reconnect Zerodha" copy (Zerodha publisher path) |
+| WebView callback missed | No `zerodhaStatus='success'` fired within timeout | Two-layer recovery — see "WebView callback missed" below |
+| `record-orders` HTTP failure | `axios.request` rejects after Kite callback | Synthetic 'Unknown' response: "Order sent via Kite. Please check your Kite app for actual status." Server-side `status-check-queue` still enrolled. |
+
+### WebView callback missed (Zerodha publisher path)
+
+Kite Publisher submits the basket form inside a WebView. The expected flow is:
+1. User completes Kite's hosted form
+2. Kite redirects to a status URL
+3. WebView intercepts the redirect → app sets `zerodhaStatus='success'`
+4. `checkZerodhaStatus()` runs the post-success ingestion chain
+
+Step 3 can fail silently in three known scenarios:
+- **Cross-domain intercept loss** — some Android WebView versions don't honor `shouldOverrideUrlLoading` for server-side 302s on URLs outside the configured `baseUrl` origin
+- **App backgrounded mid-flow** — user switches to Kite app to complete authentication; OS may suspend the WebView before the redirect lands
+- **AsyncStorage race** — the WebView callback fires before AsyncStorage has hydrated `zerodhaStockDetails`, causing `checkZerodhaStatus` to short-circuit and never re-run
+
+**Recovery layer 1 — client-side polling** (RebalanceModal only as of 2026-05-12):
+
+```
+RebalanceModal.js:148-217
+  POLL_INTERVAL_MS = 5000        // poll every 5s
+  POLL_TIMEOUT_MS  = 90000       // give up after 90s
+
+  startOrderPolling():
+    baseline = fetchOrderBook(broker, creds)
+    baselineOrderIdsRef = Set(baseline.map(o => o.orderId))
+    setInterval(POLL_INTERVAL_MS):
+      current = fetchOrderBook(broker, creds)
+      newOrders = current.filter(o => !baseline.has(o.orderId))
+      if (newOrders.length > 0):
+        publisherProcessedRef = true  // prevents double-fire vs WebView callback
+        setZerodhaStatus('success')
+        return
+    setTimeout(POLL_TIMEOUT_MS):
+      if (!publisherProcessedRef):
+        setZerodhaStatus('success')   // give up cleanly, let user see results
+```
+
+Three other publisher consumers (`StockAdvices`, `AddtoCartModal`, `MPReviewTradeModal`) do NOT implement client polling — they rely entirely on layer 2.
+
+**Recovery layer 2 — server-side `status-check-queue`** (all four publisher consumers):
+
+```
+POST /rebalance/add-user/status-check-queue (ccxt-india)
+Body: { userEmail, modelName, advisor, broker }
+
+Backend behavior:
+  Enrolls the user in a periodic reconciliation job
+  Job polls broker's order book + recent fills
+  Updates traderecos / model_portfolio_user records when matches found
+  Eventual consistency — typical delay 1-5 minutes
+```
+
+This layer always runs. It is enrolled in STEP 4 of every publisher path regardless of whether STEP 4 succeeded — see e.g. `MPReviewTradeModal.js:1270` (enrolled even in the catch block of `record-orders`).
 
 ### Per-Leg Error Display
 
@@ -666,10 +822,15 @@ model_portfolio_user or traderecos
 |---------|--------|-----|
 | Margin estimate | Not shown before execution | `POST /margin/basket-estimate` shows margin requirement |
 | LIMIT order conflict check | Not implemented | Auto-cancels conflicting open LIMIT orders before placing |
-| Broker publisher | Not used for baskets | Zerodha Kite Publisher + FYERS API Connect available |
-| Symbol conversion | Not needed | `GET /zerodha/convert-symbol` for Angel One → Zerodha format |
+| Broker publisher | **Zerodha Kite Publisher via WebView** — `KitePublisherModal` + `handleZerodhaRedirect` in StockAdvices/AddtoCartModal/MPReviewTradeModal/RebalanceModal. Fyers retired 2026-04-26 (Fyers REST-only on mobile per `brokerPublisher.js` header). | Zerodha Kite Publisher (script-loaded) + FYERS API Connect |
+| Publisher polling fallback | RebalanceModal only (L148-217) — see § 7 Mobile Zerodha Publisher fork | Implemented in `BrokerPublisherButton` |
+| Server-side status fallback | All four publisher consumers enroll in `/rebalance/add-user/status-check-queue` | Same |
+| Symbol conversion | `POST /zerodha/convert-symbol` via `convertSymbolsToZerodha` (Angel One → Zerodha format) | `GET /zerodha/convert-symbol` |
 | Live prices in modal | WebSocket via `useWebSocketCurrentPrice` hook | Direct Socket.IO in BasketModal |
-| GTT order placement | Supported via ccxt | Supported via ccxt |
+| GTT order placement | Supported via ccxt; publisher path does NOT support GTT — `separateGttOrders` helper exists in `brokerPublisher.js` but is not wired into the four publisher forks (known gap, would silently drop GTT orders if placed via publisher) | Supported via ccxt |
+| Market protection | `applyKiteMarketProtection` (MARKET → LIMIT-IOC + 1% buffer + Kite tick rounding) applied in all four publisher forks | `convertToBasketItem` applies same protection |
+| Exchange validation | `validateStockExchanges` pre-flight in all four publisher forks (rejects basket if any exchange missing — prevents Kite silently dropping items) | Same helper |
+| Variant (AMO/REGULAR) | Tagged on outgoing trades — **REST paths**: yes; **Publisher paths**: RebalanceModal yes (L958-963), StockAdvices/AddtoCartModal/MPReviewTradeModal **not yet** (tracked, see CHANGELOG 2026-05-12) | Web path drops variant in publisher today |
 | SL/PT display | Per-leg in results modal | Per-leg in UpdateRebalanceModal |
 | Basket edit badge | `isBasketEdited()` → "Updated" badge | Same |
 | Expiry display | isBasketExpired → disabled card | Same |
@@ -680,7 +841,7 @@ model_portfolio_user or traderecos
 **Shared patterns:**
 - Both use `basketUtils.js` (same logic: `parseExpiryFromSymbol`, `isBasketExpired`, `netBasketTrades`)
 - Both use `to_trade_net[]` as authoritative netting source
-- Both use `portfolioEvents.emit(HOLDINGS_REFRESH)` post-execution
+- Both use `portfolioEvents.emit(HOLDINGS_REFRESH)` post-execution — see § 7 STEP 5 (RebalanceModal Zerodha publisher path emits at L969-977; MPReviewTradeModal Zerodha publisher path missing emit as of 2026-05-12; StockAdvices and AddtoCartModal don't emit structured events post-execution either — separate decision point)
 - Both support GTT and SLPT config shapes
 
 ---

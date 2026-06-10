@@ -29,7 +29,19 @@ const indicesConfig = {
     symbol: "SENSEX",
     exchange: "BSE",
     displayName: "Sensex",
-    alternativeSymbols: ["BSE SENSEX", "SENSEX 30"],
+    // 2026-05-26: alternativeSymbols dropped after recurrent "Sensex
+    // Loading" reports. The Set-replacement fallback at line ~178 (added
+    // 2026-05-07 to stop alias-driven flicker) advanced PAST the working
+    // "SENSEX" symbol when the server's auto_sync snapshot (poll cadence
+    // ~3s) arrived after the 1.5s fallback timer fired. By that point
+    // subscribedSymbolsRef[sensex] had been replaced with
+    // Set(["BSE SENSEX"]) or Set(["SENSEX 30"]) — neither of which had
+    // data in Redis (`ltp:BSE:BSE SENSEX` and `ltp:BSE:SENSEX 30` both
+    // empty per Redis HGETALL inspection 2026-05-26). The legitimate
+    // `ltp_update` for symbol="SENSEX" was then silently rejected by the
+    // gate. Empty alternativeSymbols matches nifty50/bankNifty and means
+    // the fallback timer never fires for an out-of-Redis alias.
+    alternativeSymbols: [],
   },
   bankNifty: {
     symbol: "BANKNIFTY",
@@ -77,7 +89,7 @@ const MarketIndices = () => {
   useEffect(() => {
     if (!configData) return;
 
-    const fetchPreviousClosePrices = async () => {
+    const fetchPreviousClosePrices = async (attempt = 0) => {
       try {
         const symbols = Object.entries(indicesConfig).map(([key, config]) => ({
           symbol: config.symbol,
@@ -135,7 +147,18 @@ const MarketIndices = () => {
           throw new Error("Invalid response format");
         }
       } catch (error) {
-        // Fallback: Will use first price received as opening price
+        // 2026-06-08: RETRY before degrading. A single transient failure of the
+        // prev-close endpoint used to permanently flip to "opening" mode (base =
+        // first live LTP) → when the market is closed (flat LTP) the indices render
+        // 0.00% even though Redis has the correct prev_close. Retry up to 3× (1.5s
+        // apart) so a blip doesn't strand the user on the 0.00% fallback. Redis
+        // prev_close confirmed correct 2026-06-08 (ltp:NSE:NIFTY.prev_close present);
+        // the bug was purely this no-retry frontend fallback. See WEBSOCKET_HEALTH doc.
+        if (attempt < 3) {
+          setTimeout(() => fetchPreviousClosePrices(attempt + 1), 1500);
+          return;
+        }
+        // Exhausted retries → use first price received as opening base (last resort).
         setComparisonType("opening");
         // Don't set hasInitializedBasePrices yet - will be set when first prices arrive
       }
