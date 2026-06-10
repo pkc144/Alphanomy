@@ -78,7 +78,16 @@ const AccountSettingsScreen = ({ navigation }) => {
                         ?.split(',')
                         .map(code => code.trim().toUpperCase()) || [];
                     const currentCode = Config?.ADVISOR_RA_CODE?.toUpperCase() || '';
-                    const shouldHide = Config?.REACT_APP_HIDE_CHANGE_MANAGER === 'true' ||
+                    // "Change Manager" lets a user switch which advisor/RA they
+                    // sit under — only meaningful on the multi-advisor PARENT app
+                    // (APP_VARIANT 'alphaquark' = AlphaQuark B2B). Whitelabel
+                    // builds (alphanomy, zamzamcapital, rgxresearch, arfs, …) are
+                    // single-tenant, so the option is hidden there by default.
+                    // Still force-overridable via the existing flags.
+                    const appVariant = Config?.APP_VARIANT || 'alphaquark';
+                    const isWhitelabel = appVariant !== 'alphaquark';
+                    const shouldHide = isWhitelabel ||
+                        Config?.REACT_APP_HIDE_CHANGE_MANAGER === 'true' ||
                         hideChangeManagerCodes.includes(currentCode);
                     return !shouldHide;
                 })()
