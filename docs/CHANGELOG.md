@@ -4,6 +4,41 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ---
 
+## [unreleased] - 2026-06-11 — MPInvestNowModal Cashfree install-source handling (ported from upstream Alphab2bapp)
+
+Ported the upstream fix (Alphab2bapp `e1ac60f` + `76b943d`) — alphanomy's
+shared `MPInvestNowModal.js` container carried the identical pre-fix code.
+
+**Symptom**: MP subscription payment spun on an endless loader (one-time path
+polled a never-created order ~5 min; recurring path sat silent) on sideloaded
+APKs; the web (and Play Store build) worked.
+
+**Root cause**: Cashfree's native AAR blocks the Play-Store-only install-source
+check in PRODUCTION; the modal inlined its own env on the one-time seam and
+hardcoded `CFEnvironment.PRODUCTION` on the recurring seam, classifying neither
+throw. DB config verified correct first — `alphanomy` has
+`paymentPlatform: 'cashfree'`, `active_gateway: 'cashfree'` (configured),
+`features.recurring_enabled: true`; the gateway is fine, the block is the
+install source.
+
+### Files touched
+
+- `src/components/ModelPortfolioComponents/MPInvestNowModal.js` — import
+  `getCashfreeEnvironment` / `isInstallSourceError` / `friendlyPaymentError`;
+  one-time seam uses `getCashfreeEnvironment()` and on the `doPayment` throw
+  clears `paymentPollingMessage`, stops the background poll, shows the friendly
+  Play-Store alert; recurring seam replaces hardcoded `PRODUCTION` with
+  `getCashfreeEnvironment()` and classifies the `doSubscriptionPayment` throw.
+- `.env` — added `REACT_APP_CASHFREE_ENV=production` (forces PRODUCTION in every
+  build type; payment-only var, not a broker var).
+- `docs/MODEL_PORTFOLIO_ARCHITECTURE.md` § 4c — "Cashfree environment +
+  install-source handling" subsection.
+
+No backend or DB change. Container is shared with upstream — kept byte-identical
+to Alphab2bapp's fixed version.
+
+---
+
 ## [unreleased] - 2026-06-10 (drift cleanup — logo→designs, iosClientId→config)
 
 Eliminated the fork's shared-`src/` divergences by either upstreaming the

@@ -347,6 +347,12 @@ adminpaymentPlatform ←  GET /api/adminControl/get-payment-platform
 ```
 Routes to one of `react-native-razorpay`, `react-native-cashfree-pg-sdk`, `PayUOneTimePayment`, `react-native-iap` (Play Store / App Store). Switcher is tenant-overridable via `appadvisors.paymentPlatform` in the backend.
 
+**Cashfree environment + install-source handling** (`MPInvestNowModal.js` one-time seam, recurring seam; helpers in `src/utils/cashfreeEnv.js`)
+
+Both Cashfree seams (one-time `doPayment`, recurring `doSubscriptionPayment`) resolve the SDK environment through `getCashfreeEnvironment()` — the single source of truth shared with `CoursePurchaseSheet` / `BuyWebinarTicketSheet`. It honours `REACT_APP_CASHFREE_ENV`, defaults to `SANDBOX` in Metro debug, else maps `REACT_APP_ENV`. **Do not inline `Config.REACT_APP_ENV === 'production' ? …` or hardcode `CFEnvironment.PRODUCTION` again** — both were removed 2026-06-11 (ported from upstream Alphab2bapp).
+
+Cashfree's native AAR enforces a **Play-Store-only install-source check in PRODUCTION**: a sideloaded APK (installer = `com.google.android.packageinstaller`, i.e. `adb install` / manual APK tap) makes `doPayment` / `doSubscriptionPayment` throw synchronously. The seam catches run `isInstallSourceError(err)` → `friendlyPaymentError(err)` and show an *"install from Play Store"* alert (the one-time seam also clears `paymentPollingMessage` and stops the 30s + 54×5s background poll, so the spinner no longer runs ~5 min on a build that can never open the sheet). **The DB payment config is unrelated** — verified 2026-06-11 that `alphanomy` has `paymentPlatform: 'cashfree'`, `active_gateway: 'cashfree'` (configured), and `features.recurring_enabled: true`. Legitimate fixes: install via Play Store Internal Testing, or whitelist the installer at Cashfree dashboard → Settings → Whitelisted Install Sources. `.env` here sets `REACT_APP_CASHFREE_ENV=production` so every build type talks to the live gateway.
+
 **Digio e-signature** (`@digiotech/react-native`, lines 88-93, 904-1099)
 - `Digio` SDK gates the strategy activation behind a signed advisory PDF
 - PDF buffer fetched from `${ccxtServer.baseUrl}misc/pdf/s3/digio/download` (L1054)
