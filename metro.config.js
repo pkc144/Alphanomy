@@ -1,12 +1,12 @@
 const path = require('path');
+const fs = require('fs');
 const { getDefaultConfig, mergeConfig } = require("@react-native/metro-config");
 
 const defaultConfig = getDefaultConfig(__dirname);
 const { resolver: { sourceExts, assetExts } } = defaultConfig;
 
-// @alphaquark/mobile-sdk lives outside this project root (../alphaquark-mobile-sdk
-// — Alphanomy's parent layout differs from Alphab2bapp's two-level-up layout).
-// npm installed it via the file: dep into node_modules/@alphaquark/mobile-sdk as a
+// @alphaquark/mobile-sdk lives outside this project root.
+// npm installs it via the file: dep into node_modules/@alphaquark/mobile-sdk as a
 // symlink, but Metro's default resolver doesn't follow symlinks across watchFolder
 // boundaries — it returned "Unable to resolve module @alphaquark/mobile-sdk".
 // Two-part fix:
@@ -15,7 +15,19 @@ const { resolver: { sourceExts, assetExts } } = defaultConfig;
 //      project rebuilds when the SDK is re-tsc'd.
 // Scoped to ONLY the SDK path (not the whole parent dir, which has 50+ unrelated
 // projects and would tank Metro's startup).
-const SDK_PATH = path.resolve(__dirname, '../alphaquark-mobile-sdk/packages/rn');
+//
+// MACHINE-AGNOSTIC RESOLUTION (2026-06-11, ported from Alphab2bapp 487efa1):
+// the SDK checkout sits at a different depth per machine — `../alphaquark-mobile-sdk`
+// on the canonical Mac (sibling of this repo) vs `../../alphaquark-mobile-sdk` on
+// the Linux box / this Mac (repo lives under AQ/App/, SDK under AQ/). Hardcoding
+// either breaks release bundling on the other layout. Probe both and take the
+// first that exists.
+const SDK_PATH_CANDIDATES = [
+  path.resolve(__dirname, '../alphaquark-mobile-sdk/packages/rn'),
+  path.resolve(__dirname, '../../alphaquark-mobile-sdk/packages/rn'),
+];
+const SDK_PATH =
+  SDK_PATH_CANDIDATES.find((p) => fs.existsSync(p)) || SDK_PATH_CANDIDATES[0];
 
 /**
  * Metro configuration
