@@ -4,6 +4,27 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ---
 
+## [unreleased] - 2026-06-11 — AliceBlue blank WebView on iOS — fixed in the shared SDK package (no src change here)
+
+**Symptom**: iOS only — "connect AliceBlue → spinner → blank". Android fine,
+all other brokers fine. Root cause: AliceBlue's portal SPA UA-sniffs and
+renders blank on iOS WKWebView's default UA (no `Version/x Safari/x` tokens);
+the SDK `WebViewBrokerAuthFlow` (active lane — `REACT_APP_USE_SDK_BROKER_FLOW=true`)
+never inherited the legacy modal's Safari-UA spoof (`59e8e1f`).
+
+**Fix lives in `alphaquark-mobile-sdk` commit `47c232e`** (consumed here via
+the symlinked `file:../alphaquark-mobile-sdk/packages/rn` dependency — no
+Alphanomy `src/` change): AliceBlue-gated `userAgent` (iOS only) +
+AliceBlue-gated legacy OTP-validate redirect interceptor, RN + Flutter parity.
+Canonical docs: Alphab2bapp `PHASE3_ARCHITECTURE.md` § WebViewBrokerAuthFlow
+→ "AliceBlue-only WebView overrides", `PHASE3_BROKER_AUDIT.md` AliceBlue row.
+
+**To pick up on another machine**: `git pull` in alphaquark-mobile-sdk, then
+`npm run build` in `packages/rn` (lib/ is gitignored, built locally), then
+restart Metro with `--reset-cache`. JS-only — no pod install.
+
+---
+
 ## [unreleased] - 2026-06-11 — MPInvestNowModal Cashfree install-source handling (ported from upstream Alphab2bapp)
 
 Ported the upstream fix (Alphab2bapp `e1ac60f` + `76b943d`) — alphanomy's
