@@ -4,6 +4,28 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ---
 
+## [unreleased] - 2026-06-11 — AliceBlue iOS blank: real root cause — WKWebView shims (serviceWorker + Notification)
+
+The UA-only fix below proved insufficient. Real root cause (verified by
+reading AliceBlue's deployed bundle): their Vue bootstrap runs
+firebase-messaging at module top level before `mount("#app")` —
+`navigator.serviceWorker` + `Notification` don't exist in iOS WKWebView, so
+their own code throws and the page never mounts (blank). Android WebView has
+both APIs → works.
+
+- SDK fix: `alphaquark-mobile-sdk` `c0d53d5` — serviceWorker + Notification
+  stubs prepended to the AliceBlue-gated document-start script (RN + Flutter).
+  Consumed here via the symlinked package; pull + `npm run build` in
+  `packages/rn` on the build machine.
+- `src/UIComponents/BrokerConnectionUI/AliceBlueConnectUI.js` — same shim in
+  the legacy lane (mirrored byte-identical from upstream Alphab2bapp
+  `7d643a2`; legacy had the identical latent bug).
+
+Canonical docs: Alphab2bapp `PHASE3_ARCHITECTURE.md` § WebViewBrokerAuthFlow
+→ "AliceBlue-only WebView overrides" (rewritten with the real root cause).
+
+---
+
 ## [unreleased] - 2026-06-11 — AliceBlue blank WebView on iOS — fixed in the shared SDK package (no src change here)
 
 **Symptom**: iOS only — "connect AliceBlue → spinner → blank". Android fine,
