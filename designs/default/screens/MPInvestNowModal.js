@@ -1092,6 +1092,7 @@ const MPInvestNowModal = ({ viewModel, actions }) => {
           {/* Content */}
           <ScrollView
             style={styles.content}
+            contentContainerStyle={styles.scrollContentContainer}
             showsVerticalScrollIndicator={false}>
             <View style={styles.stepsContainer}>
               {steps.map((step, index) => (
@@ -1285,6 +1286,13 @@ const styles = StyleSheet.create({
 
   content: {
     flex: 1,
+  },
+  // Bottom inset so the "Complete Investment" CTA at the end of step 3
+  // clears the Android gesture nav bar instead of sitting flush against
+  // (or partly under) it. The SafeAreaView only insets the outer frame;
+  // the scrollable content needs its own bottom pad. Added 2026-06-12.
+  scrollContentContainer: {
+    paddingBottom: 32,
   },
   stepsContainer: {
     padding: 16,

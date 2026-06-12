@@ -963,9 +963,25 @@ const MPInvestNowModal = ({
                 console.error('[Digio] Failed to update digio_verification:', err);
               }
 
-              // Download signed doc (best-effort, doesn't block success flow)
-              try {
-                await axios.get(
+              // Show the success modal IMMEDIATELY after verification +
+              // digio-mark, BEFORE the signed-doc download. The download is
+              // best-effort but was previously `await`ed here, leaving the
+              // plan-selection sheet visible for the download's full duration
+              // (user-reported "flash back to the plans screen after Digio
+              // confirm", 2026-06-12). Showing the success modal first closes
+              // that gap; the download runs in the background below.
+              setDigioSuccessModal(true);
+              setLoading(false);
+              console.log('this get true----');
+
+              // Clear pending Digio on successful completion
+              await clearPendingDigio();
+              console.log('[Digio] Cleared pending Digio after successful signature');
+
+              // Download signed doc — fire-and-forget (best-effort, MUST NOT
+              // delay the success modal). Errors are swallowed/logged.
+              axios
+                .get(
                   `${server.ccxtServer.baseUrl}misc/digio/download/signed-doc/${storeDigioData?.id}/${advisorTag}`,
                   {
                     headers: {
@@ -979,20 +995,11 @@ const MPInvestNowModal = ({
                     },
                     responseType: 'blob',
                   },
+                )
+                .then(() => console.log('[Digio] Signed doc downloaded successfully'))
+                .catch(error =>
+                  console.error('[Digio] Error downloading signed PDF (non-blocking):', error),
                 );
-                console.log('[Digio] Signed doc downloaded successfully');
-              } catch (error) {
-                console.error('[Digio] Error downloading signed PDF (non-blocking):', error);
-              }
-
-              // Show success modal with anti-drop-off mechanism instead of direct payment
-              setDigioSuccessModal(true);
-              setLoading(false);
-              console.log('this get true----');
-
-              // Clear pending Digio on successful completion
-              await clearPendingDigio();
-              console.log('[Digio] Cleared pending Digio after successful signature');
             } else {
               setDigioUnsuccessModal(true);
               setRazorpayLoader(false);

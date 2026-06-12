@@ -4,6 +4,18 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ---
 
+## [unreleased] - 2026-06-12 — MPInvestNowModal cosmetic: post-Digio flash + CTA under nav bar (port upstream 1579b57)
+
+1. Post-Digio "flash back to the plans sheet" — handleDigioSuccess awaited
+   the signed-doc download before showing DigioSuccessModal; now shows the
+   modal first and downloads fire-and-forget.
+2. "Complete Investment" CTA sat under the gesture nav bar — added
+   scrollContentContainer paddingBottom:32 to the step ScrollView.
+
+Both byte-identical to upstream Alphab2bapp. New app build required.
+
+---
+
 ## [unreleased] - 2026-06-12 — Cashfree recurring checkout: session-id strip removed (port upstream b1b1dc0; NEW BUILD REQUIRED)
 
 After Digio, "Complete Investment" opened Cashfree's raw error page
