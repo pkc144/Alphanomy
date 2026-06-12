@@ -1570,9 +1570,16 @@ const MPInvestNowModal = ({
       );
       setLoadingmp(false);
 
-      let subsSessionId = response?.data?.data?.subscription_session_id;
-      if (typeof subsSessionId === 'string')
-        subsSessionId = subsSessionId.replace(/(payment){1,2}$/, '');
+      // Pass the subscription_session_id RAW — do NOT strip anything.
+      // A previous build stripped a trailing "payment" token
+      // (.replace(/(payment){1,2}$/, '')), but that suffix is PART of the
+      // ID Cashfree issues: the working web (PricingPage.js
+      // initiateCashfreeRecurringPayment) passes it untouched to
+      // cashfree.subscriptionsCheckout. The strip corrupted the session →
+      // Cashfree's hosted checkout rendered its raw error page
+      // ("payload: <no value> / errorMessage: no referrer…") instead of
+      // the payment UI (alphanomy, 2026-06-12).
+      const subsSessionId = response?.data?.data?.subscription_session_id;
       const orderId = response?.data?.data?.order_id;
       const redirectTarget = '_self';
       console.log('response of CF---', response);

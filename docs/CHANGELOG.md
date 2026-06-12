@@ -4,6 +4,18 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ---
 
+## [unreleased] - 2026-06-12 — Cashfree recurring checkout: session-id strip removed (port upstream b1b1dc0; NEW BUILD REQUIRED)
+
+After Digio, "Complete Investment" opened Cashfree's raw error page
+("payload: <no value> / no referrer") — the app stripped the trailing
+"payment" token from subscription_session_id before opening the native
+subscription checkout; that suffix is part of the ID (web passes it raw and
+works). Strip removed, container kept byte-identical to upstream. The fix is
+app JS — ship a new build (test recurring checkout via Play Store internal
+testing; sideloads hit Cashfree's install-source block).
+
+---
+
 ## [unreleased] - 2026-06-12 — Payment spinner root cause: admin.paymentPlatform was 'razorpay' (DB fix, no code change)
 
 The app obeys `admin.paymentPlatform` via `GET /get-payment-platform`; for
