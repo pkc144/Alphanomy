@@ -4,6 +4,19 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ---
 
+## [unreleased] - 2026-06-12 — Payment spinner root cause: admin.paymentPlatform was 'razorpay' (DB fix, no code change)
+
+The app obeys `admin.paymentPlatform` via `GET /get-payment-platform`; for
+alphanomy it said `razorpay` while only Cashfree is configured (razorpay
+key_id null) → the modal took a dead Razorpay branch → endless spinner on
+every build incl. Play Store. Web worked (reads `payment_gateway_configs.
+active_gateway` = cashfree). Fixed 2026-06-12 in the alphanomy DB:
+`db.admin.updateOne({is_primary:true},{$set:{paymentPlatform:'cashfree'}})`.
+No app change. Canonical writeup: Alphab2bapp
+`MODEL_PORTFOLIO_ARCHITECTURE.md` § 4c (three-sources warning block).
+
+---
+
 ## [unreleased] - 2026-06-11 — AliceBlue iOS blank: real root cause — WKWebView shims (serviceWorker + Notification)
 
 The UA-only fix below proved insufficient. Real root cause (verified by
