@@ -4,6 +4,23 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ---
 
+## [unreleased] - 2026-06-18 — iOS version bump retarget: 1.0.15/12 → 1.0.16/13 (collision with App Store Connect)
+
+App Store Connect already had Build 12 (Marketing 1.0.15) in "Ready for
+Distribution" under Version 12, and Version 13 was being prepared.
+Re-uploading 1.0.15/12 would be rejected by Apple as a duplicate, so
+bumped to `MARKETING_VERSION = 1.0.16` and `CURRENT_PROJECT_VERSION = 13`
+(both Debug + Release configs in
+`ios/AlphaQuark.xcodeproj/project.pbxproj`).
+
+This puts iOS one marketing version ahead of Android (1.0.16 vs 1.0.15).
+Next Android release should match — and when the backend `latestAppVersion`
+is bumped to drive iOS adoption, set it to `1.0.16` carefully so it
+doesn't re-trigger the legacy update modal on Android 1.0.15 devices in
+the same window.
+
+---
+
 ## [unreleased] - 2026-06-18 — iOS unresponsive on TestFlight: stale marketing version + invalid App Store URL
 
 **Symptom**: iPhone 16 Pro on TestFlight reports the app opens but no taps
