@@ -4,6 +4,28 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ---
 
+## [unreleased] - 2026-06-18 — alphanomy 54 / 1.0.16 AAB build (Android-iOS version parity)
+
+Bumped `versionCode 53 → 54` and `versionName "1.0.15" → "1.0.16"` in
+`android/app/build.gradle` to match the iOS retarget (1.0.16 / build 13).
+Produced signed AAB at
+`android/app/build/outputs/bundle/release/app-release.aab` (45.6 MB)
+for upload to Play Console.
+
+Includes:
+- HTML strip on MP description / rebalance overView (`74f7168`).
+- Reco-messages port + Digio + Cashfree logging (`77d5ed7`).
+
+No Android-specific code changes — straight version bump. Signing via
+the shared Zamzam upload keystore at `android/app/alphanomy-release.keystore`
+with credentials in `~/.gradle/gradle.properties` (per-machine, never
+tracked). Firebase config at `android/app/google-services.json` is also
+per-machine; copied from `~/Downloads/google-services (25).json`
+(project_id `alphanomy`, project_number `713385591555`) — same pattern
+as `ios/GoogleService-Info.plist`.
+
+---
+
 ## [unreleased] - 2026-06-18 — iOS version bump retarget: 1.0.15/12 → 1.0.16/13 (collision with App Store Connect)
 
 App Store Connect already had Build 12 (Marketing 1.0.15) in "Ready for
