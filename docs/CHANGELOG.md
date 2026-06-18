@@ -4,6 +4,54 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ---
 
+## [unreleased] - 2026-06-18 — iOS unresponsive on TestFlight: stale marketing version + invalid App Store URL
+
+**Symptom**: iPhone 16 Pro on TestFlight reports the app opens but no taps
+respond. Same JS bundle works fine on the iPhone 16 Pro simulator.
+
+**Root cause**: the iOS native marketing version was last bumped to `1.0.8`
+(`5c5ca3a`, 2026-05 cycle). The Android-only release cycle that followed
+took the app to `1.0.15` (`912c969 alphanomy 53/1.0.15`), and the alphanomy
+tenant's MongoDB `latestAppVersion` was updated to match for the Play Store
+update prompt. On iOS, `AppUpdateChecker` reads
+`DeviceInfo.getVersion() → "1.0.8"` from `CFBundleShortVersionString` and
+compares against `config.latestAppVersion → "1.0.15"`. `semver.lt` is true,
+so `<UpdateAppModal>` opens as a fullscreen `<Modal transparent animationType="fade">`
+with a `rgba(0,0,0,0.4)` overlay (`src/UpdateAppModal.js:171-177`). On
+release builds with Hermes the modal sometimes renders its
+content-`<LinearGradient>` invisibly while the overlay layer remains
+mounted — the user sees an apparently-untouched home screen but every tap
+hits the overlay and is swallowed. The simulator dev build did not hit
+this because the device's `MARKETING_VERSION` for sim builds was also 1.0.8
+but config hadn't been refreshed in dev (and the iOS marketing version
+matched what the user had dismissed before).
+
+A second, latent bug compounded this: `getAppStoreUrl()` was constructing
+`https://apps.apple.com/app/id${getPackageId()}` — i.e. `id**com.aq.alphanomy**`,
+the bundle ID. Apple App Store URLs require the numeric store ID (e.g.
+`id1234567890`); `idcom.aq.alphanomy` is a 404. So even if a user
+*did* see the modal and tapped "Update Now", iOS would refuse to open
+the link, leaving them stuck on the overlay.
+
+Files:
+- `ios/AlphaQuark.xcodeproj/project.pbxproj` — `MARKETING_VERSION 1.0.8 → 1.0.15`
+  (Debug + Release) and `CURRENT_PROJECT_VERSION 11 → 12`. Next TestFlight
+  upload reports `1.0.15 (12)` which clears the update-modal trigger.
+- `src/UpdateAppModal.js` — `getAppStoreUrl(appStoreId)` now takes the
+  numeric ID and returns `null` when unset. `handleUpdate` reads
+  `config?.iosAppStoreId` and early-returns when null instead of calling
+  `Linking.openURL(<invalid>)`.
+- `src/context/ConfigContext.js` — exposed `iosAppStoreId` from
+  `apiData.iosAppStoreId`. Operator runbook: once the iOS build ships on
+  App Store, set
+  `db.appadvisors.updateOne({subdomain:'<tenant>'},{$set:{iosAppStoreId:'<numeric_id>'}})`.
+
+Until a fresh TestFlight build (`1.0.15 (12)`) is uploaded, existing devices
+on `1.0.8 (11)` remain broken — the JS fix alone cannot resolve this
+because the version check reads the native bundle string, not the JS layer.
+
+---
+
 ## [unreleased] - 2026-06-18 — Strip HTML tags from MP description / rebalance overView
 
 The model-portfolio API returns `description` (Model Portfolios card) and

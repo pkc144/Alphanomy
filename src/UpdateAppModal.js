@@ -23,8 +23,15 @@ const getPackageId = () => DeviceInfo.getBundleId();
 const getPlayStoreUrl = () =>
   `https://play.google.com/store/apps/details?id=${getPackageId()}`;
 
-const getAppStoreUrl = () =>
-  `https://apps.apple.com/app/id${getPackageId()}`;
+// App Store URLs require Apple's numeric app ID (e.g. id1234567890), NOT the
+// bundle ID. The numeric ID is per-tenant and lives in backend config as
+// `iosAppStoreId`. When null (app not yet on App Store, TestFlight only), we
+// return null so callers can skip the version prompt entirely instead of
+// linking the user to an invalid URL.
+const getAppStoreUrl = (appStoreId) => {
+  if (!appStoreId) return null;
+  return `https://apps.apple.com/app/id${appStoreId}`;
+};
 
 // serverVersion: version string from backend config (e.g. "1.0.4").
 // When provided, skips Play Store scraping — which is unreliable because
@@ -118,7 +125,11 @@ const UpdateAppModal = ({visible, onClose, serverVersion}) => {
   }, [visible, checkUpdate]);
 
   const handleUpdate = () => {
-    const storeUrl = Platform.OS === 'android' ? getPlayStoreUrl() : getAppStoreUrl();
+    const storeUrl =
+      Platform.OS === 'android'
+        ? getPlayStoreUrl()
+        : getAppStoreUrl(config?.iosAppStoreId);
+    if (!storeUrl) return;
     Linking.openURL(storeUrl);
   };
 

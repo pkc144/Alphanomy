@@ -407,6 +407,16 @@ export const ConfigProvider = ({ children }) => {
                         // version; falls back to Play Store / App Store scraping when null.
                         // ============================================================================
                         latestAppVersion: apiData.latestAppVersion || null,
+
+                        // ============================================================================
+                        // iOS APP STORE ID — set this in MongoDB once the iOS build is live on the
+                        // App Store. The "Update Now" button on iOS opens
+                        // `https://apps.apple.com/app/id<iosAppStoreId>`. Apple requires the numeric
+                        // store ID (e.g. 1234567890), NOT the bundle ID.
+                        // db.appadvisors.updateOne({subdomain:'<tenant>'},{$set:{iosAppStoreId:'1234567890'}})
+                        // When null, UpdateAppModal's iOS Update CTA is a no-op (no broken URL).
+                        // ============================================================================
+                        iosAppStoreId: apiData.iosAppStoreId || null,
                     };
 
                     console.log('✅ Using newConfig from API for APP_VARIANTS:', {
