@@ -4,6 +4,30 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ---
 
+## [unreleased] - 2026-06-18 — Strip HTML tags from MP description / rebalance overView
+
+The model-portfolio API returns `description` (Model Portfolios card) and
+`overView` (Portfolio Recommendations rebalance card) as HTML-formatted
+strings, e.g. `<p><span style="color: rgb(44, 44, 44);">SectorSur…</p>`.
+Both surfaces were rendering the field inside `<Text>` directly, so the
+raw markup appeared in the UI — visible on the Home screen as
+"`<p><span style="color: rgb(44, 44, 44);">SectorSur… Read More`" inside
+the SectorSurfer rebalance card.
+
+Files:
+- `src/UIComponents/RebalanceAdvicesUI/RebalanceCard.js` — added a local
+  `stripHtml()` helper (regex tag-strip + entity decode + whitespace
+  collapse); applied to the truncated preview (50-char `Read More`
+  cutoff) and the full-text Read More modal.
+- `designs/default/composites/MPCard.js` — same `stripHtml()` helper
+  applied to the expanded "Overview" line.
+
+Cross-platform — same RN/JS code path on iOS and Android. No backend
+change. No env-var change. No broker surface touched. No SDK widget
+touched.
+
+---
+
 ## [unreleased] - 2026-06-12 — MPInvestNowModal cosmetic: post-Digio flash + CTA under nav bar (port upstream 1579b57)
 
 1. Post-Digio "flash back to the plans sheet" — handleDigioSuccess awaited
