@@ -54,7 +54,7 @@ const FALLBACK_TAGLINES = {
     brandSubtag: 'by alphanomy',
     heroTitle: 'Your Alpha,\nEngineered.',
     heroSubtitle:
-        'Research-backed investment plans curated by SEBI-registered advisors.',
+        'Research-backed investment plans curated by SEBI-registered managers.',
     trustBadges: [
         { icon: 'check', label: 'SEBI Registered' },
         { icon: 'shield', label: '256-bit Encrypted' },
