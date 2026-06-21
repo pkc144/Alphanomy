@@ -9,12 +9,13 @@
  * Contract is identical to default's composite — flat props, not viewModel:
  *   navigationState        — { index, routes: [{ key, title }] }
  *   jumpTo                 — (key: string) => void
- *   isSubscriptionActive   — boolean — when TRUE, first tab gets the lock icon
- *                            and is disabled. (Yes — the prop is named
- *                            `isSubscriptionActive` but the legacy logic
- *                            disables the first tab when it's TRUE; the
- *                            container passes `!isActive` so this matches
- *                            "disabled when there's NO active subscription".)
+ *   isSubscriptionActive   — boolean — when TRUE, the PORTFOLIO tab (premium
+ *                            content) gets the lock icon and is disabled. Locked
+ *                            by route.key ('portfolio'), NOT by index, so the tab
+ *                            order can change (Overview is index 0). The prop is
+ *                            named `isSubscriptionActive` but the container passes
+ *                            `!isActive`, so it means "lock when there's NO active
+ *                            subscription".)
  */
 
 import React, { memo } from 'react';
@@ -34,7 +35,10 @@ const CustomTabbarMPPerformance = memo(
                 <View style={styles.tabs}>
                     {navigationState.routes.map((route, idx) => {
                         const isActive = navigationState.index === idx;
-                        const isDisabled = idx === 0 && isSubscriptionActive;
+                        // Lock the PORTFOLIO tab (premium content) by key, not by
+                        // position — the tab order can change (Overview is now
+                        // index 0), so an index-based lock would lock the wrong tab.
+                        const isDisabled = route.key === 'portfolio' && isSubscriptionActive;
                         return (
                             <TouchableOpacity
                                 key={route.key}
