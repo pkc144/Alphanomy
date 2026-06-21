@@ -149,8 +149,8 @@ const buildRebalanceRow = (n, now) => {
         n?.body ||
         n?.description ||
         (n?.modelName
-            ? `Your advisor has updated the ${n.modelName} portfolio.`
-            : 'Your advisor has updated a model portfolio.');
+            ? `Your manager has updated the ${n.modelName} portfolio.`
+            : 'Your manager has updated a model portfolio.');
     return {
         id: n?._id ? `rebalance-${n._id}` : `rebalance-${date?.getTime?.() || Date.now()}`,
         section: sectionLabelFor(date, now),

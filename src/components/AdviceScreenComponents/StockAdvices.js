@@ -1241,7 +1241,7 @@ const StockAdvices = React.memo(({ userEmail, orderscreen, type }) => {
       Toast.show({
         type: 'error',
         text1: 'Order blocked — missing exchange',
-        text2: `Missing exchange for: ${missingList}. Please contact your advisor.`,
+        text2: `Missing exchange for: ${missingList}. Please contact your manager.`,
         visibilityTime: 8000,
       });
       setOpenReviewTrade(false);

@@ -268,7 +268,7 @@ const ModelPortfolioScreen = ({ viewModel, actions, slots }) => {
           <View style={styles.textWrapper}>
             <Text style={styles.emptyTitle}>No Plans Available</Text>
             <Text style={styles.emptySubtitle}>
-              When your advisor creates a plan, it will appear here.
+              When your manager creates a plan, it will appear here.
             </Text>
           </View>
         </View>

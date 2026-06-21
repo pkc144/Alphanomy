@@ -582,7 +582,7 @@ const HomeScreen = ({ }) => {
   const handleRecoMessageNotification = async (title, body) => {
     if (!title && !body) return;
     await notifee.displayNotification({
-      title: `${title || 'New message from your advisor'}`,
+      title: `${title || 'New message from your manager'}`,
       body: `${body || ''}`,
       android: {
         channelId: 'default',
@@ -687,7 +687,7 @@ const HomeScreen = ({ }) => {
         title: title || 'New Rebalance!',
         body:
           body ||
-          'You have received a new rebalance from your advisor. Tap to review.',
+          'You have received a new rebalance from your manager. Tap to review.',
         android: {
           channelId: 'default',
           importance: AndroidImportance.HIGH,

@@ -656,7 +656,7 @@ const RebalanceModal = ({
       Toast.show({
         type: 'error',
         text1: 'Order blocked — missing exchange',
-        text2: `Missing exchange for: ${missingList}. Please contact your advisor.`,
+        text2: `Missing exchange for: ${missingList}. Please contact your manager.`,
         visibilityTime: 8000,
       });
       return;
@@ -2137,7 +2137,7 @@ const RebalanceModal = ({
   };
 
   // Mark a repair-mode row as manually placed. Calls aq_backend's
-  // /api/model-portfolio-db-update/manual-placement so the advisor's
+  // /api/model-portfolio-db-update/manual-placement so the manager's
   // model_portfolio.rebalanceHistory[].adviceEntries[].status flips to
   // "executed" + manually_placed_at is stamped, then mutates the local
   // dataArray to remove the row visually. Mirrors mobile MP success
@@ -2516,7 +2516,7 @@ const RebalanceModal = ({
                         }}>
                         Great news! Based on your current holdings and the latest model
                         portfolio recommendations, no trades are needed right now. Your
-                        investments are already in sync with your advisor's strategy.
+                        investments are already in sync with your manager's strategy.
                       </Text>
                       <Text
                         style={{

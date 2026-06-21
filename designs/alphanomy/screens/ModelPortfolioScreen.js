@@ -59,14 +59,25 @@ const ModelPortfolioScreenAlphanomy = ({ viewModel, actions, home, slots }) => {
     const mpPlans = livePlans?.mp || [];
 
     const { tabIndex = 0 } = viewModel || {};
-    const [tab, setTab] = useState(tabIndex === 0 ? 'bespoke' : 'mp');
 
-    // Sync local tab state with container's tabIndex (e.g. when navigating from Home View All)
+    // Real bespoke plans only — the backend injects a `priorRecommendationPlan`
+    // system offering that must NOT, on its own, surface a Bespoke tab.
+    const realBespoke = bespokePlans.filter(
+        p => p?.name !== 'priorRecommendationPlan' && p?.key !== 'priorRecommendationPlan',
+    );
+    const hasBespoke = realBespoke.length > 0;
+
+    // Land on Model Portfolio by default (container route 0 = Model Portfolio).
+    const [tab, setTab] = useState('mp');
+
+    // Honour a container-driven selection (e.g. Home "View All" deep-link to
+    // bespoke) only when bespoke plans actually exist; otherwise stay on MP.
     React.useEffect(() => {
-        setTab(tabIndex === 0 ? 'bespoke' : 'mp');
-    }, [tabIndex]);
+        if (tabIndex !== 0 && hasBespoke) setTab('bespoke');
+        else setTab('mp');
+    }, [tabIndex, hasBespoke]);
 
-    const plans = tab === 'bespoke' ? bespokePlans : mpPlans;
+    const plans = tab === 'bespoke' ? realBespoke : mpPlans;
 
     return (
         <SafeAreaView style={styles.safe}>
@@ -83,28 +94,7 @@ const ModelPortfolioScreenAlphanomy = ({ viewModel, actions, home, slots }) => {
                 showsVerticalScrollIndicator={false}
             >
                 <View style={styles.pillTabs}>
-                    <TouchableOpacity
-                        style={[
-                            styles.pillTab,
-                            tab === 'bespoke' && styles.pillTabHidden,
-                        ]}
-                        onPress={() => setTab('bespoke')}
-                        activeOpacity={0.85}
-                    >
-                        {tab === 'bespoke' ? (
-                            <LinearGradient
-                                colors={GRADIENTS.brand}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 1 }}
-                                style={styles.pillTabGradFill}
-                            >
-                                <Text style={styles.pillTabTextActiveGrad}>Bespoke Plans</Text>
-                            </LinearGradient>
-                        ) : (
-                            <Text style={styles.pillTabText}>Bespoke Plans</Text>
-                        )}
-                    </TouchableOpacity>
-
+                    {/* Model Portfolio FIRST — the default landing tab. */}
                     <TouchableOpacity
                         style={[
                             styles.pillTab,
@@ -126,6 +116,31 @@ const ModelPortfolioScreenAlphanomy = ({ viewModel, actions, home, slots }) => {
                             <Text style={styles.pillTabText}>Model Portfolio</Text>
                         )}
                     </TouchableOpacity>
+
+                    {/* Bespoke tab only when there are real bespoke plans. */}
+                    {hasBespoke && (
+                        <TouchableOpacity
+                            style={[
+                                styles.pillTab,
+                                tab === 'bespoke' && styles.pillTabHidden,
+                            ]}
+                            onPress={() => setTab('bespoke')}
+                            activeOpacity={0.85}
+                        >
+                            {tab === 'bespoke' ? (
+                                <LinearGradient
+                                    colors={GRADIENTS.brand}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 1 }}
+                                    style={styles.pillTabGradFill}
+                                >
+                                    <Text style={styles.pillTabTextActiveGrad}>Bespoke Plans</Text>
+                                </LinearGradient>
+                            ) : (
+                                <Text style={styles.pillTabText}>Bespoke Plans</Text>
+                            )}
+                        </TouchableOpacity>
+                    )}
                 </View>
 
                 {plans.length === 0 ? (
@@ -134,7 +149,7 @@ const ModelPortfolioScreenAlphanomy = ({ viewModel, actions, home, slots }) => {
                             No {tab === 'bespoke' ? 'bespoke plans' : 'model portfolios'} yet
                         </Text>
                         <Text style={styles.emptySub}>
-                            Plans configured for your advisor will appear here.
+                            Plans configured by your manager will appear here.
                         </Text>
                     </View>
                 ) : (

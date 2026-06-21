@@ -90,7 +90,7 @@ const FALLBACK_ITEMS = [
         kind: 'message',
         title: 'Advisor Message',
         message:
-            'Your advisor has replied to your query about BankNifty hedging.',
+            'Your manager has replied to your query about BankNifty hedging.',
         time: 'Apr 27',
         unread: false,
     },

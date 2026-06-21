@@ -130,7 +130,7 @@ const SignUpRADetails = ({ viewModel, actions }) => {
                         </TouchableOpacity>
 
                         <Text variant="caption" style={styles.helpText}>
-                            Don't have an RA ID? Contact your financial advisor.
+                            Don't have an RA ID? Contact your manager.
                         </Text>
                     </View>
                 </LinearGradient>

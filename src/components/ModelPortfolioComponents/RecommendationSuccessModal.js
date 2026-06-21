@@ -983,7 +983,7 @@ const RecommendationSuccessModal = ({
                           ? 'Every order was blocked by the exchange. See the alert below.'
                           : (orderResponse?.[0]?.message_aq ||
                               orderResponse?.[0]?.message ||
-                              'Your order could not be placed. Please contact your advisor.')}
+                              'Your order could not be placed. Please contact your manager.')}
                   </Text>
 
                   {/* Keep link to Orders */}
@@ -1023,7 +1023,7 @@ const RecommendationSuccessModal = ({
                       style={styles.linkText}>
                       Order details
                     </Text>{' '}
-                    below and contact your advisor for next steps.
+                    below and contact your manager for next steps.
                   </Text>
                 </View>
               </View>

@@ -687,7 +687,7 @@ const IgnoreTradesScreen = () => {
           type: 'error',
           text1: 'Failed',
           text2:
-            'There was an issue in placing the trade, please try again after sometime or contact your advisor',
+            'There was an issue in placing the trade, please try again after sometime or contact your manager',
           visibilityTime: 5000,
           position: 'bottom',
           bottomOffset: 40,
@@ -746,7 +746,7 @@ const IgnoreTradesScreen = () => {
       Toast.show({
         type: 'error',
         text1: 'Order blocked — missing exchange',
-        text2: `Missing exchange for: ${missingList}. Please contact your advisor.`,
+        text2: `Missing exchange for: ${missingList}. Please contact your manager.`,
         visibilityTime: 8000,
       });
       return;

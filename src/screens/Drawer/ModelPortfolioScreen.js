@@ -520,7 +520,7 @@ const ModelPortfolioScreen = ({type = '', onDataLoaded}) => {
           <View style={localStyles.textWrapper}>
             <Text style={localStyles.emptyTitle}>No Model Portfolio Available</Text>
             <Text style={localStyles.emptySubtitle}>
-              When your advisor creates a strategy, it will appear here.
+              When your manager creates a strategy, it will appear here.
             </Text>
           </View>
         </View>
@@ -582,7 +582,7 @@ const ModelPortfolioScreen = ({type = '', onDataLoaded}) => {
                 No Bespoke Plan Is Available Now
               </Text>
               <Text style={localStyles.emptySubtitle}>
-                When your advisor creates any strategy, it will appear here
+                When your manager creates any strategy, it will appear here
               </Text>
             </View>
           </View>

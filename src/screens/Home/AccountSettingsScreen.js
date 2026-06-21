@@ -95,7 +95,7 @@ const AccountSettingsScreen = ({ navigation }) => {
                         {
                             icon: Tags,
                             label: 'Change Manager',
-                            onPress: () => handleMenuPress('Advisor Change'),
+                            onPress: () => handleMenuPress('Manager Change'),
                         },
                     ]
                     : []),

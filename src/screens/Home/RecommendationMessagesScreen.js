@@ -126,7 +126,7 @@ const RecommendationMessagesScreen = () => {
               <MessageSquare color="#cbd5e1" size={40} />
               <Text style={styles.emptyTitle}>No Messages Yet</Text>
               <Text style={styles.muted}>
-                Investment messages from your advisor will appear here.
+                Investment messages from your manager will appear here.
               </Text>
             </View>
           ) : (

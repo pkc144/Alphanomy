@@ -891,7 +891,7 @@ const MPReviewTradeModal = ({
     const exchangeCheck = validateStockExchanges(stockDetails);
     if (!exchangeCheck.valid) {
       const missingList = exchangeCheck.missing.join(', ');
-      const userMsg = `Cannot place order — exchange is missing for: ${missingList}. Please contact your advisor to correct the trade before retrying.`;
+      const userMsg = `Cannot place order — exchange is missing for: ${missingList}. Please contact your manager to correct the trade before retrying.`;
       console.error('[ZerodhaPublisher] Blocked due to missing exchange:', missingList);
       const syntheticResponse = stockDetails.map(stock => {
         const stockMissing = !(stock.exchange && String(stock.exchange).trim());
@@ -1400,7 +1400,7 @@ const MPReviewTradeModal = ({
       Toast.show({
         type: 'error',
         text1: 'Order blocked — missing exchange',
-        text2: `Missing exchange for: ${missingList}. Please contact your advisor.`,
+        text2: `Missing exchange for: ${missingList}. Please contact your manager.`,
         visibilityTime: 8000,
       });
       onCloseReviewTrade();

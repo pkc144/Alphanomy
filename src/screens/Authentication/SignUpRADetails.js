@@ -67,7 +67,7 @@ const SignUpRADetails = ({ route }) => {
             }
 
             setLoading(true);
-            setStatusMessage('Verifying advisor details...');
+            setStatusMessage('Verifying manager details...');
 
             const result = await updateRACodeAndConfig(raId.trim(), userEmail);
 
@@ -105,7 +105,7 @@ const SignUpRADetails = ({ route }) => {
             } else if (result.advisorExists === false) {
                 Alert.alert(
                     'Invalid RA ID',
-                    'The RA ID you entered is not registered in our system. Please contact your financial advisor for the correct RA ID.',
+                    'The RA ID you entered is not registered in our system. Please contact your manager for the correct RA ID.',
                     [{ text: 'OK' }],
                 );
                 setStatusMessage('');
