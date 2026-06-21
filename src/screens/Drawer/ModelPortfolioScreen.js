@@ -120,16 +120,19 @@ const ModelPortfolioScreen = ({type = '', onDataLoaded}) => {
         title: config?.timeCyclePlanLabel || 'Time Cycle',
       });
     }
-    // Bespoke tab: shown only when the admin flag allows it AND the bespoke
-    // catalog actually has at least one plan. Tenants that offer no bespoke
-    // plans no longer get a dead "Bespoke Plan" tab. `allBespoke` is
-    // async-loaded, so the tab appears once the catalog lands (and never, if
-    // it's empty). Admin can still force-hide via bespokePlansEnabled=false.
-    if (config?.bespokePlansEnabled !== false && (allBespoke?.length || 0) > 0) {
+    // Bespoke tab: shown only when the admin flag allows it AND the catalog
+    // has at least one REAL bespoke plan. `priorRecommendationPlan` is a
+    // backend-injected system offering (not an advisor-created bespoke plan),
+    // so it must NOT, on its own, light up a "Bespoke Plan" tab — that's why
+    // tenants with zero real bespoke plans were still seeing the tab.
+    const realBespokeCount = (allBespoke || []).filter(
+      p => p?.name !== 'priorRecommendationPlan',
+    ).length;
+    if (config?.bespokePlansEnabled !== false && realBespokeCount > 0) {
       availableRoutes.push({key: 'bespoke', title: 'Bespoke Plan'});
     }
     return availableRoutes;
-  }, [config, allBespoke?.length, hasTimeCycle]);
+  }, [config, allBespoke, hasTimeCycle]);
 
   // Keep the selected tab index valid when `routes` shrinks (e.g. the bespoke
   // tab drops out because its catalog came back empty) — a stale index past

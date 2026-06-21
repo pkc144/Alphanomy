@@ -408,6 +408,12 @@ export const ConfigProvider = ({ children }) => {
                         // ============================================================================
                         latestAppVersion: apiData.latestAppVersion || null,
 
+                        // Multi-advisor RA-ID onboarding gate. Only the master
+                        // app (b2b / subdomain "prod") sets this true in
+                        // appadvisors; every white-label defaults false → the
+                        // SignUpRADetails screen self-redirects to Home.
+                        raIdOnboardingEnabled: apiData.raIdOnboardingEnabled === true,
+
                         // ============================================================================
                         // iOS APP STORE ID — set this in MongoDB once the iOS build is live on the
                         // App Store. The "Update Now" button on iOS opens
