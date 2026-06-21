@@ -39,8 +39,8 @@ android {
         applicationId "com.aq.alphanomy"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 67
-        versionName "1.0.29"
+        versionCode 68
+        versionName "1.0.30"
 
         missingDimensionStrategy "store", "play"
         ndk {

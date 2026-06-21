@@ -14,6 +14,17 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
+    <!-- The Daily/WebRTC voice library (used AUDIO-ONLY here) transitively
+         declares FOREGROUND_SERVICE_MEDIA_PROJECTION + a MediaProjectionService
+         for screen-sharing, which this app never does. Strip both so the merged
+         manifest carries no media-projection capability and Play Console does
+         not require the FOREGROUND_SERVICE_MEDIA_PROJECTION declaration. Safe:
+         the MediaProjectionService is only started on screen-share, never on
+         audio calls. -->
+    <uses-permission
+        android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION"
+        tools:node="remove" />
+
     <application
         android:name=".MainApplication"
         android:label="@string/app_name"
@@ -27,9 +38,14 @@
             android:value="true"
             tools:replace="android:value" />
 
-        <meta-data 
-            android:name="com.dieam.reactnativepushnotification.notification_foreground" 
+        <meta-data
+            android:name="com.dieam.reactnativepushnotification.notification_foreground"
             android:value="true" />
+
+        <!-- Remove the WebRTC screen-share foreground service (audio-only app). -->
+        <service
+            android:name="com.oney.WebRTCModule.MediaProjectionService"
+            tools:node="remove" />
 
         <activity
             android:name=".MainActivity"
