@@ -77,6 +77,7 @@ const ModelPortfolioScreen = ({ viewModel, actions, slots }) => {
   const {
     TabBarSlot,
     MPListSlot,
+    TimeCycleListSlot,
     BespokeListSlot,
     InvestNowModalSlot = null,
     PaymentSuccessSlot = null,
@@ -85,6 +86,7 @@ const ModelPortfolioScreen = ({ viewModel, actions, slots }) => {
 
   const renderScene = ({ route }) => {
     if (route.key === 'modelportfolio' && MPListSlot) return MPListSlot();
+    if (route.key === 'timecycle' && TimeCycleListSlot) return TimeCycleListSlot();
     if (route.key === 'bespoke' && BespokeListSlot) return BespokeListSlot();
     return null;
   };

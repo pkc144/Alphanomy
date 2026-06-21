@@ -96,8 +96,30 @@ const ModelPortfolioScreen = ({type = '', onDataLoaded}) => {
 
   const [index, setIndex] = useState(0);
 
+  // Time-cycle plans are model-portfolio plans flagged `timeCyclePlan: true`
+  // (Plan.js). They ride in `allStrategy`; we split them into their own tab.
+  const timeCyclePlans = React.useMemo(
+    () => (allStrategy || []).filter(p => p?.timeCyclePlan === true),
+    [allStrategy],
+  );
+  const hasTimeCycle =
+    config?.enableTimeCyclePlan !== false && timeCyclePlans.length > 0;
+
   const routes = React.useMemo(() => {
     const availableRoutes = [];
+    // Model Portfolio FIRST so the screen lands here by default (index 0),
+    // not on Bespoke.
+    if (config?.modelPortfolioEnabled !== false) {
+      availableRoutes.push({key: 'modelportfolio', title: 'Model Portfolio'});
+    }
+    // Time Cycle tab: only when the catalog actually has active time-cycle
+    // plans (and not admin-disabled). No time-cycle plans → no dead tab.
+    if (hasTimeCycle) {
+      availableRoutes.push({
+        key: 'timecycle',
+        title: config?.timeCyclePlanLabel || 'Time Cycle',
+      });
+    }
     // Bespoke tab: shown only when the admin flag allows it AND the bespoke
     // catalog actually has at least one plan. Tenants that offer no bespoke
     // plans no longer get a dead "Bespoke Plan" tab. `allBespoke` is
@@ -106,11 +128,8 @@ const ModelPortfolioScreen = ({type = '', onDataLoaded}) => {
     if (config?.bespokePlansEnabled !== false && (allBespoke?.length || 0) > 0) {
       availableRoutes.push({key: 'bespoke', title: 'Bespoke Plan'});
     }
-    if (config?.modelPortfolioEnabled !== false) {
-      availableRoutes.push({key: 'modelportfolio', title: 'Model Portfolio'});
-    }
     return availableRoutes;
-  }, [config, allBespoke?.length]);
+  }, [config, allBespoke?.length, hasTimeCycle]);
 
   // Keep the selected tab index valid when `routes` shrinks (e.g. the bespoke
   // tab drops out because its catalog came back empty) — a stale index past
@@ -471,9 +490,15 @@ const ModelPortfolioScreen = ({type = '', onDataLoaded}) => {
     return bSubscribed - aSubscribed;
   });
 
-  const renderMPList = () => (
+  // In the tabbed Plans view, time-cycle plans get their own tab, so split
+  // them out of the Model Portfolio list. Horizontal/home lists keep showing
+  // the full set (default arg below).
+  const mpTabStrategy = sortedStrategy.filter(p => !p?.timeCyclePlan);
+  const tcTabStrategy = sortedStrategy.filter(p => p?.timeCyclePlan === true);
+
+  const renderMPList = (data = sortedStrategy) => (
     <FlatList
-      data={sortedStrategy}
+      data={data}
       renderItem={renderItem}
       keyExtractor={(item, idx) =>
         item._id || item.id || item.model_name?.toString() || idx.toString()
@@ -693,7 +718,12 @@ const ModelPortfolioScreen = ({type = '', onDataLoaded}) => {
         TabBarSlot: (props) => <CustomTabBar {...props} />,
         MPListSlot: isSingleListType
           ? (isMP ? renderMPList : null)
-          : renderMPList,
+          // Only carve time-cycle plans out of MP when the Time Cycle tab is
+          // actually shown — otherwise they'd vanish with nowhere to appear.
+          : () => renderMPList(hasTimeCycle ? mpTabStrategy : sortedStrategy),
+        TimeCycleListSlot: isSingleListType
+          ? null
+          : () => renderMPList(tcTabStrategy),
         BespokeListSlot: isSingleListType
           ? (!isMP ? renderBespokeList : null)
           : renderBespokeList,
