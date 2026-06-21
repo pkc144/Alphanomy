@@ -175,6 +175,43 @@ const MarketIndices = () => {
     fetchPreviousClosePrices();
   }, [configData]);
 
+  // Recompute change/% whenever the base (prev_close) or comparison mode
+  // changes — WITHOUT waiting for the next price tick.
+  //
+  // The tick handler below only (re)computes `change` when the price ticks
+  // to a NEW value (the `newPrice !== currentData.value` gate). But the
+  // prev_close base is fetched asynchronously and usually lands AFTER the
+  // first tick has already set change=0 (in "loading" mode the base is the
+  // live price itself). If the index then doesn't tick to a fresh value, the
+  // stale 0.00 change sticks on screen even though the correct base is now
+  // known — the intermittent "Nifty/Sensex 0.00" report. This effect closes
+  // that race: on every base/mode change, recompute each index's change from
+  // its current value against the current base. (2026-06-21)
+  useEffect(() => {
+    if (comparisonType !== "prevClose") {
+      return;
+    }
+    setMarketData((prev) => {
+      let mutated = false;
+      const next = { ...prev };
+      Object.keys(indicesConfig).forEach((key) => {
+        const data = prev[key];
+        const base = basePrices[key];
+        if (!data || data.loading || base == null || !data.value) {
+          return;
+        }
+        const change = parseFloat((data.value - base).toFixed(2));
+        const percentChange =
+          base === 0 ? 0 : parseFloat(((change / base) * 100).toFixed(2));
+        if (change !== data.change || percentChange !== data.percentChange) {
+          next[key] = { ...data, change, percentChange, basePrice: base };
+          mutated = true;
+        }
+      });
+      return mutated ? next : prev;
+    });
+  }, [basePrices, comparisonType]);
+
   // Subscribe to all indices via WebSocket
   useEffect(() => {
     if (!configData) {

@@ -112,7 +112,7 @@ const KotakHelpContent = ({ expanded, onExpandChange }) => {
           </View>
 
           <Text style={styles.instruction1}>
-            Register for TOTP, verify mobile via OTP, select account, scan QR via authenticator app (e.g. Google Authenticator), and submit TOTP.
+            On the Kotak Neo API Dashboard (the Trade API page), click "TOTP Registration". Verify your mobile via OTP, select your account, scan the QR with an authenticator app (e.g. Google Authenticator), and submit the TOTP to register.
           </Text>
 
           {/* STEP 4 */}
@@ -120,6 +120,10 @@ const KotakHelpContent = ({ expanded, onExpandChange }) => {
 
           <Text style={styles.instruction1}>
             Return to this screen and fill the fields below: your Unique Client Code (UCC), the Consumer Key & Secret from Step 2, your MPIN, and the current TOTP from your Authenticator app (Step 3). Then tap Connect.
+          </Text>
+
+          <Text style={styles.instruction1}>
+            Tip: your Client Code (UCC) is shown in your Kotak Neo Profile (or in the "Select Client Code" prompt that appears during TradeAPI setup).
           </Text>
           </>
         )}
