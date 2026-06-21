@@ -244,14 +244,17 @@ const useNotificationFeed = () => {
         configData,
     } = useTrade();
 
-    // First-load fetch. Same trigger PushNotificationScreen uses (mount-time
-    // without dep tracking). Re-firing on focus is the container's job.
+    // First-load fetch. Gate on userEmail: on login the hook mounts before
+    // userEmail is hydrated, and firing then hits
+    // /get-user-notifications/undefined → 404 → the feed stays errored until a
+    // manual refresh. Depending on userEmail re-fires the fetch the moment it
+    // becomes available.
     useEffect(() => {
-        if (typeof getAllNotifcations === 'function') {
+        if (userEmail && typeof getAllNotifcations === 'function') {
             getAllNotifcations();
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [userEmail]);
 
     const notifications = useMemo(
         () => normalizeFeed(allNotifications?.notifications),

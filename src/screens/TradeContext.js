@@ -1247,6 +1247,12 @@ const getAllTrades = async () => {
   const [allNotifications, setAllNotifications] = useState(null);
 
   const getAllNotifcations = async () => {
+    // Don't fetch with an unresolved email — on login this can fire before
+    // userEmail hydrates and would hit /get-user-notifications/undefined → 404.
+    if (!userEmail) {
+      setIsNotificationLoading(false);
+      return;
+    }
     try {
       setIsNotificationLoading(true);
       const response = await axios.get(
