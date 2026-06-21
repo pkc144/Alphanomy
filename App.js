@@ -26,6 +26,7 @@ import {GstConfigProvider} from './src/context/GstConfigContext';
 import {MarketDataProvider} from './src/context/MarketDataContext';
 import ModalManager from './src/GlobalUIModals/ModalManager';
 import BrokerAlertModal from './src/GlobalUIModals/BrokerAlertModal';
+import SupportWidget from './src/components/SupportWidget/SupportWidget';
 import UpdateAppModal, {AppUpdateChecker} from './src/UpdateAppModal';
 import SdkProviderRoot, {
   isSdkIntegrationEnabled,
@@ -269,6 +270,7 @@ const App = () => {
                         </SafeAreaView>
                         <ModalManager />
                         <BrokerAlertModal />
+                        <SupportWidget userEmail={userEmail} visible={!!user} />
                         <AppUpdateChecker />
                       </SdkOn>
                     ) : (
@@ -283,6 +285,7 @@ const App = () => {
                         </SafeAreaView>
                         <ModalManager />
                         <BrokerAlertModal />
+                        <SupportWidget userEmail={userEmail} visible={!!user} />
                         <AppUpdateChecker />
                       </>
                     )}
