@@ -96,14 +96,47 @@ class LiveKitService {
   }
 
   // ---------------------------------------------------------------------------
-  // Live-class viewer token (Firebase + verifyEnrollment server-side)
-  // Returns { url, token, ttlSeconds }
+  // Live-class viewer token. Two credential models (mirrors web
+  // LiveKitService.getViewerToken, magic-link added 2026-06-06):
+  //   - Default: Firebase Bearer → POST /token/:lessonId (server runs
+  //     verifyEnrollment against the container course).
+  //   - Magic-link: a signed join JWT (from the confirmation email's
+  //     "Join the webinar" deep link) → POST /token-magic/:lessonId with
+  //     NO Firebase; the JWT is the sole credential and the server checks
+  //     a live webinar_registrations row for the bound email.
+  // Returns { url, token, ttlSeconds }.
   // ---------------------------------------------------------------------------
 
-  async getViewerToken(lessonId, courseId) {
+  async getViewerToken(lessonId, courseId, { joinToken } = {}) {
+    if (joinToken) {
+      const res = await axios.post(
+        `${BASE}/token-magic/${lessonId}`,
+        { joinToken, courseId },
+        { headers: getPublicHeaders() },
+      );
+      return res.data?.data;
+    }
     const headers = await getAuthedHeaders();
     const res = await axios.post(`${BASE}/token/${lessonId}`, { courseId }, { headers });
     return res.data?.data;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Web join URL (WebView live-room bridge).
+  //
+  // The app renders the LIVE class by loading the existing web webinar page
+  // in a react-native-webview — the browser's WebRTC stack runs the LiveKit
+  // room, so we avoid native LiveKit deps. The server mints a short-lived
+  // magic joinToken bound to the caller's verified email + this lesson and
+  // returns the full URL (https://<advisor>.alphaquark.in/webinar/<id>?joinToken=…),
+  // so no Firebase session needs to live inside the WebView. Firebase path
+  // (signed-in enrolled user). Returns the joinUrl string.
+  // ---------------------------------------------------------------------------
+
+  async getJoinUrl(lessonId, courseId) {
+    const headers = await getAuthedHeaders();
+    const res = await axios.post(`${BASE}/join-url/${lessonId}`, { courseId }, { headers });
+    return res.data?.data?.joinUrl;
   }
 }
 
