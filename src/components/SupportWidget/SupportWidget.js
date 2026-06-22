@@ -141,13 +141,16 @@ export default function SupportWidget({userEmail = '', visible = false}) {
     setCallActive(true); // mounts VoiceCallWebView → starts the Vapi web call
   };
 
-  // VoiceCallWebView → call status (connecting|live|idle|error).
-  const handleVoiceStatus = status => {
+  // VoiceCallWebView → call status (connecting|live|idle|error). `info` carries
+  // the end reason ('inactivity' when the cost-guard auto-dropped a silent call).
+  const handleVoiceStatus = (status, info) => {
     setCallStatus(status);
     if (status === 'idle' || status === 'error') {
       setCallActive(false);
       if (status === 'error') {
         pushMsg({from: 'bot', text: "Couldn't start the call. You can keep chatting here."});
+      } else if (info === 'inactivity') {
+        pushMsg({from: 'bot', text: 'Voice call ended after 30s of silence. Tap 📞 to start again, or keep chatting here.'});
       }
     }
   };
