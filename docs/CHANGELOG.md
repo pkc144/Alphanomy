@@ -4,6 +4,26 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ---
 
+## [unreleased] - 2026-06-22 — DB: alphanomy force-update gate (latestAppVersion + minAppVersion = 1.0.37)
+
+DB-only change (no code) on tidi mongo `alphanomy` DB → `appadvisors` doc
+(`subdomain:"alphanomy"`): set `latestAppVersion:"1.0.37"` and
+`minAppVersion:"1.0.37"` (was `latestAppVersion:"1.0.30"`, no `minAppVersion`).
+
+Drives `UpdateAppModal.js` (`src/UpdateAppModal.js:141-148`): the prompt shows
+only when `currentVersion < latestAppVersion`; with `minAppVersion` set,
+`isMandatory = currentVersion < minAppVersion`. So with both at 1.0.37:
+- users **on 1.0.37** → no prompt (already latest);
+- users **below 1.0.37** → forced "Upgrade Now" to 1.0.37 (the version live on
+  Play, so the Update button resolves).
+When 1.0.38 is published, bump `latestAppVersion → 1.0.38`; 1.0.37 users then get
+a **dismissible** nudge (not forced) because `1.0.37 < minAppVersion(1.0.37)` is
+false. A stale duplicate `appadvisors` doc with `subdomain:"alphanomy"` exists in
+the `zamzamcapital` DB (fork leftover, same `_id`) — NOT read for alphanomy
+requests (DB is selected per subdomain), left untouched.
+
+---
+
 ## [unreleased] - 2026-06-22 — alphanomy 76 / 1.0.38 release build
 
 `android/app/build.gradle`: `versionCode 75 → 76`, `versionName "1.0.37" → "1.0.38"`.
