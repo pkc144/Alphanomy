@@ -38,7 +38,7 @@ import {
 } from '../tokens';
 
 const Glogo = require('../../../src/assets/GLogo.png');
-const ALPHANOMY_LOGO = require('../../../src/assets/AppLogo/alphanomy-logo.png');
+const ALPHANOMY_LOGO = require('../assets/alphanomy-logo.png');
 
 const TRUST_ICON_MAP = {
     check: Check,

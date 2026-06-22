@@ -16,7 +16,7 @@ import React from 'react';
 import { View, Text, Image, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 
-const ALPHANOMY_LOGO = require('../../../src/assets/AppLogo/alphanomy-logo.png');
+const ALPHANOMY_LOGO = require('../assets/alphanomy-logo.png');
 import { Bell } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import {

@@ -12,7 +12,7 @@ import {
     ScrollView,
 } from 'react-native';
 
-const ALPHANOMY_LOGO = require('../../../src/assets/AppLogo/alphanomy-logo.png');
+const ALPHANOMY_LOGO = require('../assets/alphanomy-logo.png');
 
 import LinearGradient from 'react-native-linear-gradient';
 import Toast from 'react-native-toast-message';
