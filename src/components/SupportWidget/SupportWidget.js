@@ -12,16 +12,17 @@ import {
 } from 'react-native';
 import Config from 'react-native-config';
 import {useConfig} from '../../context/ConfigContext';
+import VoiceCallWebView from './VoiceCallWebView';
 
 /**
  * In-app support widget for the mobile app (chat-first, voice optional).
  *
  * Chat: POST {BRAIN_URL}/chat -> safe reply from the AlphaQuark support brain.
- * Voice: the Vapi React Native SDK (@vapi-ai/react-native) for a WebRTC call to
- *        the same brain. The SDK is LAZY-REQUIRED so the app does NOT crash if
- *        the native module isn't linked yet (run `cd ios && pod install`, then a
- *        rebuild, to activate voice). Until then the call button is hidden and
- *        chat works fully.
+ * Voice: the Vapi WEB SDK loaded inside an invisible WebView (./VoiceCallWebView)
+ *        — it uses the OS WebView's built-in WebRTC, so there is NO native .so
+ *        and therefore NO Google Play 16 KB page-size problem. (The native
+ *        @vapi-ai/react-native stack was removed for that reason — see CLAUDE.md
+ *        "16 KB page-size check".) Chat works regardless of voice.
  *
  * Gated by the per-advisor flag `voiceSupportUserEnabled` (supportAQ →
  * advisor_config.voice_support_user_enabled, default OFF) + `visible`
@@ -35,15 +36,10 @@ const VAPI_PUBLIC_KEY = '5cfbb95d-830d-4365-896c-3d08f04054fd';
 const ACK =
   'Thanks for reaching out! 🙏 Our team has received your message and someone will get in touch with you shortly.';
 
-// Voice (Vapi/WebRTC) deps temporarily REMOVED for Google Play 16 KB compliance:
-// @daily-co/react-native-webrtc@118 ships an UNALIGNED arm64 libjingle_peerconnection_so.so
-// (4 KB pages) that fails the 16 KB page-size requirement, and @vapi-ai/react-native@0.3.0
-// hard-pins that webrtc version (no 16 KB build exists yet). The widget stays CHAT-ONLY
-// (voiceAvailable=false) until voice is re-added via a 16 KB-safe path — preferably the
-// Vapi web SDK inside a WebView (no native .so at all), or Vapi >0.3.0 on webrtc 124+.
-// To restore native voice: re-add the 4 deps (vapi/daily-js/webrtc/background-timer) and
-// restore the lazy require here. See CLAUDE.md "16 KB page-size check".
-let VapiCtor = null;
+// Voice runs through the Vapi WEB SDK inside an invisible WebView
+// (./VoiceCallWebView) — NO native WebRTC .so, so no Google Play 16 KB page-size
+// problem. (The native @vapi-ai/react-native stack was removed for that reason;
+// see CLAUDE.md "16 KB page-size check".)
 
 async function ensureMicPermission() {
   try {
@@ -72,7 +68,7 @@ export default function SupportWidget({userEmail = '', visible = false}) {
   // was always disabled. Read it flat.
   const config = useConfig();
   const enabled = config?.voiceSupportUserEnabled === true && visible;
-  const voiceAvailable = !!VapiCtor;
+  const voiceAvailable = true; // WebView-based voice — no native dependency
 
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([
@@ -81,27 +77,8 @@ export default function SupportWidget({userEmail = '', visible = false}) {
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [callStatus, setCallStatus] = useState('idle'); // idle|connecting|live|error
-  const vapiRef = useRef(null);
+  const [callActive, setCallActive] = useState(false); // mounts VoiceCallWebView
   const scrollRef = useRef(null);
-
-  useEffect(() => {
-    if (!enabled || !voiceAvailable) return undefined;
-    let vapi;
-    try {
-      vapi = new VapiCtor(VAPI_PUBLIC_KEY);
-      vapiRef.current = vapi;
-      vapi.on('call-start', () => setCallStatus('live'));
-      vapi.on('call-end', () => setCallStatus('idle'));
-      vapi.on('error', () => setCallStatus('error'));
-    } catch (e) {
-      vapiRef.current = null;
-    }
-    return () => {
-      try {
-        vapi && vapi.stop();
-      } catch (_) {}
-    };
-  }, [enabled, voiceAvailable]);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollToEnd({animated: true});
@@ -139,13 +116,18 @@ export default function SupportWidget({userEmail = '', visible = false}) {
     }
   };
 
+  // advisor key → flows into the Vapi end-of-call-report metadata (per-advisor
+  // voice billing) and scopes the brain to THIS advisor (white-label).
+  const advisorSub =
+    config?.subdomain ||
+    Config?.REACT_APP_ADVISOR_SUBDOMAIN ||
+    Config?.REACT_APP_HEADER_NAME ||
+    '';
+
   const toggleCall = async () => {
-    const vapi = vapiRef.current;
-    if (!vapi) return;
-    if (callStatus === 'live' || callStatus === 'connecting') {
-      try {
-        vapi.stop();
-      } catch (_) {}
+    // End an active/connecting call: unmounting VoiceCallWebView tears it down.
+    if (callActive || callStatus === 'live' || callStatus === 'connecting') {
+      setCallActive(false);
       setCallStatus('idle');
       return;
     }
@@ -156,27 +138,24 @@ export default function SupportWidget({userEmail = '', visible = false}) {
     }
     setCallStatus('connecting');
     pushMsg({from: 'bot', text: '📞 Connecting your voice call…'});
-    try {
-      const advisor =
-        config?.subdomain ||
-        Config?.REACT_APP_ADVISOR_SUBDOMAIN ||
-        Config?.REACT_APP_HEADER_NAME ||
-        '';
-      // metadata flows into the Vapi end-of-call-report → per-advisor voice billing.
-      await vapi.start(ASSISTANT_ID, {
-        metadata: {advisor, senderRef: userEmail || 'app_user'},
-      });
-    } catch (e) {
-      setCallStatus('error');
-      pushMsg({from: 'bot', text: "Couldn't start the call. You can keep chatting here."});
+    setCallActive(true); // mounts VoiceCallWebView → starts the Vapi web call
+  };
+
+  // VoiceCallWebView → call status (connecting|live|idle|error).
+  const handleVoiceStatus = status => {
+    setCallStatus(status);
+    if (status === 'idle' || status === 'error') {
+      setCallActive(false);
+      if (status === 'error') {
+        pushMsg({from: 'bot', text: "Couldn't start the call. You can keep chatting here."});
+      }
     }
   };
 
   const live = callStatus === 'live';
 
   // ── Launcher (collapsed) ──
-  if (!open) {
-    return (
+  const launcher = (
       <TouchableOpacity
         onPress={() => setOpen(true)}
         activeOpacity={0.85}
@@ -199,11 +178,10 @@ export default function SupportWidget({userEmail = '', visible = false}) {
         }}>
         <Text style={{fontSize: 24}}>💬</Text>
       </TouchableOpacity>
-    );
-  }
+  );
 
   // ── Panel (expanded) ──
-  return (
+  const panel = (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       style={{
@@ -319,5 +297,22 @@ export default function SupportWidget({userEmail = '', visible = false}) {
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
+  );
+
+  // Single stable mount: VoiceCallWebView lives at a fixed position in the tree
+  // (always the fragment's first child) so toggling launcher↔panel does NOT
+  // remount it — the call survives collapse/expand. It's invisible/audio-only.
+  return (
+    <>
+      {callActive && (
+        <VoiceCallWebView
+          publicKey={VAPI_PUBLIC_KEY}
+          assistantId={ASSISTANT_ID}
+          metadata={{advisor: advisorSub, senderRef: userEmail || 'app_user'}}
+          onStatus={handleVoiceStatus}
+        />
+      )}
+      {open ? panel : launcher}
+    </>
   );
 }
