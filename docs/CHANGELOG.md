@@ -4,6 +4,29 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ---
 
+## [unreleased] - 2026-06-22 — alphanomy 76 / 1.0.38 release build
+
+`android/app/build.gradle`: `versionCode 75 → 76`, `versionName "1.0.37" → "1.0.38"`.
+
+Ships today's two fixes (both already committed; this build is what carries them
+to users):
+- **Advisor auto-resolution** — app now sends `REACT_APP_HEADER_NAME` (real
+  subdomain) to `resolve-advisor`, and the backend disambiguates multi-advisor
+  emails by subdomain → multi-advisor accounts resolve their advisor → Plans
+  render. (Backend already deployed live on tidi.)
+- **Prev-close day-boundary refresh** — home indices re-fetch the prev-close
+  base on app foreground so the base no longer goes stale across a session that
+  spans a market close.
+
+**No websocket/LTP code change.** A frozen-index reading during testing was
+traced to an emulator-NAT / lost-`adb reverse` artifact during an emulator
+crash window, NOT an app bug — the websocket-only transport streams live ticks
+fine (verified: 2000 `ltp_update` frames over a session, live values). A
+speculative polling-fallback change was prototyped and **reverted** as
+unnecessary.
+
+---
+
 ## [unreleased] - 2026-06-22 — Advisor auto-resolution: disambiguate multi-advisor emails by subdomain (fixes "no Plans")
 
 **Bug (reported 2026-06-22, alphanomy build):** Home showed "Recommendations
