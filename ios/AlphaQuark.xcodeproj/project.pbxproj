@@ -689,7 +689,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 14;
-				DEVELOPMENT_TEAM = BZ95XULX2M;
+				DEVELOPMENT_TEAM = RP6526QG34;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = AlphaQuark/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = alphanomy;
@@ -723,7 +723,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 14;
-				DEVELOPMENT_TEAM = BZ95XULX2M;
+				DEVELOPMENT_TEAM = RP6526QG34;
 				INFOPLIST_FILE = AlphaQuark/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = alphanomy;
 				LD_RUNPATH_SEARCH_PATHS = (

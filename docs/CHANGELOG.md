@@ -4,6 +4,29 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ---
 
+## [unreleased] - 2026-06-23 — iOS: revert team to RP6526QG34 (Alphanomy Solutions Private Limited)
+
+`ios/AlphaQuark.xcodeproj/project.pbxproj` — `DEVELOPMENT_TEAM` reverted
+`BZ95XULX2M → RP6526QG34` in Debug + Release.
+
+The earlier same-day commit (see entry below) moved both configs onto Apple
+team `BZ95XULX2M`. That was the wrong team — the App Store Connect record
+for bundle id `com.aq.alphanomy` lives under **`RP6526QG34` (Alphanomy
+Solutions Private Limited)**, the same team that shipped 1.0.16/13. With
+Automatic signing under `BZ95XULX2M`, Xcode could not have fetched a
+matching managed profile for the bundle id and the archive would have
+failed at the "Register Bundle Identifier" step. Reverted to the correct
+team before any archive attempt.
+
+Everything else from the earlier commit stands: signing remains Automatic
+(`CODE_SIGN_STYLE = Automatic`, `CODE_SIGN_IDENTITY = "Apple Development"`),
+the legacy Manual `"Alphanomy App Store"` provisioning specifier stays
+removed, build/version remain 1.0.17 / 14. Net effect vs the last-shipped
+state (1.0.16/13): version + build bumped, signing flipped from Manual to
+Xcode-managed Automatic under the same Alphanomy team.
+
+---
+
 ## [unreleased] - 2026-06-23 — iOS: alphanomy build 14 / 1.0.17 + Apple team switch + Automatic signing
 
 `ios/AlphaQuark.xcodeproj/project.pbxproj` (Debug + Release):
