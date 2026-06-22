@@ -30,9 +30,8 @@ import VoiceCallWebView from './VoiceCallWebView';
  */
 
 const BRAIN_URL = 'https://customersupport.alphaquark.in';
-const ASSISTANT_ID = '7323e900-a15e-4616-b383-c1affcde7fb9';
-// Vapi PUBLIC key (safe in-app; start-call scoped). Same value as the web build.
-const VAPI_PUBLIC_KEY = '5cfbb95d-830d-4365-896c-3d08f04054fd';
+// The Vapi public key + assistant id now live SERVER-SIDE on the brain (the
+// token-gated /voice page injects them) — the client no longer passes them.
 const ACK =
   'Thanks for reaching out! 🙏 Our team has received your message and someone will get in touch with you shortly.';
 
@@ -309,8 +308,6 @@ export default function SupportWidget({userEmail = '', visible = false}) {
     <>
       {callActive && (
         <VoiceCallWebView
-          publicKey={VAPI_PUBLIC_KEY}
-          assistantId={ASSISTANT_ID}
           metadata={{advisor: advisorSub, senderRef: userEmail || 'app_user'}}
           onStatus={handleVoiceStatus}
         />

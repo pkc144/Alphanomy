@@ -1,50 +1,70 @@
 /**
- * VoiceCallWebView — loads the SELF-HOSTED Vapi voice page from the support
- * brain (customersupport.alphaquark.in/voice) inside an invisible
+ * VoiceCallWebView — loads the SELF-HOSTED, TOKEN-GATED Vapi voice page from the
+ * support brain (customersupport.alphaquark.in) inside an invisible
  * react-native-webview.
  *
- * The brain serves both the page AND a pre-bundled Vapi WEB SDK
- * (/voice-sdk.js) — so there is NO third-party CDN at call-time and the page is
- * a guaranteed https SECURE CONTEXT for getUserMedia. The OS WebView's built-in
- * WebRTC handles audio → NO native libjingle .so → no Google Play 16 KB
- * page-size problem (the reason the native @vapi-ai/react-native stack was
- * removed — see CLAUDE.md "16 KB page-size check"). The page also runs the 30s
- * customer-silence cost guard. Source: aq-support-brain src/server/app.ts
- * (`/voice` + `/voice-sdk.js` + VOICE_PAGE).
+ * Flow:
+ *   1. POST /voice/token with the app's `aq-encrypted-key` (same HS256 token the
+ *      app signs for every API call) → the brain returns a short-lived (120s)
+ *      signed voice token carrying {advisor, senderRef}. This gates the endpoint
+ *      so randoms can't hit /voice to start (cost-incurring) calls.
+ *   2. Load GET /voice?token=<token> in the WebView. The brain serves the page +
+ *      a bundled Vapi WEB SDK (/voice-sdk.js) — no third-party CDN, real https
+ *      secure context for getUserMedia. The Vapi PUBLIC key + assistant id live
+ *      server-side (never passed by the client). The page runs the call + the
+ *      30s customer-silence cost guard.
  *
- * Audio-only: the WebView is 0×0 / invisible; UI stays native in SupportWidget.
- * MOUNT to start a call; UNMOUNT to end it. Status → `onStatus(status, reason)`
- * ('inactivity' when the cost guard auto-dropped a silent call).
+ * OS WebView WebRTC → NO native libjingle .so → no 16 KB page-size problem (see
+ * CLAUDE.md "16 KB page-size check"). Source: aq-support-brain src/server/app.ts.
  *
- * Mic: the app's RECORD_AUDIO (granted by the caller before mount) lets
- * react-native-webview auto-grant the page's capture request on Android; on iOS
- * `mediaCapturePermissionGrantType="grant"` + NSMicrophoneUsageDescription.
+ * Audio-only: 0×0 invisible; UI stays native in SupportWidget. MOUNT to start;
+ * UNMOUNT to end. onStatus(status, reason) — 'inactivity' = cost-guard auto-drop.
  */
-import React, {useCallback, useRef} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {View} from 'react-native';
 import {WebView} from 'react-native-webview';
+import Config from 'react-native-config';
+import {generateToken} from '../../utils/SecurityTokenManager';
 
-const VOICE_PAGE = 'https://customersupport.alphaquark.in/voice';
+const BRAIN = 'https://customersupport.alphaquark.in';
 
-export default function VoiceCallWebView({
-  publicKey,
-  assistantId,
-  metadata,
-  idleMs = 30000, // auto-drop after 30s of customer silence (cost guard)
-  onStatus = () => {},
-}) {
+export default function VoiceCallWebView({metadata, onStatus = () => {}}) {
   const ref = useRef(null);
+  const [uri, setUri] = useState(null);
+  const advisor = (metadata && metadata.advisor) || '';
+  const senderRef = (metadata && metadata.senderRef) || 'app_user';
 
-  const uri =
-    VOICE_PAGE +
-    '?pk=' +
-    encodeURIComponent(publicKey || '') +
-    '&aid=' +
-    encodeURIComponent(assistantId || '') +
-    '&meta=' +
-    encodeURIComponent(JSON.stringify(metadata || {})) +
-    '&idle=' +
-    encodeURIComponent(String(idleMs));
+  // Fetch a short-lived voice token (proving we're a real app via aq-encrypted-key),
+  // then load the gated page. Runs on mount (the widget mounts only during a call).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const aqKey = generateToken(
+          Config.REACT_APP_AQ_KEYS,
+          Config.REACT_APP_AQ_SECRET,
+        );
+        const res = await fetch(`${BRAIN}/voice/token`, {
+          method: 'POST',
+          headers: {'content-type': 'application/json', 'aq-encrypted-key': aqKey},
+          body: JSON.stringify({advisor, senderRef}),
+        });
+        if (!res.ok) throw new Error('token_http_' + res.status);
+        const data = await res.json().catch(() => ({}));
+        if (!data || !data.token) throw new Error('no_token');
+        if (!cancelled) {
+          setUri(`${BRAIN}/voice?token=${encodeURIComponent(data.token)}`);
+        }
+      } catch (e) {
+        if (!cancelled) onStatus('error', String((e && e.message) || e));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // onStatus intentionally omitted — run once per mount for the stable advisor/senderRef.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [advisor, senderRef]);
 
   const handleMessage = useCallback(
     (e) => {
@@ -55,6 +75,8 @@ export default function VoiceCallWebView({
     },
     [onStatus],
   );
+
+  if (!uri) return null; // still fetching the token
 
   return (
     <View
