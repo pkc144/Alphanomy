@@ -35,18 +35,15 @@ const VAPI_PUBLIC_KEY = '5cfbb95d-830d-4365-896c-3d08f04054fd';
 const ACK =
   'Thanks for reaching out! 🙏 Our team has received your message and someone will get in touch with you shortly.';
 
-// Lazy + safe: required at module scope so Metro bundles the SDK (the dep IS
-// installed — see package.json @vapi-ai/react-native). The try/catch degrades to
-// chat-only at runtime if the native module fails to initialise (e.g. iOS pods
-// not yet installed) instead of crashing the whole app on import.
+// Voice (Vapi/WebRTC) deps temporarily REMOVED for Google Play 16 KB compliance:
+// @daily-co/react-native-webrtc@118 ships an UNALIGNED arm64 libjingle_peerconnection_so.so
+// (4 KB pages) that fails the 16 KB page-size requirement, and @vapi-ai/react-native@0.3.0
+// hard-pins that webrtc version (no 16 KB build exists yet). The widget stays CHAT-ONLY
+// (voiceAvailable=false) until voice is re-added via a 16 KB-safe path — preferably the
+// Vapi web SDK inside a WebView (no native .so at all), or Vapi >0.3.0 on webrtc 124+.
+// To restore native voice: re-add the 4 deps (vapi/daily-js/webrtc/background-timer) and
+// restore the lazy require here. See CLAUDE.md "16 KB page-size check".
 let VapiCtor = null;
-try {
-  // eslint-disable-next-line global-require
-  const mod = require('@vapi-ai/react-native');
-  VapiCtor = mod?.default || mod;
-} catch (e) {
-  VapiCtor = null;
-}
 
 async function ensureMicPermission() {
   try {
