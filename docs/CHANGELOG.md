@@ -4,6 +4,41 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ---
 
+## [unreleased] - 2026-06-22 — Advisor auto-resolution: disambiguate multi-advisor emails by subdomain (fixes "no Plans")
+
+**Bug (reported 2026-06-22, alphanomy build):** Home showed "Recommendations
+not available" and no Plans. Root cause: the logged-in email
+(`pratik@alphaquark.in`) maps to 5 advisors in `common.email_advisor_map`
+(incl. `alphanomy`). `GET /resolve-advisor/:email` only auto-resolved on a
+SINGLE mapping and returned `multiple_advisors` otherwise — ignoring which
+whitelabel build was asking. So the per-user advisor was never selected,
+`REACT_APP_ADVISOR_SPECIFIC_TAG` (advisorTag) stayed empty, and
+`useHomePlanSummary` → `fetchCatalog()` returned `[]` without calling the API.
+A second cooperating bug: the app sent the wrong header value.
+
+**Fix (two parts):**
+- **Frontend** (`src/utils/storageUtils.js` `tryResolveAdvisor`): send
+  `X-Advisor-Subdomain: REACT_APP_HEADER_NAME` (the real subdomain, e.g.
+  `alphanomy`) instead of `REACT_APP_WHITE_LABEL_TEXT` (the display name
+  "Alphanomy", which never matched `advisor_subdomain`). Applied in BOTH
+  Alphanomy (fork) and Alphab2bapp (upstream) — identical block.
+- **Backend** (`aq_backend_github/Routes/userRoutes.js` `GET /resolve-advisor/:email`):
+  when an email maps to >1 advisor, read the request's `X-Advisor-Subdomain`
+  (case-insensitive) and auto-resolve to the single mapping whose
+  `advisor_subdomain` matches; only fall back to `multiple_advisors` when there
+  is no unique subdomain match. Response includes `disambiguated_by:
+  "subdomain"` on that path. Deployed to tidi (`servers/server1/aq_backend_github`,
+  restart `alphaquark.service`).
+
+Docs: `docs/APP_ARCHITECTURE.md § 6.5` updated (both app repos);
+`aq_backend_github/docs/CHANGELOG.md` updated.
+
+**Separate, NOT fixed here:** live index/LTP values were also frozen at the
+same time — that feed is scoped by the subdomain config (loads fine), not the
+per-user advisor, so it is an independent websocket issue (deferred per user).
+
+---
+
 ## [unreleased] - 2026-06-22 — Market-indices prev-close: day-boundary foreground refresh (stale-base fix)
 
 **Bug (reported 2026-06-22):** the HomeScreen market-indices header showed the
