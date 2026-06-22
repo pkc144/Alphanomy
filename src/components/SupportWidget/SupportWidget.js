@@ -68,7 +68,12 @@ async function ensureMicPermission() {
 }
 
 export default function SupportWidget({userEmail = '', visible = false}) {
-  const {config} = useConfig();
+  // useConfig() returns the config object FLAT ({...config, configLoading}) —
+  // not nested under `.config`. Every other consumer does `const config =
+  // useConfig()`; the nested destructure here left `config` undefined, so
+  // voiceSupportUserEnabled (and subdomain below) never resolved → the widget
+  // was always disabled. Read it flat.
+  const config = useConfig();
   const enabled = config?.voiceSupportUserEnabled === true && visible;
   const voiceAvailable = !!VapiCtor;
 

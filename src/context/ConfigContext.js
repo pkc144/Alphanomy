@@ -130,6 +130,8 @@ export const ConfigProvider = ({ children }) => {
                             portfolioHealthEnabled:  d.portfolioHealthEnabled === true,
                             transitionEngineEnabled: d.transitionEngineEnabled === true,
                             portfolioHealth:         d.portfolioHealth || undefined,
+                            // In-app support widget (chat + voice), customer side. Default OFF.
+                            voiceSupportUserEnabled: d.voiceSupportUserEnabled === true,
                         };
                     } catch (e) {
                         console.warn('[ConfigContext] frontend-config flags unavailable, defaulting OFF:', e?.message);
@@ -266,6 +268,7 @@ export const ConfigProvider = ({ children }) => {
                         nbaHomeEnabled:          parityFlags.nbaHomeEnabled          ?? false,
                         portfolioHealthEnabled:  parityFlags.portfolioHealthEnabled  ?? false,
                         transitionEngineEnabled: parityFlags.transitionEngineEnabled ?? false,
+                        voiceSupportUserEnabled: parityFlags.voiceSupportUserEnabled ?? false,
                         portfolioHealth:         parityFlags.portfolioHealth         ?? undefined,
 
                         // ============================================================================
@@ -514,6 +517,7 @@ export const ConfigProvider = ({ children }) => {
                                     nbaHomeEnabled: newConfig.nbaHomeEnabled,
                                     portfolioHealthEnabled: newConfig.portfolioHealthEnabled,
                                     transitionEngineEnabled: newConfig.transitionEngineEnabled,
+                                    voiceSupportUserEnabled: newConfig.voiceSupportUserEnabled,
                                     portfolioHealth: newConfig.portfolioHealth,
                                 },
                             };
