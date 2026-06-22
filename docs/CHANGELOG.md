@@ -61,6 +61,27 @@ on the user model. See `aq_backend_github/docs/SMART_LINKS.md`.
 
 ---
 
+## [unreleased] - 2026-06-23 — iOS: Release CODE_SIGN_IDENTITY → "Apple Distribution"
+
+`ios/AlphaQuark.xcodeproj/project.pbxproj` — Release `CODE_SIGN_IDENTITY`
+changed `"Apple Development" → "Apple Distribution"`. Debug stays on
+`"Apple Development"`.
+
+When the Manual → Automatic signing flip landed earlier today, Release
+inherited Xcode's `"Apple Development"` default. With that identity on a
+Release/Archive build, Xcode tries to mint a Development provisioning
+profile — which fails with "Your team has no devices from which to
+generate a provisioning profile" if the team has no registered devices,
+even though a true App Store archive doesn't require one. Setting
+Release to `"Apple Distribution"` tells Xcode to fetch a managed
+distribution profile instead, which doesn't need devices.
+
+Net signing layout now:
+- Debug: Automatic, `"Apple Development"`, team `RP6526QG34`.
+- Release: Automatic, `"Apple Distribution"`, team `RP6526QG34`.
+
+---
+
 ## [unreleased] - 2026-06-23 — iOS: revert team to RP6526QG34 (Alphanomy Solutions Private Limited)
 
 `ios/AlphaQuark.xcodeproj/project.pbxproj` — `DEVELOPMENT_TEAM` reverted
