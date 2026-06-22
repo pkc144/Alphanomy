@@ -4,6 +4,38 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ---
 
+## [unreleased] - 2026-06-22 — Market-indices prev-close: day-boundary foreground refresh (stale-base fix)
+
+**Bug (reported 2026-06-22):** the HomeScreen market-indices header showed the
+change vs the WRONG previous close — a session opened Friday *pre-close* held
+Thursday's close as the base and still showed it Monday morning, until a manual
+logout/login. Root cause: the prev-close base was fetched once on mount, held
+for the whole session, with no day-boundary refresh. There is no market-open /
+9:15 trigger — waiting for 9:15 does not refresh it; time of day was never the
+variable. Confirmed by the user: logout/login at 9:15 fixed it (remount →
+re-fetch), proving it was app-side staleness, not the backend
+`misc/indices-previous-close` endpoint.
+
+**Fix:** both render surfaces now re-fetch the prev-close base on app foreground
+(`AppState` `'active'`), throttled to 15 min (`PREV_CLOSE_REFRESH_MS`). The
+existing retry+merge fetch is reused via a ref; a same-session refresh returns
+the same base (no chip flicker), so the value only changes across a session that
+spans a market close — exactly the stale-base case.
+
+Files touched (identical patch in both repos — Alphanomy fork + Alphab2bapp upstream):
+- `src/components/HomeScreenComponents/MarketIndices.js` — import `AppState`;
+  add `PREV_CLOSE_REFRESH_MS`, `lastPrevCloseFetchRef`/`fetchPrevCloseRef`;
+  stamp timestamp on successful fetch; new `AppState` foreground-refresh effect.
+- `src/screens/Home/hooks/useHomeMarketSummary.js` — same pattern
+  (`fetchPrevRef`).
+- `docs/APP_ARCHITECTURE.md` — new section "Market-indices header — prev-close
+  base & day-boundary refresh (2026-06-22)".
+
+No backend / ccxt-india change — the `misc/indices-previous-close` endpoint was
+serving correct data; this was purely a frontend caching/staleness bug.
+
+---
+
 ## [unreleased] - 2026-06-18 — alphanomy 54 / 1.0.16 AAB build (Android-iOS version parity)
 
 Bumped `versionCode 53 → 54` and `versionName "1.0.15" → "1.0.16"` in
