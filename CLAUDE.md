@@ -1,5 +1,32 @@
 # CLAUDE.md — AlphaQuark B2B Mobile App
 
+## 🔴 BLOCKING: 16 KB page-size check — run before EVERY Play Store release
+
+This app sets `targetSdkVersion 35`, so Google Play requires **16 KB page-size
+compatibility**: every native `.so` under **`lib/arm64-v8a/`** (and x86_64) must have
+ELF LOAD-segment alignment **`2**14` (16 KB)**. `armeabi-v7a` is 32-bit and **EXEMPT**
+(ignore its UNALIGNED lines). An unaligned arm64 lib crashes on 16 KB-page devices and
+Play warns/blocks the release.
+
+**MANDATORY before every release** — run from the repo root on the built artifact:
+```bash
+bash check_elf_alignment.sh android/app/build/outputs/bundle/release/app-release.aab
+# (or the APK: android/app/build/outputs/apk/release/app-release.apk)
+```
+PASS = every `lib/arm64-v8a/*.so` prints `ALIGNED (2**14)`. If ANY `arm64-v8a` lib is
+`UNALIGNED (2**12)`, do NOT ship — fix it first. (`check_elf_alignment.sh` lives in the
+repo root.)
+
+**KNOWN ISSUE (2026-06):** `lib/arm64-v8a/libjingle_peerconnection_so.so` is `UNALIGNED
+(2**12 / 4 KB)`. It comes from `@daily-co/react-native-webrtc@118.0.3-daily.4`, which is
+**hard-pinned by `@vapi-ai/react-native@0.3.0`** (the voice-support stack). The
+16 KB-aligned webrtc is the `124.x` line, but Vapi's latest (0.3.0) still pins 118 — so
+there is **no clean bump yet**. Until Vapi ships a 124-based release, options are:
+(a) force `@daily-co/react-native-webrtc@124.x` and re-test voice (peer-dep mismatch —
+risky), or (b) remove the Vapi/daily/webrtc deps until voice goes live. Every other
+arm64-v8a lib is already aligned. **Re-run the check after ANY change to the voice /
+WebRTC deps.**
+
 ## 🔴 When broker-connect or order-placement times out → check egress /128s on the GRE tunnel
 
 > **First debugging stop** for any "Couldn't connect to <Broker>" /
