@@ -4,6 +4,52 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ---
 
+## [unreleased] - 2026-06-23 — iOS: alphanomy build 14 / 1.0.17 + Apple team switch + Automatic signing
+
+`ios/AlphaQuark.xcodeproj/project.pbxproj` (Debug + Release):
+- `CURRENT_PROJECT_VERSION 13 → 14`, `MARKETING_VERSION 1.0.16 → 1.0.17`.
+- `DEVELOPMENT_TEAM` swapped `RP6526QG34 → BZ95XULX2M` (new Alphanomy Apple
+  Developer team).
+- Signing flipped Manual → Automatic on **both** Debug and Release.
+  `CODE_SIGN_IDENTITY` is now `"Apple Development"` in both configs (was
+  `"iPhone Distribution"` under `[sdk=iphoneos*]` for the manual variant);
+  `CODE_SIGN_STYLE = Automatic`; the platform-qualified
+  `DEVELOPMENT_TEAM[sdk=iphoneos*]` and empty plain `DEVELOPMENT_TEAM = ""`
+  entries collapsed into a single plain `DEVELOPMENT_TEAM = BZ95XULX2M`.
+- Removed the manual provisioning specifier
+  `PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*] = "Alphanomy App Store"`
+  from Debug; both configs now leave `PROVISIONING_PROFILE_SPECIFIER = ""`
+  so Xcode-managed profiles take over.
+
+Prep for the next TestFlight / App Store submission. The last shipped state
+was 1.0.16 / 13; this bump satisfies App Store's strict-monotonic
+build-number requirement for the same version train. Bundle identifier
+`com.aq.alphanomy` and `INFOPLIST_KEY_CFBundleDisplayName = alphanomy`
+unchanged. `Info.plist` interpolates both values from build settings
+(`$(MARKETING_VERSION)` / `$(CURRENT_PROJECT_VERSION)`), so no plist edit
+needed.
+
+Also cleaned up an uncommitted local regression in the same file that
+preceded the bump: Debug had picked up duplicated CODE_SIGN_* /
+DEVELOPMENT_TEAM / `MARKETING_VERSION = 1.0.9` / `CURRENT_PROJECT_VERSION
+= 12` entries (last-wins so runtime still resolved correctly) and Release
+had been lowered to 1.0.8 / 11. Reverted to the committed clean shape
+first, then applied the bump and the signing/team changes — both configs
+now carry one canonical pair at 1.0.17 / 14 with Automatic signing under
+team `BZ95XULX2M`.
+
+**Follow-up before archiving:** confirm bundle id `com.aq.alphanomy` is
+registered (or transferred) under Apple team `BZ95XULX2M` in App Store
+Connect — Xcode's automatic-signing fetch will fail otherwise. The legacy
+`"Alphanomy App Store"` provisioning profile (issued under the old team
+`RP6526QG34`) is no longer referenced and can be left to expire.
+
+iOS train is independent of the Android `versionName` 1.0.38 / `versionCode`
+76 shipped 2026-06-22 — iOS has its own App Store Connect history and
+continues incrementing from its last submitted build.
+
+---
+
 ## [unreleased] - 2026-06-22 — DB: alphanomy force-update gate (latestAppVersion + minAppVersion = 1.0.37)
 
 DB-only change (no code) on tidi mongo `alphanomy` DB → `appadvisors` doc
@@ -587,6 +633,46 @@ Shared logic for all modals hosting a Kite Publisher WebView.
 
 `src/` is now byte-identical with upstream `feature/ios2.6`. `designs/default/`
 and `App.js` were intentionally left at Alphanomy's ahead versions.
+
+---
+
+## [unreleased] - 2026-06-12 — iOS bundle id renamed to com.aq.alphanomy
+
+### Change — Align iOS bundle id with Alphanomy fork identity
+
+Until today, the iOS shell still carried the upstream parent's bundle id
+`com.arpint.alphaquark` while Android already used `com.aq.alphanomy`. SYNC.md
+flags iOS bundle id as part of the fork's native shell delta — this commit
+closes that gap.
+
+**Files touched:**
+- `ios/AlphaQuark.xcodeproj/project.pbxproj` — `PRODUCT_BUNDLE_IDENTIFIER` set
+  to `com.aq.alphanomy` for both Debug (line 686) and Release (line 716)
+  configs.
+- `ios/GoogleService-Info.plist` — `BUNDLE_ID` key updated from
+  `com.arpint.alphaquark` → `com.aq.alphanomy`. The rest of the plist
+  (`GOOGLE_APP_ID`, `API_KEY`, `PROJECT_ID`, etc.) still references the
+  upstream Firebase iOS app registration. Verified at runtime that Firebase
+  Analytics / Messaging / Auth still initialize without error, but Cloud
+  Messaging push tokens and Crashlytics attribution should be re-verified
+  after a proper Alphanomy iOS app is registered in Firebase and a new
+  `GoogleService-Info.plist` is dropped in.
+- `SYNC.md` — § "What this fork contains" item 5 expanded to record the iOS
+  bundle id and the Firebase-registration follow-up.
+
+**Verified locally:**
+- Clean rebuild via `npx react-native run-ios --simulator="iPhone 16 Pro"`
+  (after `rm -rf ios/build && pod install`).
+- App installs as `com.aq.alphanomy` (Bundle Display Name "Alphanomy"),
+  launches cleanly, Metro JS bundle fetch from `http://localhost:8081/index.bundle`
+  succeeds, no redbox, no Firebase mismatch warnings.
+
+**Follow-up (not in this commit):**
+- Register `com.aq.alphanomy` as an iOS app in the Alphanomy Firebase project
+  and replace `ios/GoogleService-Info.plist` end-to-end.
+- Update iOS push entitlement provisioning profile to match the new bundle
+  id before any TestFlight upload (current `aps-environment=development`
+  entitlement is signing-profile bound).
 
 ---
 
