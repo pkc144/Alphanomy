@@ -47,7 +47,7 @@ async function ensureMicPermission() {
         PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
         {
           title: 'Microphone access',
-          message: 'AlphaQuark Support needs your mic to start a voice call.',
+          message: 'Support needs your mic to start a voice call.',
           buttonPositive: 'Allow',
         },
       );
@@ -68,6 +68,8 @@ export default function SupportWidget({userEmail = '', visible = false}) {
   const config = useConfig();
   const enabled = config?.voiceSupportUserEnabled === true && visible;
   const voiceAvailable = true; // WebView-based voice — no native dependency
+  // Per-advisor brand for the widget header (white-label aware).
+  const brandName = config?.whiteLabelText || config?.appName || 'AlphaQuark';
 
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([
@@ -212,7 +214,7 @@ export default function SupportWidget({userEmail = '', visible = false}) {
           paddingVertical: 12,
           backgroundColor: '#2563eb',
         }}>
-        <Text style={{color: '#fff', fontWeight: '600', fontSize: 15}}>AlphaQuark Support</Text>
+        <Text style={{color: '#fff', fontWeight: '600', fontSize: 15}}>{brandName} Support</Text>
         <View style={{flexDirection: 'row', alignItems: 'center'}}>
           {voiceAvailable && (
             <TouchableOpacity
