@@ -4,6 +4,18 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ---
 
+## [unreleased] - 2026-06-23 — alphanomy bump to versionCode 78 / versionName 1.0.40
+
+**Android:** `android/app/build.gradle` — `versionCode 77 → 78`, `versionName
+"1.0.39" → "1.0.40"`. Dev-cycle bump preparing the next alphanomy release —
+no signed AAB built in this commit. When the release AAB is produced, run the
+16 KB page-size check (BLOCKING gate per CLAUDE.md) on
+`android/app/build/outputs/bundle/release/app-release.aab` before shipping,
+and update the alphanomy `appadvisors` force-update gate
+(`latest`/`minAppVersion`) if 1.0.40 should be gated.
+
+---
+
 ## [unreleased] - 2026-06-23 — metro: machine-agnostic SDK path; SYNC notes; ignore /test.bundle
 
 **Metro:** `metro.config.js` now resolves `SDK_PATH` by probing
