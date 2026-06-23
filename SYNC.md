@@ -44,6 +44,16 @@ Per the recipe contract, an overlay should contain:
    map entry.
 5. Native shell delta — Android/iOS icons, `applicationId`, build number,
    signing config, splash, display name, deep-link scheme.
+   - **iOS bundle id**: `com.aq.alphanomy` (matches Android `applicationId`).
+     Set in `ios/AlphaQuark.xcodeproj/project.pbxproj` (`PRODUCT_BUNDLE_IDENTIFIER`,
+     both Debug + Release configs) and mirrored in `ios/GoogleService-Info.plist`
+     (`BUNDLE_ID`). Note: the rest of the Firebase plist still references the
+     upstream Firebase iOS app (`GOOGLE_APP_ID 1:892331696104:ios:9331874a9bad...`)
+     — when Alphanomy registers its own iOS app in Firebase, replace the whole
+     `GoogleService-Info.plist`. Firebase tolerates the `BUNDLE_ID`-only edit
+     at runtime (Analytics/Messaging/Auth still initialize), but Cloud Messaging
+     token delivery and crash-reporting attribution should be re-verified after
+     the proper Firebase registration lands.
 6. `.env` with `DESIGN_VARIANT=alphanomy` (or equivalent).
 7. This `SYNC.md`.
 

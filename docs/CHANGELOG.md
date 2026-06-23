@@ -4,6 +4,30 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ---
 
+## [unreleased] - 2026-06-23 — metro: machine-agnostic SDK path; SYNC notes; ignore /test.bundle
+
+**Metro:** `metro.config.js` now resolves `SDK_PATH` by probing
+`../alphaquark-mobile-sdk/packages/rn` and `../../alphaquark-mobile-sdk/packages/rn`
+and picking the first that exists. The hardcoded sibling path broke Metro
+startup when this repo lives one level deeper (e.g. `AQ/App/Alphanomy` with the
+SDK at `AQ/`) — watchman crashed because `watchFolders` pointed at a
+non-existent directory. Ported from upstream `feature/prince 5ddca4f`.
+
+**SYNC.md:** documented the iOS bundle id (`com.aq.alphanomy`) and the
+`GoogleService-Info.plist` BUNDLE_ID-only edit, plus the caveat that Cloud
+Messaging / crash-reporting need re-verification once Alphanomy registers its
+own iOS app in Firebase.
+
+**`.gitignore`:** added `/test.bundle` so the local 7.8 MB JS bundle artifact
+stops surfacing in `git status`.
+
+**Files:**
+- `metro.config.js` — machine-agnostic SDK path resolution.
+- `SYNC.md` — iOS bundle id + Firebase plist notes.
+- `.gitignore` — ignore `/test.bundle`.
+
+---
+
 ## [release] - 2026-06-23 — alphanomy 77 / 1.0.39 — release AAB build
 
 **Release build:** bumped Android `versionCode 76 → 77` and `versionName
