@@ -4,6 +4,38 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ---
 
+## [unreleased] - 2026-06-23 — Campaign smart links + UTM attribution (ported from upstream Alphab2bapp)
+
+**Feature (ported from upstream):** campaign smart link
+`https://app-links.alphaquark.in/l/alphanomy?utm_*&dl=` for WhatsApp/SMS/email.
+Opens the app if installed (App Link / Universal Link), else Play Store (UTM
+carried through install via Play Install Referrer) / App Store, else the web
+app on desktop; every click logged with UTM. Signup attaches the captured
+campaign (`getStoredCampaign()` → `campaign` field on `api/user/`). See
+`docs/SMART_LINKS.md`.
+
+**Files (this fork — content-ported from Alphab2bapp):**
+- `src/utils/smartLink.js` (NEW).
+- `App.js` — smart-link handling + `captureInstallReferrer()`.
+- `src/screens/Authentication/SignupScreen.js` — `getStoredCampaign()` → `campaign` in the create-user body.
+- `android/app/src/main/AndroidManifest.xml` — `/l` pathPrefix on the verified app-links intent-filter.
+- `ios/AlphaQuark/AlphaQuark.entitlements` — `associated-domains` = `applinks:app-links.alphaquark.in` (needs the capability enabled on App ID `com.aq.alphanomy`, team `RP6526QG34`).
+- `package.json` — `react-native-play-install-referrer`.
+
+**Per-tenant DB (alphanomy `appadvisors`, set 2026-06-23):** `androidPackageName`
+= `com.aq.alphanomy`, `iosBundleId` = `com.aq.alphanomy`, `iosTeamId` =
+`RP6526QG34`, `appLinksEnabled` = true. **Still TODO for full app-open:**
+`androidSha256Fingerprints` (release signing SHA-256 from Play Console → App
+Integrity) and `iosAppStoreId` (numeric, once published). Until the SHA-256 is
+set, Android smart links go to Play Store even if the app is installed (fine
+for acquisition); until `iosAppStoreId` is set, iOS-without-app falls back to web.
+
+**Backend:** `aq_backend_github` SmartLinkRouter (`/l/:tenant`, `/l/attribution`,
+`/l/stats`), `smartlink_clicks` collection, AASA `/l/*`, `campaign_attribution`
+on the user model. See `aq_backend_github/docs/SMART_LINKS.md`.
+
+---
+
 ## [unreleased] - 2026-06-23 — iOS: revert team to RP6526QG34 (Alphanomy Solutions Private Limited)
 
 `ios/AlphaQuark.xcodeproj/project.pbxproj` — `DEVELOPMENT_TEAM` reverted
