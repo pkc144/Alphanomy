@@ -4,6 +4,31 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ---
 
+## [release] - 2026-06-23 — alphanomy 77 / 1.0.39 — release AAB build
+
+**Release build:** bumped Android `versionCode 76 → 77` and `versionName
+1.0.38 → 1.0.39`, rebuilt the signed release bundle. This build ships the
+campaign smart-links + UTM attribution feature (commit `9d4577e`, see the
+entry below), which landed after the 76 / 1.0.38 release was cut.
+
+**Files:**
+- `android/app/build.gradle` — `versionCode 77`, `versionName "1.0.39"`.
+
+**Artifact:** `android/app/build/outputs/bundle/release/app-release.aab`
+(47.8 MB). Signed with the alphanomy upload key (`alphanomy-release.keystore`,
+alias `my-key-alias-zamzam` — same key as the shipped 76 / 1.0.38).
+
+**16 KB page-size check (BLOCKING gate, per CLAUDE.md):** PASS — all 18
+`lib/arm64-v8a/*.so` are `ALIGNED (2**14)`. The 14 `UNALIGNED (2**12)` libs are
+all `armeabi-v7a` (32-bit) and are exempt. This fork has no Vapi/daily/webrtc
+deps, so the upstream `libjingle_peerconnection_so.so` known-issue does not
+apply here.
+
+**Note:** the in-DB force-update gate (`latest`/`minAppVersion`) still reads
+1.0.37; bump it in the alphanomy `appadvisors` doc if 1.0.39 should be gated.
+
+---
+
 ## [unreleased] - 2026-06-23 — Campaign smart links + UTM attribution (ported from upstream Alphab2bapp)
 
 **Feature (ported from upstream):** campaign smart link
