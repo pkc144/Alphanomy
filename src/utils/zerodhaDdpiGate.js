@@ -15,9 +15,13 @@
  */
 
 // Standing Zerodha sell-authorization statuses (Kite profile.meta.demat_consent).
-// "consent" = digital CDSL standing consent; authorizes selling without a
-// per-trade TPIN exactly like "physical"/"ddpi".
-export const SELL_AUTHORIZED_DDPI_STATUSES = ['physical', 'ddpi', 'consent'];
+// NOTE: "consent" is NOT included. Per Zerodha (Kite forum / docs),
+// demat_consent="consent" means "go through CDSL flow for authorization"
+// i.e. the customer MUST complete CDSL TPIN/eDIS for each sell — it is
+// NOT standing authorization. Only "physical" (POA/DDPI on file) and
+// "ddpi" mean the customer can sell without a per-trade TPIN. Including
+// "consent" here wrongly skipped the TPIN flow → CDSL rejected the sell.
+export const SELL_AUTHORIZED_DDPI_STATUSES = ['physical', 'ddpi'];
 
 /**
  * Is this Zerodha user authorized to SELL without the EDIS/TPIN flow?
