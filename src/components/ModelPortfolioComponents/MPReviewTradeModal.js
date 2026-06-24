@@ -42,6 +42,7 @@ import { useConfig } from '../../context/ConfigContext';
 import { computeTradeVariant } from '../../utils/tradeVariant';
 import useSdkClient from '../../sdk/useSdkClient';
 import portfolioEvents, { PORTFOLIO_EVENTS } from '../../utils/portfolioEvents';
+import { isZerodhaSellAuthorized } from '../../utils/zerodhaDdpiGate';
 
 const isSdkExecuteAdviceEnabled = () => {
   const v = String(Config?.REACT_APP_USE_SDK_EXECUTE_ADVICE || '').trim().toLowerCase();
@@ -874,8 +875,7 @@ const MPReviewTradeModal = ({
       stockDetails.some(s => s.transactionType === 'SELL');
 
     if ((allSellZerodha || isMixedZerodha) && !allBuyZerodha) {
-      const canSell = userDetails?.is_authorized_for_sell ||
-        ['physical', 'ddpi'].includes(userDetails?.ddpi_status);
+      const canSell = isZerodhaSellAuthorized(userDetails);
       if (!canSell && setShowDdpiModal) {
         setShowDdpiModal(true);
         onCloseReviewTrade();
@@ -1991,8 +1991,7 @@ const MPReviewTradeModal = ({
                       // If user has completed TPIN authorization (is_authorized_for_sell), allow sell
                       // If DDPI is active (physical/ddpi status), allow sell
                       if (broker === 'Zerodha' &&
-                        !userDetails?.is_authorized_for_sell &&
-                        !['physical', 'ddpi'].includes(userDetails?.ddpi_status) &&
+                        !isZerodhaSellAuthorized(userDetails) &&
                         setShowDdpiModal) {
                         setShowDdpiModal(true);
                         onCloseReviewTrade();

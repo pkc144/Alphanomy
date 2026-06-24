@@ -48,6 +48,7 @@ import { computeTradeVariant } from '../../utils/tradeVariant';
 import moment from 'moment';
 import { isOrderSuccess, isOrderRejected } from '../../utils/orderStatusUtils';
 import { validateBrokerSession } from '../../utils/brokerSessionUtils';
+import { isZerodhaSellAuthorized } from '../../utils/zerodhaDdpiGate';
 import useModalStore from '../../GlobalUIModals/modalStore';
 import useSdkClient from '../../sdk/useSdkClient';
 
@@ -274,8 +275,7 @@ const UserStrategySubscribeModal = ({
           // Zerodha: DDPI persisted by `ddpi_status` ∈ {physical, ddpi}
           // (live check via `/zerodha/save-ddpi-status` populates this);
           // OR session-TPIN flag. Either ⇒ proceed.
-          const canSellZerodha = userDetails?.is_authorized_for_sell ||
-            ['physical', 'ddpi'].includes(userDetails?.ddpi_status);
+          const canSellZerodha = isZerodhaSellAuthorized(userDetails);
           if (!canSellZerodha) {
             needsEdisAuth = true;
             edisMessage = 'Please authorize DDPI in Kite Web before placing sell orders.';

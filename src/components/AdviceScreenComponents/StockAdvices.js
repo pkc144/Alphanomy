@@ -60,6 +60,7 @@ import Config from 'react-native-config';
 import notifee, { EventType } from '@notifee/react-native';
 
 import { generateToken } from '../../utils/SecurityTokenManager';
+import { isZerodhaSellAuthorized } from '../../utils/zerodhaDdpiGate';
 import { getAdvisorSubdomain } from '../utils/variantHelper';
 import useSdkClient from '../../sdk/useSdkClient';
 
@@ -1785,8 +1786,7 @@ const StockAdvices = React.memo(({ userEmail, orderscreen, type }) => {
       if (allBuy) {
         setOpenReviewTrade(true);
       } else if ((tradeType?.allSell || tradeType?.isMixed) && tradeHasEquityDeliverySells) {
-        const canSell = userDetails?.is_authorized_for_sell ||
-          ['physical', 'ddpi'].includes(userDetails?.ddpi_status);
+        const canSell = isZerodhaSellAuthorized(userDetails);
         if (canSell) {
           setShowDdpiModal(false);
           setOpenReviewTrade(true);
@@ -1878,8 +1878,7 @@ const StockAdvices = React.memo(({ userEmail, orderscreen, type }) => {
 
     if (broker === 'Zerodha') {
       if ((allSell || isMixed) && basketHasEquityDeliverySells) {
-        const canSellZerodha = userDetails?.is_authorized_for_sell ||
-          ['physical', 'ddpi'].includes(userDetails?.ddpi_status);
+        const canSellZerodha = isZerodhaSellAuthorized(userDetails);
         if (!canSellZerodha) {
           setShowDdpiModal(true);
           return;
@@ -2623,8 +2622,7 @@ const StockAdvices = React.memo(({ userEmail, orderscreen, type }) => {
           if (isBuyOrder) {
             openReviewForSingle();
           } else if (isSellOrder && !isDerivative) {
-            const canSellSingle = userDetails?.is_authorized_for_sell ||
-              ['physical', 'ddpi'].includes(userDetails?.ddpi_status);
+            const canSellSingle = isZerodhaSellAuthorized(userDetails);
             if (canSellSingle) {
               setShowDdpiModal(false);
               openReviewForSingle();
@@ -2647,8 +2645,7 @@ const StockAdvices = React.memo(({ userEmail, orderscreen, type }) => {
       if (broker === 'Zerodha') {
         const isDerivativeSingle = ['NFO', 'BFO', 'MCX'].includes((newStock.exchange || '').toUpperCase())
           || ['MIS', 'NRML', 'CARRYFORWARD'].includes((newStock.productType || 'CNC').toUpperCase());
-        const canSellBatch = userDetails?.is_authorized_for_sell ||
-          ['physical', 'ddpi'].includes(userDetails?.ddpi_status);
+        const canSellBatch = isZerodhaSellAuthorized(userDetails);
         if (isSellOrder && !isDerivativeSingle && !canSellBatch) {
           setShowDdpiModal(true);
         } else {
