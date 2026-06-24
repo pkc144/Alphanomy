@@ -1,5 +1,4 @@
 const path = require('path');
-const fs = require('fs');
 const { getDefaultConfig, mergeConfig } = require("@react-native/metro-config");
 
 const defaultConfig = getDefaultConfig(__dirname);
@@ -17,18 +16,11 @@ const { resolver: { sourceExts, assetExts } } = defaultConfig;
 // Scoped to ONLY the SDK path (not the whole parent dir, which has 50+ unrelated
 // projects and would tank Metro's startup).
 //
-// MACHINE-AGNOSTIC RESOLUTION (ported from feature/prince 5ddca4f): the SDK
-// checkout sits at a different depth per machine — `../alphaquark-mobile-sdk`
-// when this repo is a sibling of the SDK vs `../../alphaquark-mobile-sdk` when
-// this repo lives one level deeper (e.g. AQ/App/Alphanomy with SDK at AQ/).
-// Hardcoding either path breaks Metro startup on the other layout because
-// watchFolders points at a non-existent directory and watchman crashes.
-const SDK_PATH_CANDIDATES = [
-  path.resolve(__dirname, '../alphaquark-mobile-sdk/packages/rn'),
-  path.resolve(__dirname, '../../alphaquark-mobile-sdk/packages/rn'),
-];
-const SDK_PATH =
-  SDK_PATH_CANDIDATES.find((p) => fs.existsSync(p)) || SDK_PATH_CANDIDATES[0];
+// Alphanomy's SDK checkout lives two levels up at
+// `../../alphaquark-mobile-sdk/packages/rn`. Hardcoded (not probed): the
+// candidate-probe variant could silently fall back to the wrong `../` path
+// when the real SDK isn't found, producing a broken bundle.
+const SDK_PATH = path.resolve(__dirname, '../../alphaquark-mobile-sdk/packages/rn');
 
 /**
  * Metro configuration
