@@ -439,7 +439,7 @@ const AddToCartModal = ({
         setOpenReviewTrade(true);
       } else if ((tradeType?.allSell || tradeType?.isMixed) && cartHasEquityDeliverySells) {
         if (
-          ['consent', 'physical', 'ddpi'].includes(userDetails?.ddpi_status)
+          ['physical', 'ddpi'].includes(userDetails?.ddpi_status)
         ) {
           setShowDdpiModal(false);
           setOpenReviewTrade(true);
