@@ -143,11 +143,21 @@ const UpdateAppModal = ({visible, onClose, serverVersion}) => {
     // <AppUpdateChecker/> passes explicitly.
     const sv = serverVersion ?? pickPlatformVersion(config, 'latestAppVersion');
     const result = await checkForAppUpdate(sv);
-    if (!result.updateAvailable) return;
+    // Self-heal: if a refreshed config says no update is needed, HIDE the modal
+    // (it may have been shown earlier from a higher floor that was since lowered).
+    // Without this, lowering latestAppVersion in the backend left already-shown
+    // modals stuck until a full app relaunch.
+    if (!result.updateAvailable) {
+      setShowModal(false);
+      return;
+    }
 
     // APK / sideloaded installs can't update via the store → never gate them.
     const fromStore = await isStoreInstall();
-    if (!fromStore) return;
+    if (!fromStore) {
+      setShowModal(false);
+      return;
+    }
 
     // Mandatory by default (force upgrade, non-dismissible). A backend
     // `minAppVersion` (platform-specific or generic) softens it: at/above min →
