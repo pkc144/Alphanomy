@@ -25,7 +25,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {Platform} from 'react-native';
+import {NativeModules, Platform} from 'react-native';
 import axios from 'axios';
 import NavigationService from '../components/NatificationServiceNav';
 import server from './serverConfig';
@@ -130,13 +130,16 @@ export async function captureInstallReferrer() {
   } catch (e) {
     return;
   }
-  let PlayInstallReferrer;
-  try {
-    // eslint-disable-next-line global-require
-    PlayInstallReferrer = require('react-native-play-install-referrer')
-      .PlayInstallReferrer;
-  } catch (e) {
-    return; // native module not installed yet — safe no-op
+  // react-native-play-install-referrer is declared in package.json but the
+  // native module may not be installed/linked yet. Look up via NativeModules
+  // so Metro never tries to bundle the JS shim — a missing require() string
+  // surfaces as a dev-mode LogBox redbox even when wrapped in try/catch.
+  const PlayInstallReferrer = NativeModules.RNPlayInstallReferrer;
+  if (
+    !PlayInstallReferrer ||
+    typeof PlayInstallReferrer.getInstallReferrerInfo !== 'function'
+  ) {
+    return;
   }
   try {
     PlayInstallReferrer.getInstallReferrerInfo(async (info, error) => {
