@@ -1,0 +1,86 @@
+name: Android Build
+
+# Builds a signed release APK on a cheap ubuntu runner (no macOS minutes).
+# Signing passwords live in android/gradle.properties; the keystore file is
+# injected from the ANDROID_KEYSTORE_BASE64 secret.
+#
+# NOTE: Android release bundling must use Node 18 — Node 20/22 crash Metro
+# (V8 TurboFan) on this app. Build is split (clean, then assemble) with
+# --no-daemon, as that's what reliably completes.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 18 (required — 20/22 crash Metro)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.20.5'
+          cache: 'npm'
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Checkout & build @alphaquark/mobile-sdk (if used)
+        env:
+          SDK_REPO_TOKEN: ${{ secrets.SDK_REPO_TOKEN }}
+        run: |
+          set -euo pipefail
+          if ! grep -q '@alphaquark/mobile-sdk' package.json; then
+            echo "App does not depend on @alphaquark/mobile-sdk — skipping."; exit 0
+          fi
+          if [ -z "${SDK_REPO_TOKEN:-}" ]; then
+            echo "ERROR: app uses @alphaquark/mobile-sdk but SDK_REPO_TOKEN is not set."; exit 1
+          fi
+          SDK_DIR="$GITHUB_WORKSPACE/../../alphaquark-mobile-sdk"
+          rm -rf "$SDK_DIR"
+          git clone --depth 1 --branch develop \
+            "https://x-access-token:${SDK_REPO_TOKEN}@github.com/alpha112233/alphaquark-mobile-sdk.git" \
+            "$SDK_DIR"
+          cd "$SDK_DIR/packages/rn"
+          npm install --legacy-peer-deps
+          npm run build
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Install release keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ANDROID_KEYSTORE_BASE64:-}" ]; then
+            echo "ERROR: ANDROID_KEYSTORE_BASE64 secret not set."; exit 1
+          fi
+          # gradle.properties sets MYAPP_UPLOAD_STORE_FILE=my-upload-key.keystore (relative to android/app)
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/alphanomy-release.keystore
+          echo "keystore installed ($(wc -c < android/app/alphanomy-release.keystore) bytes)"
+
+      - name: Use runner JAVA_HOME (strip dev-local org.gradle.java.home)
+        run: |
+          # gradle.properties hardcodes the developer's local JDK path which
+          # doesn't exist on the runner; remove it so gradle uses JAVA_HOME.
+          sed -i '/org\.gradle\.java\.home/d' android/gradle.properties
+          echo "JAVA_HOME=$JAVA_HOME"
+
+      - name: Gradle clean (--no-daemon)
+        run: cd android && ./gradlew clean --no-daemon
+
+      - name: Gradle assembleRelease (--no-daemon)
+        run: cd android && ./gradlew assembleRelease --no-daemon
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-release-apk
+          path: android/app/build/outputs/apk/release/*.apk
+          retention-days: 30
