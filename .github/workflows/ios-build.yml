@@ -94,7 +94,13 @@ jobs:
           printf '%s' "$ASC_API_KEY" > "$ASC_KEY_PATH"
           export PROJECT_MARKETING_VERSION=$(grep -m1 'MARKETING_VERSION = ' ios/AlphaQuark.xcodeproj/project.pbxproj | sed -E 's/.*MARKETING_VERSION = ([^;]+);.*/\1/' | tr -d ' ')
           echo "Project marketing version: $PROJECT_MARKETING_VERSION"
-          ruby scripts/asc_versioning.rb | tee -a "$GITHUB_ENV"
+          # Use the project's marketing version as-is (human-controlled, e.g. 1.0.41
+          # to match Android); only take the auto build number from the script.
+          # (Alphanomy's App Store history has a stray "13" that the auto-bump would
+          # otherwise pick over 1.0.x.)
+          ruby scripts/asc_versioning.rb | grep '^BUILD_NUMBER=' | tee -a "$GITHUB_ENV"
+          echo "MARKETING_VERSION=$PROJECT_MARKETING_VERSION" >> "$GITHUB_ENV"
+          echo "Using marketing version: $PROJECT_MARKETING_VERSION"
 
       - name: Install CocoaPods
         run: |
