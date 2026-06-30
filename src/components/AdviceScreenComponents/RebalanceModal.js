@@ -1362,6 +1362,22 @@ const RebalanceModal = ({
       return;
     }
 
+    // T+1 settlement heads-up. A rebalance that both SELLS and BUYS funds the
+    // buys partly from today's sell proceeds, which (CNC equity) only fully
+    // settle at T+1. So a few buys may not go through right now — that's
+    // expected, and the fix is to re-run tomorrow, NOT to add more funds.
+    // Mirrors the web BrokerPublisherButton notice (prod-alphaquark-github
+    // 2026-06-30). Informational only — does not block the rebalance.
+    if (isMixedPre) {
+      Toast.show({
+        type: 'info',
+        text1: 'Some buys may complete tomorrow',
+        text2:
+          "Cash from today's sells settles tomorrow (T+1). If a few buys don't go through now, just re-run the rebalance tomorrow — you don't need to add more funds.",
+        visibilityTime: 9000,
+      });
+    }
+
     const matchingRepairTrade =
       modelPortfolioRepairTrades &&
       modelPortfolioRepairTrades?.find(
