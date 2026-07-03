@@ -4,6 +4,22 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ---
 
+## [unreleased] - 2026-07-03 — fix(bespoke): yearly plan card double-counted GST
+
+**Bug:** MP/bespoke cards (`MPCardBespoke.js`, `MPCard.js`) showed the
+GST-inclusive yearly amount (base × 1.18) **and then** appended the `+ GST`
+label — e.g. a ₹20000/yr plan rendered as `₹23600 + GST`. Monthly/quarterly/
+half-yearly were correct because they read `pricingWithoutGst.<freq>`; only the
+**yearly** branch read the inclusive `pricing.yearly`.
+
+**Fix:** yearly now reads `pricingWithoutGst.yearly` (fallback to
+`pricing.yearly` only for legacy plans without the without-GST field). Ported
+from the upstream Alphab2bapp fix (same root cause across all RN forks).
+
+**Files:** `src/components/ModelPortfolioComponents/MPCardBespoke.js`, `MPCard.js`.
+
+---
+
 ## [unreleased] - 2026-06-23 — alphanomy bump to versionCode 78 / versionName 1.0.40
 
 **Android:** `android/app/build.gradle` — `versionCode 77 → 78`, `versionName
