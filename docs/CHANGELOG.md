@@ -4,6 +4,17 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ---
 
+## [unreleased] - 2026-07-08 — fix(payment): false "Payment Failed" + gateway-verified recovery (synced from upstream)
+
+Synced `src/FunctionCall/PaymentHandle.js` verbatim from Alphab2bapp `8000cfc`:
+post-payment errors separated from checkout errors (no more false
+"Payment Failed" over the success screen), bespoke guard on the MP-only
+insert-user-doc block, and `recoverOneTimePaymentViaGateway` (polls
+`GET /api/admin/razorpay/order-status/:orderId`, completes with the
+`"verified_signature"` sentinel the backend now gateway-verifies —
+aq_backend_github `f7c417b`). Full write-up: Alphab2bapp
+`docs/CHANGELOG.md` 2026-07-08. Ships in the NEXT iOS build (>1.0.42(19)).
+
 ## [unreleased] - 2026-07-07 — fix(alphanomy): iOS "Authentication failed" (env-less CI build) + broken logo
 
 **Two production issues reported on the Alphanomy (Folios) app.**
