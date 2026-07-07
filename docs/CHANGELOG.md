@@ -4,6 +4,47 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ---
 
+## [unreleased] - 2026-07-07 — fix(alphanomy): iOS "Authentication failed" (env-less CI build) + broken logo
+
+**Two production issues reported on the Alphanomy (Folios) app.**
+
+**1. iOS login shows "Authentication failed. Please try again."**
+- Root cause: `.env` is gitignored in this fork and `.github/workflows/ios-build.yml`
+  never created one, so the TestFlight archive shipped with an EMPTY
+  react-native-config. `serverConfig.js` hardcodes the server URLs (so the app
+  still reaches the backend), but `REACT_APP_AQ_KEYS`/`REACT_APP_AQ_SECRET` have
+  no fallback → `generateToken(undefined, undefined)` → backend
+  `headerMiddleware.js` rejects the `aq-encrypted-key` → **401** → the login
+  screen maps `e.response?.status === 401` to "Authentication failed."
+  (`APP_VARIANT` also undefined → `getAdvisorSubdomain()` falls back to `'prod'`,
+  so iOS additionally rendered AlphaQuark branding, not Alphanomy.) Android was
+  unaffected because it's built manually with a local `.env`.
+- Fix: added a **"Write .env (react-native-config)"** step to `ios-build.yml`
+  that writes `.env` from the `APP_ENV_FILE` repo secret before `pod install` /
+  `xcodebuild archive`, and **hard-fails** if the secret (or APP_VARIANT /
+  REACT_APP_AQ_KEYS / REACT_APP_AQ_SECRET) is missing — so an env-less build can
+  never silently ship again. Requires: add the `APP_ENV_FILE` GitHub secret (full
+  Alphanomy `.env`, same as Android), then re-dispatch the iOS build. NOT
+  backend-fixable — the app signs tokens with undefined keys.
+
+**2. Logo "looking different".**
+- Root cause: backend `appadvisors` doc (DB `alphanomy`, `subdomain: alphanomy`)
+  had `logo`/`toolbarlogo`/`backgroundLogo` pointing at private S3 objects named
+  `…Screenshot_2026-04-28_….png` that now return **HTTP 403** → the app
+  (`ConfigContext`: `logo: apiData.logo || initialConfig.logo`) tried the dead
+  URL and rendered a broken/fallback logo. The real brand ("folios by alphanomy")
+  is served publicly by the web at `folios.alphanomy.com/downloads/`.
+- Fix (backend, no rebuild): repointed the three `appadvisors` fields to the
+  web-served logos — `logo`/`backgroundLogo` → `FoliosLoginLogo.png` (square,
+  matches web login), `toolbarlogo` → `FoliosLogo.png` (horizontal). Callsites
+  (`LogoSection.js`, `CustomToolbar.js`, `SplashScreen.js`) already `<Image
+  source={{uri}}>` string logos, and their backgrounds are white (`#fff`), so the
+  black wordmark renders correctly. Existing installs pick it up on next
+  config-fetch. Old values preserved above for rollback.
+
+**Files touched:** `.github/workflows/ios-build.yml` (CI env-injection step).
+**Backend (outside repo):** `alphanomy` DB `appadvisors` logo/toolbarlogo/backgroundLogo URLs.
+
 ## [unreleased] - 2026-07-03 — fix(bespoke): yearly plan card double-counted GST
 
 **Bug:** MP/bespoke cards (`MPCardBespoke.js`, `MPCard.js`) showed the

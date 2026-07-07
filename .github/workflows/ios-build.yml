@@ -31,6 +31,37 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # react-native-config reads `.env` at build time (the "Bundle React Native
+      # code" phase during `xcodebuild archive`). `.env` is GITIGNORED in this
+      # fork, so a CI checkout has none — without this step the archive ships an
+      # EMPTY react-native-config: APP_VARIANT is undefined (so getAdvisorSubdomain()
+      # falls back to 'prod' → AlphaQuark branding instead of Alphanomy) and
+      # REACT_APP_AQ_KEYS/REACT_APP_AQ_SECRET are undefined (so the aq-encrypted-key
+      # token is invalid → backend 401 → "Authentication failed. Please try again."
+      # on the login screen). Android works because it's built manually with a
+      # local .env; the iOS TestFlight build had no such file. Hard-fail if the
+      # secret is missing so we can never again silently ship an env-less build.
+      # Set the APP_ENV_FILE repo secret to the FULL contents of the working
+      # Alphanomy `.env` (same file used for the Android build).
+      - name: Write .env (react-native-config)
+        env:
+          APP_ENV_FILE: ${{ secrets.APP_ENV_FILE }}
+        run: |
+          set -euo pipefail
+          if [ -z "${APP_ENV_FILE:-}" ]; then
+            echo "ERROR: APP_ENV_FILE secret is not set. The build would ship with an"
+            echo "empty react-native-config → wrong branding + 'Authentication failed'"
+            echo "on login. Add the APP_ENV_FILE repo secret (full Alphanomy .env)."
+            exit 1
+          fi
+          printf '%s\n' "$APP_ENV_FILE" > .env
+          # Print key NAMES only (never values) as a sanity check.
+          echo "Wrote .env with keys:"
+          grep -oE '^[A-Za-z_][A-Za-z0-9_]*=' .env | sed 's/=$//' | sort -u
+          for k in APP_VARIANT REACT_APP_AQ_KEYS REACT_APP_AQ_SECRET; do
+            grep -q "^${k}=" .env || { echo "ERROR: required key ${k} missing from APP_ENV_FILE"; exit 1; }
+          done
+
       - name: Select Xcode 26 (iOS 26 SDK required by App Store Connect)
         run: |
           set -euo pipefail
