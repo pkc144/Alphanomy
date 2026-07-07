@@ -232,11 +232,25 @@ jobs:
             exit 1
           fi
           echo "Uploading IPA: $IPA"
+          # altool exits 0 EVEN ON VALIDATION FAILURE (e.g. "Invalid Pre-Release
+          # Train / version closed", "CFBundleShortVersionString must be higher")
+          # — a fake-green that silently ships nothing (2026-07-07: 1.0.41(19)
+          # "succeeded" but never reached App Store Connect). Capture the output
+          # and hard-fail on any error marker OR non-zero exit.
+          UPLOAD_LOG="$RUNNER_TEMP/altool_upload.log"
+          set +e
           xcrun altool --upload-app \
             -f "$IPA" \
             -t ios \
             --apiKey "$APP_STORE_CONNECT_KEY_ID" \
-            --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID"
+            --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID" 2>&1 | tee "$UPLOAD_LOG"
+          RC=${PIPESTATUS[0]}
+          set -e
+          if [ "$RC" -ne 0 ] || grep -qiE "UPLOAD FAILED|Failed to upload package|Validation failed|^[[:space:]]*ERROR:" "$UPLOAD_LOG"; then
+            echo "::error::TestFlight upload FAILED (altool exit=$RC). See errors above — the build did NOT reach App Store Connect."
+            exit 1
+          fi
+          echo "TestFlight upload succeeded."
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
