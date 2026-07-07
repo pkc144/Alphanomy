@@ -642,45 +642,50 @@ async function completeSubscription(props, paymentDetails) {
         console.log(error);
       });
 
-    let data2 = JSON.stringify({
-      userEmail: userEmail,
-      model: strategyDetails?.model_name,
-      advisor: strategyDetails?.advisor,
-      model_id: latestRebalance.model_Id,
-      userBroker: broker ? broker : "",
-      subscriptionAmountRaw: [
-        {
-          amount: invetAmount,
-          dateTime: new Date(),
-        },
-      ],
-    });
-
-    let config2 = {
-      method: "post",
-      url: `${props.server.ccxtServer.baseUrl}rebalance/insert-user-doc`,
-      
-        headers: {
-                    "Content-Type": "application/json",
-                    "X-Advisor-Subdomain":  configData?.config?.REACT_APP_HEADER_NAME,
-                    "aq-encrypted-key": generateToken(
-                      Config.REACT_APP_AQ_KEYS,
-                      Config.REACT_APP_AQ_SECRET
-                    ),
-                  },
-    
-      data: data2,
-    };
-
-    axios
-      .request(config2)
-      .then((response) => {
-        getStrategyDetails();
-      
-      })
-      .catch((error) => {
-        console.log(error);
+    // MP-only guard: bespoke recurring plans have no strategyDetails /
+    // latestRebalance — unguarded latestRebalance.model_Id is the same
+    // TypeError class as the 2026-07-07 one-time incident.
+    if (strategyDetails && latestRebalance) {
+      let data2 = JSON.stringify({
+        userEmail: userEmail,
+        model: strategyDetails?.model_name,
+        advisor: strategyDetails?.advisor,
+        model_id: latestRebalance.model_Id,
+        userBroker: broker ? broker : "",
+        subscriptionAmountRaw: [
+          {
+            amount: invetAmount,
+            dateTime: new Date(),
+          },
+        ],
       });
+
+      let config2 = {
+        method: "post",
+        url: `${props.server.ccxtServer.baseUrl}rebalance/insert-user-doc`,
+
+          headers: {
+                      "Content-Type": "application/json",
+                      "X-Advisor-Subdomain":  configData?.config?.REACT_APP_HEADER_NAME,
+                      "aq-encrypted-key": generateToken(
+                        Config.REACT_APP_AQ_KEYS,
+                        Config.REACT_APP_AQ_SECRET
+                      ),
+                    },
+
+        data: data2,
+      };
+
+      axios
+        .request(config2)
+        .then((response) => {
+          getStrategyDetails();
+
+        })
+        .catch((error) => {
+          console.log(error);
+        });
+    }
     getAllStrategy();
   } catch (error) {
     console.error("Error completing subscription:", error);
@@ -1006,7 +1011,8 @@ async function completeSinglePayment(props, paymentDetails) {
     // Invoice + notifications handled by handleClientUpdate.
     // Removed sendNotifications() — was producing duplicate invoices.
 
-    if (strategyDetails) {
+    // (also requires latestRebalance — see the guard note on the block below)
+    if (strategyDetails && latestRebalance) {
       let data2 = JSON.stringify({
         userEmail: userEmail,
         model: strategyDetails?.model_name,
