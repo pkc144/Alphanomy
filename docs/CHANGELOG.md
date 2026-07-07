@@ -45,6 +45,27 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 **Files touched:** `.github/workflows/ios-build.yml` (CI env-injection step).
 **Backend (outside repo):** `alphanomy` DB `appadvisors` logo/toolbarlogo/backgroundLogo URLs.
 
+**3. Model Portfolio plan logo wrong on mobile (showed red AlphaQuark `alpha-100.png`).**
+- Reported: MicroPulse (and other) MP detail screens showed the red "100"
+  AlphaQuark placeholder instead of the real plan logo that the **web** shows.
+- Root cause: the plan logo is uploaded to the **`plans`** collection
+  (`plans.image = uploads/<hash>`), which the WEB reads
+  (`usePortfoliosData.js: image: plan.image`). The MOBILE app reads
+  `strategyDetails.image` off the **`model_portfolio`** collection
+  (`MPPerformanceScreen.js:455` → `${baseUrl}${strategyDetails.image}`,
+  fallback `Alpha100 = alpha-100.png` at line 63/707). Those `model_portfolio`
+  records had `image: ''`, so mobile fell back to the AlphaQuark red "100".
+  Data-sync gap: admin upload writes `plans.image` but not `model_portfolio.image`.
+- Fix (backend, no rebuild): mirrored `plans.image` → `model_portfolio.image`
+  for the 4 alphanomy plans with the mismatch — MicroPulse
+  (`uploads/87b13ce2…`), SectorSurfer (`uploads/3767e752…`), EliteRebound
+  (`uploads/a97da7be…`), StratSpectrum (`uploads/dff2c9d3…`). All 4 URLs verified
+  200. Mobile now renders the same logo as web on next load.
+- ⚠️ Recurrence risk: any NEW alphanomy plan (or edited logo) will hit the same
+  gap until the backend save handler (`aq_backend_github/Routes/modelPortfolio.js`)
+  is changed to write `image` to BOTH `plans` and `model_portfolio` (or mobile is
+  changed to read the plan logo). Recommended durable fix, not yet done.
+
 ## [unreleased] - 2026-07-03 — fix(bespoke): yearly plan card double-counted GST
 
 **Bug:** MP/bespoke cards (`MPCardBespoke.js`, `MPCard.js`) showed the
