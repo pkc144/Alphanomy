@@ -20,6 +20,95 @@ Copied verbatim from Alphab2bapp:
 
 ---
 
+## [unreleased] - 2026-07-08 — fix(payment): false "Payment Failed" + gateway-verified recovery (synced from upstream)
+
+Synced `src/FunctionCall/PaymentHandle.js` verbatim from Alphab2bapp `8000cfc`:
+post-payment errors separated from checkout errors (no more false
+"Payment Failed" over the success screen), bespoke guard on the MP-only
+insert-user-doc block, and `recoverOneTimePaymentViaGateway` (polls
+`GET /api/admin/razorpay/order-status/:orderId`, completes with the
+`"verified_signature"` sentinel the backend now gateway-verifies —
+aq_backend_github `f7c417b`). Full write-up: Alphab2bapp
+`docs/CHANGELOG.md` 2026-07-08. Ships in the NEXT iOS build (>1.0.42(19)).
+
+## [unreleased] - 2026-07-07 — fix(alphanomy): iOS "Authentication failed" (env-less CI build) + broken logo
+
+**Two production issues reported on the Alphanomy (Folios) app.**
+
+**1. iOS login shows "Authentication failed. Please try again."**
+- Root cause: `.env` is gitignored in this fork and `.github/workflows/ios-build.yml`
+  never created one, so the TestFlight archive shipped with an EMPTY
+  react-native-config. `serverConfig.js` hardcodes the server URLs (so the app
+  still reaches the backend), but `REACT_APP_AQ_KEYS`/`REACT_APP_AQ_SECRET` have
+  no fallback → `generateToken(undefined, undefined)` → backend
+  `headerMiddleware.js` rejects the `aq-encrypted-key` → **401** → the login
+  screen maps `e.response?.status === 401` to "Authentication failed."
+  (`APP_VARIANT` also undefined → `getAdvisorSubdomain()` falls back to `'prod'`,
+  so iOS additionally rendered AlphaQuark branding, not Alphanomy.) Android was
+  unaffected because it's built manually with a local `.env`.
+- Fix: added a **"Write .env (react-native-config)"** step to `ios-build.yml`
+  that writes `.env` from the `APP_ENV_FILE` repo secret before `pod install` /
+  `xcodebuild archive`, and **hard-fails** if the secret (or APP_VARIANT /
+  REACT_APP_AQ_KEYS / REACT_APP_AQ_SECRET) is missing — so an env-less build can
+  never silently ship again. Requires: add the `APP_ENV_FILE` GitHub secret (full
+  Alphanomy `.env`, same as Android), then re-dispatch the iOS build. NOT
+  backend-fixable — the app signs tokens with undefined keys.
+
+**2. Logo "looking different".**
+- Root cause: backend `appadvisors` doc (DB `alphanomy`, `subdomain: alphanomy`)
+  had `logo`/`toolbarlogo`/`backgroundLogo` pointing at private S3 objects named
+  `…Screenshot_2026-04-28_….png` that now return **HTTP 403** → the app
+  (`ConfigContext`: `logo: apiData.logo || initialConfig.logo`) tried the dead
+  URL and rendered a broken/fallback logo. The real brand ("folios by alphanomy")
+  is served publicly by the web at `folios.alphanomy.com/downloads/`.
+- Fix (backend, no rebuild): repointed the three `appadvisors` fields to the
+  web-served logos — `logo`/`backgroundLogo` → `FoliosLoginLogo.png` (square,
+  matches web login), `toolbarlogo` → `FoliosLogo.png` (horizontal). Callsites
+  (`LogoSection.js`, `CustomToolbar.js`, `SplashScreen.js`) already `<Image
+  source={{uri}}>` string logos, and their backgrounds are white (`#fff`), so the
+  black wordmark renders correctly. Existing installs pick it up on next
+  config-fetch. Old values preserved above for rollback.
+
+**Files touched:** `.github/workflows/ios-build.yml` (CI env-injection step).
+**Backend (outside repo):** `alphanomy` DB `appadvisors` logo/toolbarlogo/backgroundLogo URLs.
+
+**3. Model Portfolio plan logo wrong on mobile (showed red AlphaQuark `alpha-100.png`).**
+- Reported: MicroPulse (and other) MP detail screens showed the red "100"
+  AlphaQuark placeholder instead of the real plan logo that the **web** shows.
+- Root cause: the plan logo is uploaded to the **`plans`** collection
+  (`plans.image = uploads/<hash>`), which the WEB reads
+  (`usePortfoliosData.js: image: plan.image`). The MOBILE app reads
+  `strategyDetails.image` off the **`model_portfolio`** collection
+  (`MPPerformanceScreen.js:455` → `${baseUrl}${strategyDetails.image}`,
+  fallback `Alpha100 = alpha-100.png` at line 63/707). Those `model_portfolio`
+  records had `image: ''`, so mobile fell back to the AlphaQuark red "100".
+  Data-sync gap: admin upload writes `plans.image` but not `model_portfolio.image`.
+- Fix (backend, no rebuild): mirrored `plans.image` → `model_portfolio.image`
+  for the 4 alphanomy plans with the mismatch — MicroPulse
+  (`uploads/87b13ce2…`), SectorSurfer (`uploads/3767e752…`), EliteRebound
+  (`uploads/a97da7be…`), StratSpectrum (`uploads/dff2c9d3…`). All 4 URLs verified
+  200. Mobile now renders the same logo as web on next load.
+- ⚠️ Recurrence risk: any NEW alphanomy plan (or edited logo) will hit the same
+  gap until the backend save handler (`aq_backend_github/Routes/modelPortfolio.js`)
+  is changed to write `image` to BOTH `plans` and `model_portfolio` (or mobile is
+  changed to read the plan logo). Recommended durable fix, not yet done.
+
+## [unreleased] - 2026-07-03 — fix(bespoke): yearly plan card double-counted GST
+
+**Bug:** MP/bespoke cards (`MPCardBespoke.js`, `MPCard.js`) showed the
+GST-inclusive yearly amount (base × 1.18) **and then** appended the `+ GST`
+label — e.g. a ₹20000/yr plan rendered as `₹23600 + GST`. Monthly/quarterly/
+half-yearly were correct because they read `pricingWithoutGst.<freq>`; only the
+**yearly** branch read the inclusive `pricing.yearly`.
+
+**Fix:** yearly now reads `pricingWithoutGst.yearly` (fallback to
+`pricing.yearly` only for legacy plans without the without-GST field). Ported
+from the upstream Alphab2bapp fix (same root cause across all RN forks).
+
+**Files:** `src/components/ModelPortfolioComponents/MPCardBespoke.js`, `MPCard.js`.
+
+---
+
 ## [unreleased] - 2026-06-23 — alphanomy bump to versionCode 78 / versionName 1.0.40
 
 **Android:** `android/app/build.gradle` — `versionCode 77 → 78`, `versionName

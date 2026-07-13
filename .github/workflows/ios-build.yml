@@ -1,80 +1,79 @@
 name: iOS Build
 
+# Reusable iOS TestFlight build+upload workflow (AlphaQuark RN white-label apps).
+# Per-app config: set APP_BUNDLE_ID below to the app's REAL App Store Connect
+# bundle id (verify in App Store Connect — the value in project.pbxproj is often
+# a stale base-template value and may NOT match a registered app).
+#
+# Required repo secrets:
+#   APP_STORE_CONNECT_API_KEY / _ISSUER_ID / _KEY_ID  (App Store Connect API key)
+#   IOS_CERTIFICATE_BASE64 / IOS_CERTIFICATE_PASSWORD (Apple Distribution cert .p12)
+#   IOS_PROVISIONING_PROFILE_BASE64                   (App Store profile for APP_BUNDLE_ID)
+#   APPLE_TEAM_ID
+#   SDK_REPO_TOKEN  (only if this app uses @alphaquark/mobile-sdk — PAT with read
+#                    access to alpha112233/alphaquark-mobile-sdk)
+
 on:
-  push:
-    branches: [main, master, Prod/V2.4_16kb, ritik/B2BFinal, feature/V2.4_16kb_fork2]
-  pull_request:
-    branches: [main, master]
   workflow_dispatch:
-    inputs:
-      skip_simulator:
-        description: 'Skip simulator build and run TestFlight only'
-        required: false
-        default: 'false'
-        type: boolean
+
+env:
+  # >>> PER-APP CONFIG — set to the real App Store Connect bundle id <<<
+  APP_BUNDLE_ID: com.aq.alphanomy
+  # Force the standard Xcode toolchain so the Swift back-compat libs
+  # (swiftCompatibility50/51/56/...) that prebuilt Firebase references resolve
+  # under Xcode 26 (the runner otherwise picks an incomplete toolchain).
+  TOOLCHAINS: com.apple.dt.toolchain.XcodeDefault
 
 jobs:
-  # Simulator build for quick CI validation
-  build-ios-simulator:
-    runs-on: macos-14
-    if: github.event.inputs.skip_simulator != 'true'
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Select Xcode 15.4
-        run: sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm install --legacy-peer-deps
-
-      - name: Setup Ruby (for CocoaPods)
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: '3.2'
-          bundler-cache: true
-
-      - name: Install CocoaPods
-        run: |
-          gem install cocoapods
-          cd ios
-          rm -rf Pods Podfile.lock
-          pod install --repo-update
-
-      - name: Build iOS (Simulator)
-        run: |
-          xcodebuild \
-            -workspace ios/AlphaQuark.xcworkspace \
-            -scheme AlphaQuark \
-            -configuration Release \
-            -sdk iphonesimulator \
-            -destination 'platform=iOS Simulator,name=iPhone 15,OS=17.5' \
-            -derivedDataPath build/ios \
-            build \
-            CODE_SIGNING_ALLOWED=NO
-
-  # TestFlight build - on main/master, feature branch, or manual trigger
   build-ios-testflight:
-    runs-on: macos-14
-    needs: build-ios-simulator
-    if: |
-      always() &&
-      (needs.build-ios-simulator.result == 'success' || needs.build-ios-simulator.result == 'skipped') &&
-      (github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/feature/V2.4_16kb_fork2')
-
+    runs-on: macos-15
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Select Xcode 15.4
-        run: sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
+      # react-native-config reads `.env` at build time (the "Bundle React Native
+      # code" phase during `xcodebuild archive`). `.env` is GITIGNORED in this
+      # fork, so a CI checkout has none — without this step the archive ships an
+      # EMPTY react-native-config: APP_VARIANT is undefined (so getAdvisorSubdomain()
+      # falls back to 'prod' → AlphaQuark branding instead of Alphanomy) and
+      # REACT_APP_AQ_KEYS/REACT_APP_AQ_SECRET are undefined (so the aq-encrypted-key
+      # token is invalid → backend 401 → "Authentication failed. Please try again."
+      # on the login screen). Android works because it's built manually with a
+      # local .env; the iOS TestFlight build had no such file. Hard-fail if the
+      # secret is missing so we can never again silently ship an env-less build.
+      # Set the APP_ENV_FILE repo secret to the FULL contents of the working
+      # Alphanomy `.env` (same file used for the Android build).
+      - name: Write .env (react-native-config)
+        env:
+          APP_ENV_FILE: ${{ secrets.APP_ENV_FILE }}
+        run: |
+          set -euo pipefail
+          if [ -z "${APP_ENV_FILE:-}" ]; then
+            echo "ERROR: APP_ENV_FILE secret is not set. The build would ship with an"
+            echo "empty react-native-config → wrong branding + 'Authentication failed'"
+            echo "on login. Add the APP_ENV_FILE repo secret (full Alphanomy .env)."
+            exit 1
+          fi
+          printf '%s\n' "$APP_ENV_FILE" > .env
+          # Print key NAMES only (never values) as a sanity check.
+          echo "Wrote .env with keys:"
+          grep -oE '^[A-Za-z_][A-Za-z0-9_]*=' .env | sed 's/=$//' | sort -u
+          for k in APP_VARIANT REACT_APP_AQ_KEYS REACT_APP_AQ_SECRET; do
+            grep -q "^${k}=" .env || { echo "ERROR: required key ${k} missing from APP_ENV_FILE"; exit 1; }
+          done
+
+      - name: Select Xcode 26 (iOS 26 SDK required by App Store Connect)
+        run: |
+          set -euo pipefail
+          XC=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$XC" ]; then
+            echo "ERROR: Xcode 26 not found on this runner. Installed Xcodes:"
+            ls -d /Applications/Xcode_*.app
+            exit 1
+          fi
+          sudo xcode-select -s "$XC/Contents/Developer"
+          echo "Selected: $XC"
+          xcodebuild -version
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -82,14 +81,57 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
+      - name: Checkout & build @alphaquark/mobile-sdk (if used)
+        env:
+          SDK_REPO_TOKEN: ${{ secrets.SDK_REPO_TOKEN }}
+        run: |
+          set -euo pipefail
+          if ! grep -q '@alphaquark/mobile-sdk' package.json; then
+            echo "App does not depend on @alphaquark/mobile-sdk — skipping."
+            exit 0
+          fi
+          if [ -z "${SDK_REPO_TOKEN:-}" ]; then
+            echo "ERROR: app uses @alphaquark/mobile-sdk but SDK_REPO_TOKEN secret is not set."
+            exit 1
+          fi
+          SDK_DIR="$GITHUB_WORKSPACE/../../alphaquark-mobile-sdk"
+          rm -rf "$SDK_DIR"
+          git clone --depth 1 --branch develop \
+            "https://x-access-token:${SDK_REPO_TOKEN}@github.com/alpha112233/alphaquark-mobile-sdk.git" \
+            "$SDK_DIR"
+          cd "$SDK_DIR/packages/rn"
+          npm install --legacy-peer-deps
+          npm run build
+
       - name: Install dependencies
         run: npm install --legacy-peer-deps
 
-      - name: Setup Ruby (for CocoaPods)
+      - name: Setup Ruby
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.2'
-          bundler-cache: true
+          bundler-cache: false
+
+      - name: Determine version + build number (App Store Connect)
+        env:
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          ASC_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+          ASC_BUNDLE_ID: ${{ env.APP_BUNDLE_ID }}
+        run: |
+          set -euo pipefail
+          gem install jwt --no-document
+          export ASC_KEY_PATH="$RUNNER_TEMP/asc_key.p8"
+          printf '%s' "$ASC_API_KEY" > "$ASC_KEY_PATH"
+          export PROJECT_MARKETING_VERSION=$(grep -m1 'MARKETING_VERSION = ' ios/AlphaQuark.xcodeproj/project.pbxproj | sed -E 's/.*MARKETING_VERSION = ([^;]+);.*/\1/' | tr -d ' ')
+          echo "Project marketing version: $PROJECT_MARKETING_VERSION"
+          # Use the project's marketing version as-is (human-controlled, e.g. 1.0.41
+          # to match Android); only take the auto build number from the script.
+          # (Alphanomy's App Store history has a stray "13" that the auto-bump would
+          # otherwise pick over 1.0.x.)
+          ruby scripts/asc_versioning.rb | grep '^BUILD_NUMBER=' | tee -a "$GITHUB_ENV"
+          echo "MARKETING_VERSION=$PROJECT_MARKETING_VERSION" >> "$GITHUB_ENV"
+          echo "Using marketing version: $PROJECT_MARKETING_VERSION"
 
       - name: Install CocoaPods
         run: |
@@ -104,19 +146,12 @@ jobs:
           P12_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
           KEYCHAIN_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
         run: |
-          # Create variables
           CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
-
-          # Import certificate from secrets
           echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o $CERTIFICATE_PATH
-
-          # Create temporary keychain
           security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
           security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-
-          # Import certificate to keychain
           security import $CERTIFICATE_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
           security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
           security list-keychain -d user -s $KEYCHAIN_PATH
@@ -125,21 +160,12 @@ jobs:
         env:
           PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
         run: |
-          # Create variables
           PP_PATH=$RUNNER_TEMP/build_pp.mobileprovision
-
-          # Import provisioning profile from secrets
           echo -n "$PROVISIONING_PROFILE_BASE64" | base64 --decode -o $PP_PATH
-
-          # Extract UUID from provisioning profile
           PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin <<< $(/usr/bin/security cms -D -i $PP_PATH))
           echo "Profile UUID: $PROFILE_UUID"
-
-          # Copy provisioning profile with UUID as filename
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles/${PROFILE_UUID}.mobileprovision
-
-          # Export for later use
           echo "PROVISIONING_PROFILE_UUID=$PROFILE_UUID" >> $GITHUB_ENV
 
       - name: Build Archive
@@ -156,11 +182,12 @@ jobs:
             CODE_SIGN_STYLE=Manual \
             DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
             PROVISIONING_PROFILE="$PROVISIONING_PROFILE_UUID" \
-            CODE_SIGN_IDENTITY="iPhone Distribution"
+            CODE_SIGN_IDENTITY="iPhone Distribution" \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+            MARKETING_VERSION="$MARKETING_VERSION"
 
       - name: Export IPA
         run: |
-          # Create export options plist
           cat > $RUNNER_TEMP/ExportOptions.plist << EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -170,7 +197,7 @@ jobs:
               <string>app-store</string>
               <key>provisioningProfiles</key>
               <dict>
-                  <key>com.arpint.alphaquark</key>
+                  <key>${APP_BUNDLE_ID}</key>
                   <string>$PROVISIONING_PROFILE_UUID</string>
               </dict>
               <key>signingStyle</key>
@@ -182,7 +209,6 @@ jobs:
           </dict>
           </plist>
           EOF
-
           xcodebuild -exportArchive \
             -archivePath $RUNNER_TEMP/AlphaQuark.xcarchive \
             -exportOptionsPlist $RUNNER_TEMP/ExportOptions.plist \
@@ -194,16 +220,37 @@ jobs:
           APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
         run: |
-          # Create API key file
           mkdir -p ~/.appstoreconnect/private_keys
           echo "$APP_STORE_CONNECT_API_KEY" > ~/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8
-
-          # Upload to TestFlight using xcrun altool
+          # Exported IPA is named after the app product (white-label forks differ),
+          # not always "AlphaQuark". altool prints "File does not exist" but exits 0,
+          # so a wrong hardcoded name uploads nothing yet shows green. Glob + hard-fail.
+          IPA=$(ls "$RUNNER_TEMP/export/"*.ipa 2>/dev/null | head -1)
+          if [ -z "$IPA" ]; then
+            echo "ERROR: no .ipa found in $RUNNER_TEMP/export"
+            ls -la "$RUNNER_TEMP/export" || true
+            exit 1
+          fi
+          echo "Uploading IPA: $IPA"
+          # altool exits 0 EVEN ON VALIDATION FAILURE (e.g. "Invalid Pre-Release
+          # Train / version closed", "CFBundleShortVersionString must be higher")
+          # — a fake-green that silently ships nothing (2026-07-07: 1.0.41(19)
+          # "succeeded" but never reached App Store Connect). Capture the output
+          # and hard-fail on any error marker OR non-zero exit.
+          UPLOAD_LOG="$RUNNER_TEMP/altool_upload.log"
+          set +e
           xcrun altool --upload-app \
-            -f "$RUNNER_TEMP/export/AlphaQuark.ipa" \
+            -f "$IPA" \
             -t ios \
             --apiKey "$APP_STORE_CONNECT_KEY_ID" \
-            --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID"
+            --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID" 2>&1 | tee "$UPLOAD_LOG"
+          RC=${PIPESTATUS[0]}
+          set -e
+          if [ "$RC" -ne 0 ] || grep -qiE "UPLOAD FAILED|Failed to upload package|Validation failed|^[[:space:]]*ERROR:" "$UPLOAD_LOG"; then
+            echo "::error::TestFlight upload FAILED (altool exit=$RC). See errors above — the build did NOT reach App Store Connect."
+            exit 1
+          fi
+          echo "TestFlight upload succeeded."
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4

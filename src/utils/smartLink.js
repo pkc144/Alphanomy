@@ -42,6 +42,19 @@ export const SMART_LINK_DL_ROUTES = {
   mysubscriptions: 'MySubscriptionsScreen',
 };
 
+// Path-prefixed dl values that carry a parameter (e.g. campaign links to a
+// specific model portfolio). `model-portfolio/<slug>` opens that model's screen
+// directly. <slug> is the model_name lowercased with spaces→underscores (may
+// contain brackets, e.g. moneyman_sector_rotation_optimizer_[msro]); the target
+// screen replaces underscores→spaces to fetch via
+// api/model-portfolio/portfolios/strategy/<name>. MPPerformanceScreen is
+// self-contained (fetches its own model) and renders for BOTH prospects (shows
+// Subscribe) and subscribers — same screen the web /model-portfolio/:fileName
+// methodology page maps to.
+const SMART_LINK_DL_PREFIX_ROUTES = [
+  {prefix: 'model-portfolio/', screen: 'MPPerformanceScreen', param: 'modelName'},
+];
+
 function parseQuery(qs) {
   const out = {};
   (qs || '').split('&').forEach(pair => {
@@ -163,7 +176,21 @@ export async function captureInstallReferrer() {
 /** Navigate to the screen named by a smart-link `dl` value, if recognised. */
 export function routeSmartLinkDestination(dl) {
   if (!dl) return;
-  const route = SMART_LINK_DL_ROUTES[String(dl).toLowerCase()];
+  const raw = String(dl).replace(/^\/+/, '');
+
+  // Path-prefixed targets first (e.g. model-portfolio/<slug>). The remainder
+  // after the prefix is passed as the screen's param.
+  for (const {prefix, screen, param} of SMART_LINK_DL_PREFIX_ROUTES) {
+    if (raw.toLowerCase().startsWith(prefix)) {
+      const value = raw.slice(prefix.length);
+      if (!value) return;
+      // Small delay so the navigator is mounted when launched cold from a link.
+      setTimeout(() => NavigationService.navigate(screen, {[param]: value}), 350);
+      return;
+    }
+  }
+
+  const route = SMART_LINK_DL_ROUTES[raw.toLowerCase()];
   if (!route) return;
   // Small delay so the navigator is mounted when launched cold from a link.
   setTimeout(() => NavigationService.navigate(route), 350);
