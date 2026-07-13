@@ -4,6 +4,22 @@ All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ---
 
+## [unreleased] - 2026-07-13 — sync(design): mpCardColorMap + variant-aware buildColors (from Alphab2bapp)
+
+Port of Alphab2bapp commit `bfa5175`. Adds per-plan MP card color override and admin-configurable color tokens (via `config.colorTokens` from support.alphaquark.in).
+
+Copied verbatim from Alphab2bapp:
+- `src/theme/colors.js` — new `mpCardColorCycle: null` slot on `DEFAULT_TOKENS`; brand backfilled with AlphaQuark blues (`primary #0056B7`, `gradientStart #002651`, `gradientEnd #0076fb`). Effect on Alphanomy tenant is zero at runtime because backend config's `mainColor/gradient1/2` still layer on top.
+- `src/theme/useTokens.js` — variant-aware color builder (reads `design.tokens.buildColors` first, falls back to local `buildColors`).
+- `src/components/ModelPortfolioComponents/MPCard.js` — reads `tokens.colors.mpCardColorMap` (case-insensitive substring match on `modelName`) then `mpCardColorCycle[index]` as fallback; also includes GST double-count fix on yearly pricing.
+- `src/screens/PortfolioScreen/ModelPFCard.js` — same name-map + cycle lookup, passes `cardColor` into presentation viewModel.
+- `src/screens/PortfolioScreen/PortfolioScreen.js` — threads `index` from FlatList into `<ModelPFCard>`.
+- `src/screens/Drawer/ModelPortfolioScreen.js` — threads `index` into `<MPCard>` and reads main colors via `useTokens`.
+
+**Runtime effect for Alphanomy**: no visible change today (backend config drives colors as before). What's unlocked: any tenant using this fork can now be given per-plan colors from support.alphaquark.in without a rebuild, once the admin panel populates `colorTokens.mpCardColorMap` in the advisor doc.
+
+---
+
 ## [unreleased] - 2026-06-23 — alphanomy bump to versionCode 78 / versionName 1.0.40
 
 **Android:** `android/app/build.gradle` — `versionCode 77 → 78`, `versionName
