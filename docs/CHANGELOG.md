@@ -20,6 +20,45 @@ Copied verbatim from Alphab2bapp:
 
 ---
 
+## [unreleased] - 2026-07-13 — sync(upstream): port session fixes from Alphab2bapp (logo fallback, GTT, signup gate, perf summary, KYC gate, UI fixes)
+
+Content-ported the Alphab2bapp session fixes (`bfa5175..HEAD`, commits
+`d663083` / `b198035` / `1199403`) via exact-anchor edits — no whole-file
+copies of edited files.
+
+New (verbatim): `src/utils/emailValidation.js`, `src/utils/gttSupport.js`,
+`src/FunctionCall/services/PortfolioSummaryService.js`,
+`docs/GTT_MOBILE_CERT_CHECKLIST.md`, and
+`designs/default/composites/PortfolioSummaryCard.js` (CPS card — deps
+`react-native-chart-kit`+`react-native-svg` present; `useTokens().colors`
+supplies `pnl.profit/loss` + `text.muted/disabled` via `src/theme/colors.js`).
+
+Shared `src/` edits (take effect in the alphanomy variant):
+- `src/context/ConfigContext.js` — `performanceSummaryEnabled` (default-ON) +
+  `kycBlockingEnabled` (default-OFF) flags across the three parity blocks.
+- `src/screens/Authentication/SignupScreen.js` — `validateEmail` gate before
+  Firebase create-user; use normalized email.
+- `src/components/CustomToolbar.js` — safe-area header padding + logo onError
+  fallback (blank white circle no longer renders).
+- `src/components/AdviceScreenComponents/StockAdvices.js` — GTT split now uses
+  shared `isGttNativeBroker`/`isGttOcoLeg`; Groww/Dhan/Angel One/ICICI Direct
+  GTT payload cases; Zerodha customer-GTT OFF log.
+- `src/components/ModelPortfolioComponents/MPInvestNowModal.js` —
+  `runKycBlockingGate` fail-open KYC gate on `completeStep(1)`.
+- `src/components/ModelPortfolioComponents/MPCardBespoke.js` — bespoke→MP
+  gradient card restyle.
+
+`designs/default/` edits applied per parity (LoginScreen logo fallback + "It
+only takes" copy; MP/Bespoke Performance invest-now safe-area; PortfolioScreen
+mounts `PortfolioSummaryCard`). NOTE: Alphanomy runs `DESIGN_VARIANT=alphanomy`,
+which overrides LoginScreen/MPPerformanceScreen/BespokePerformanceScreen/
+PortfolioScreen — so these four default-variant edits are inert for Alphanomy
+end-users (kept for default-variant parity). To surface them for Alphanomy, the
+same changes must be ported into `designs/alphanomy/screens/*` (out of scope
+here; those forks have diverged). `LinearGradient colors=` untouched (tenant
+branding). Excluded per instruction: `src/config/brokerDisplayConfig.js`,
+`docs/ENACH_SPIKE_D4.md`.
+
 ## [unreleased] - 2026-07-08 — fix(payment): false "Payment Failed" + gateway-verified recovery (synced from upstream)
 
 Synced `src/FunctionCall/PaymentHandle.js` verbatim from Alphab2bapp `8000cfc`:
