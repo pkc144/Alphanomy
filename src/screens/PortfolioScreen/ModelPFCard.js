@@ -16,6 +16,7 @@ import Config from 'react-native-config';
 import { useComponent } from '../../design/useDesign';
 import useTokens from '../../theme/useTokens';
 import server from '../../utils/serverConfig';
+import { resolveImageUrl } from '../../utils/resolveImageUrl';
 import { generateToken } from '../../utils/SecurityTokenManager';
 import PortfolioPercentage from '../../components/AdviceScreenComponents/DynamicText/PortfolioPercentage';
 import { isOrderRejected, isOrderSuccess, isOrderPending } from '../../utils/orderStatusUtils';
@@ -159,9 +160,7 @@ const ModalPFCard = ({
       }, 0)
     : 0;
 
-  const imageUri = strategyDetails?.image
-    ? `${server.server.baseUrl}${strategyDetails.image}`
-    : null;
+  const imageUri = resolveImageUrl(strategyDetails?.image, server.server.baseUrl) || null;
 
   return (
     <Presentation
