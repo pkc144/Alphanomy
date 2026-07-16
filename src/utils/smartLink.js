@@ -40,6 +40,13 @@ const UTM_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'ut
 export const SMART_LINK_DL_ROUTES = {
   subscriptions: 'SubscriptionScreen',
   mysubscriptions: 'MySubscriptionsScreen',
+  // Advice/recommendation "View Update" WhatsApp button (2026-07-16,
+  // advice_applink_enabled) — 'Home' is the recommendations tab
+  // (Navigation.js registers it as component={AdviceScreen}, itself an
+  // alias for screens/Home/HomeScreen.js). Explicit even though an
+  // unmatched dl already falls through to the default launch screen —
+  // don't rely on that staying Home if the initial route ever changes.
+  'stock-recommendation': 'Home',
 };
 
 // Path-prefixed dl values that carry a parameter (e.g. campaign links to a
