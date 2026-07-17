@@ -27,8 +27,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {NativeModules, Platform} from 'react-native';
 import axios from 'axios';
+import {getAuth} from '@react-native-firebase/auth';
 import NavigationService from '../components/NatificationServiceNav';
 import server from './serverConfig';
+import {getAuthedHeaders} from './courseAuthHeaders';
+
+// Functional deep-link (rebalance/execute) target stashed for the destination
+// screen to auto-open — the RN mirror of the web's sessionStorage handoff.
+export const PENDING_DEEPLINK_KEY = 'pending_functional_deeplink';
 
 const CAMPAIGN_KEY = 'campaign_attribution';
 const REFERRER_READ_KEY = 'install_referrer_read_v1';
@@ -95,7 +101,8 @@ export function parseSmartLink(url) {
   const m = path.match(/\/l\/([a-zA-Z0-9-]+)/);
   if (!m) return null;
   const q = parseQuery(qs);
-  return {tenant: m[1].toLowerCase(), dl: q.dl || '', utm: pickUtm(q)};
+  // `t` = functional deep-link token (rebalance/execute, mobile-deeplink Phase 1).
+  return {tenant: m[1].toLowerCase(), dl: q.dl || '', t: q.t || '', utm: pickUtm(q)};
 }
 
 /**
@@ -204,6 +211,66 @@ export function routeSmartLinkDestination(dl) {
 }
 
 /**
+ * Resolve a functional deep-link token (rebalance/execute) against the Node
+ * backend. Requires the customer to be signed in — the server enforces a
+ * Firebase identity-match. Returns {success, surface, model_name, unique_id,
+ * advisor_tag, broker, ...} or null.
+ * NOTE(app team): confirm `server.baseUrl` (server.alphaquark.in) is the host
+ * that serves aq_backend `POST /api/deep-link/resolve` in this build's env.
+ */
+async function resolveFunctionalDeepLink(token) {
+  try {
+    const headers = await getAuthedHeaders();
+    const {data} = await axios.post(
+      `${server.baseUrl}api/deep-link/resolve`,
+      {token},
+      {headers, timeout: 15000},
+    );
+    return data && data.success ? data : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * Handle a functional deep link (rebalance/execute) that arrived via /l/ with a
+ * `?t=<token>`. Signed-out → stash token + go to sign-in (resume post-login).
+ * Signed-in → resolve, stash the resolved target under PENDING_DEEPLINK_KEY, and
+ * navigate to the surface; the destination screen reads + clears the stash on
+ * focus (mirrors web sessionStorage["aq_deeplink_rebalance"]).
+ */
+async function handleFunctionalDeepLink(token) {
+  const user = getAuth().currentUser;
+  if (!user) {
+    await AsyncStorage.setItem(
+      PENDING_DEEPLINK_KEY,
+      JSON.stringify({token, resolved: null}),
+    );
+    setTimeout(() => NavigationService.navigate('SignIn'), 300);
+    return;
+  }
+  const resolved = await resolveFunctionalDeepLink(token);
+  if (!resolved) {
+    setTimeout(() => NavigationService.navigate('Home'), 300);
+    return;
+  }
+  await AsyncStorage.setItem(
+    PENDING_DEEPLINK_KEY,
+    JSON.stringify({token, resolved}),
+  );
+  const surface = String(resolved.surface || '');
+  if (surface === 'broker_reauth') {
+    setTimeout(() => NavigationService.navigate('SubscriptionScreen'), 350);
+    return;
+  }
+  // rebalance / rebalance_execute / trade_execute / basket_execute → the rebalance
+  // surface. TODO(app team): on 'Home' focus, read PENDING_DEEPLINK_KEY and open
+  // the rebalance for resolved.model_name / resolved.unique_id via the same flow
+  // as RebalanceNotificationComponent, then AsyncStorage.removeItem(PENDING_DEEPLINK_KEY).
+  setTimeout(() => NavigationService.navigate('Home'), 350);
+}
+
+/**
  * Handle a live smart-link tap. Returns true if the URL was a smart link
  * (so the caller can stop other deep-link handlers from also firing).
  */
@@ -211,6 +278,11 @@ export async function handleSmartLink(url) {
   const parsed = parseSmartLink(url);
   if (!parsed) return false;
   await captureCampaign(parsed.utm, {source: 'deeplink', tenant: parsed.tenant});
-  routeSmartLinkDestination(parsed.dl);
+  if (parsed.t) {
+    // Functional deep-link (rebalance/execute) — resolve + route natively.
+    await handleFunctionalDeepLink(parsed.t);
+  } else {
+    routeSmartLinkDestination(parsed.dl);
+  }
   return true;
 }

@@ -6,6 +6,15 @@
 >
 > **Scope: this audit covers upstream `designs/default/` only.** As of Phase 3 of the whitelabel-sync work (2026-05-09), variant folders for non-default tenants live in per-tenant fork repos (Alphanomy, Zamzam, RGX, etc.), not upstream — so their per-surface verdict tables live in the fork repo's own audit doc, if any. Upstream's job is to ensure the **container-side viewModel + actions contract** is rich enough that any variant override can render the screen it needs. If a fork's variant override needs data the upstream container doesn't currently expose, that's an upstream change first (typically a row's verdict moves from `clean-extract` → `needs-logic-extraction` to widen the viewModel), then the fork's override consumes it. See `WHITELABEL_RECIPE.md`.
 
+> **Cross-tracked composites (Courses/Webinars).** `composites.LiveRoom` and
+> `composites.GumletPlayer` (`designs/default/composites/`) were added by the
+> courses/webinars port and are audited primarily in
+> `COURSES_WEBINARS_MOBILE_PORTING.md` (§4.2 / §4.5), not in the table below.
+> 2026-06-19: `composites.LiveRoom` active-room presentation hardened to a
+> full-screen RN `Modal` (parity with the web full-viewport webinar fix) — see
+> `DESIGN_MIGRATION_PROGRESS.md` 2026-06-19 + `CHANGELOG.md`. `GumletPlayer`
+> is already fluid (`width:100%, aspectRatio 16/9`) — no change.
+
 ## How to read this doc
 
 Each surface (screen, modal, component, primitive) gets one row. Columns:
@@ -233,7 +242,7 @@ ViewModel sketches captured in the audit-task pass (2026-05-01). The `viewModel`
 | MPPerformanceScreen | `src/screens/Drawer/MPPerformanceScreen.js` | `needs-logic-extraction` | I | Performance data + chart fetching in container. |
 | CustomTabbarMPPerformance | `src/screens/Drawer/CustomTabbarMPPerformance.js` | `needs-logic-extraction` | I | Tab navigation + per-tab data dispatch. |
 | EmptyStateMP | `src/screens/Drawer/EmptyStateMP.js` | `clean-extract` | I | Static empty-state UI; only consumes config theme. |
-| ModelPFCard | `src/screens/PortfolioScreen/ModelPFCard.js` | `needs-logic-extraction` | I | MP card on Portfolio screen; calls `ModelPortfolioService`. |
+| ModelPFCard | `src/screens/PortfolioScreen/ModelPFCard.js` | `needs-logic-extraction` | I | MP card on Portfolio screen; calls `ModelPortfolioService`. **2026-07-11:** container now also reads `useTokens().colors.mpCardColorCycle` + row `index` → passes a resolved `cardColor` into `viewModel.cardColor`. Default variant leaves the cycle `null` (no change); `moneyman_app` cycles green/blue/purple by row. Presentation applies `cardColor` as left-border accent + model-name tint. |
 
 **Reminder**: if the SDK MP plan firms up before Phase I starts, these flip back to `SDK-pending` and Phase I is dropped instead. The risk is acknowledged; see `DESIGN_SYSTEM_ARCHITECTURE.md § Note on MP and the SDK`.
 

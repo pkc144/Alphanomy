@@ -393,6 +393,6 @@ SDK package (`alphaquark-mobile-sdk`, branch `develop`):
 - Phase 3 connect SDK (template for this work): `docs/PHASE3_ARCHITECTURE.md`
 - ProcessTrades current implementation: `src/utils/ProcessTrades.js`
 - MP review-trade direct-ccxt pattern: `src/components/ModelPortfolioComponents/MPReviewTradeModal.js#placeOrder` (line 294)
-- SDK package home: `../alphaquark-mobile-sdk/` (RN: `packages/rn/src/`, Flutter: `packages/flutter/lib/src/`)
+- SDK package home: `../../alphaquark-mobile-sdk/` (RN: `packages/rn/src/`, Flutter: `packages/flutter/lib/src/`)
 - Backend SDK routes home: `../aq_backend_github/Routes/sdk/v1/`
 - Mint server: https://github.com/pk1762012/aq-sdk-mint-server

@@ -38,6 +38,7 @@ import {convertResponse} from '../../utils/tradeUtils';
 import {getAdvisorSubdomain} from '../../utils/variantHelper';
 import {useTrade} from '../TradeContext';
 import {useConfig} from '../../context/ConfigContext';
+import useTokens from '../../theme/useTokens';
 import {useGstConfig} from '../../context/GstConfigContext';
 import {withGst, gstLabel} from '../../utils/gstHelpers';
 import {getSubscriptionStatusString} from '../../utils/subscriptionStatus';
@@ -79,9 +80,10 @@ const MPPerformanceScreen = ({route}) => {
   const Presentation = useComponent('screens.MPPerformanceScreen');
 
   const appConfig = useConfig();
-  const gradient1 = appConfig?.gradient1 || '#002651';
-  const gradient2 = appConfig?.gradient2 || '#0076fb';
-  const mainColor = appConfig?.mainColor || '#0056B7';
+  const tokens = useTokens();
+  const gradient1 = tokens.colors.brand.gradientStart;
+  const gradient2 = tokens.colors.brand.gradientEnd;
+  const mainColor = tokens.colors.brand.primary;
 
   const auth = getAuth();
   const user = auth.currentUser;

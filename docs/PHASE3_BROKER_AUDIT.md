@@ -311,6 +311,7 @@ Backend already accepts the corrected mapping: `aq_backend_github/Routes/Broker/
 - **Broker-specific quirks:**
   - **HARDCODED `prod.alphaquark.in` origin** (line 40) — DO NOT read from `REACT_APP_BROKER_CONNECT_REDIRECT_URL`. AliceBlue's partner appcode is allow-listed against `prod.alphaquark.in` only. Production incident 2026-04-26: when origin was `app-links.alphaquark.in/broker-callback`, AliceBlue's portal silently bounced users after OTP because redirect URL failed appcode-whitelist check (long comment at lines 24–38).
   - SDK dual-write uses `sdkExchangeBrokerToken` (not `sdkConnectBroker`) because AliceBlue's callback yields `access_token + client_id` not `jwtToken + clientCode`.
+  - **iOS blank WebView — firebase-messaging bootstrap abort (discovered 2026-06-11, root-caused same day after a first UA-only fix proved insufficient):** AliceBlue's portal Vue bundle runs firebase-messaging at module top level before `mount("#app")` — `navigator.serviceWorker.addEventListener(…)` unguarded + UA-gated `Notification.requestPermission()`. iOS WKWebView has **neither API**, so their own bootstrap throws, never mounts, and the page is blank; Android WebView has both → works. Fix: AliceBlue-gated document-start script stubs both APIs (+ Safari-style iPhone UA as the supporting fix for the UA-gated branch) — applied to the SDK `WebViewBrokerAuthFlow` (RN + Flutter) AND the legacy `AliceBlueConnectUI.js` (same latent bug, every code path fixed in one cycle). See PHASE3_ARCHITECTURE.md § WebViewBrokerAuthFlow → "AliceBlue-only WebView overrides".
 - **Success handling:** Close WebView → PUT connect-broker → optional model-portfolio refresh → refreshEvent + toast.
 - **Error handling:** "Connection Error" / "Connection Issue" wording (lines 260–275).
 - **Gap vs SDK widget:**
@@ -320,7 +321,7 @@ Backend already accepts the corrected mapping: `aq_backend_github/Routes/Broker/
   4. EgressIpCallout — Phase3SdkBrokerModal includes it for AliceBlue (in `IP_WHITELIST_BROKERS`) but legacy AliceBlueConnect doesn't gate on IP. The Phase 3 wrapper's IP gate may be UNNECESSARY for AliceBlue. Verify before removing.
   5. Backend `/sdk/v1/connections/AliceBlue/login-url` must call ccxt `aliceblue/login` with the hardcoded `origin=https://prod.alphaquark.in&returnPath=stock-recommendation` query, not the tenant's redirect URL.
 - **Verdict:** **SDK-with-gap.** Two SDK-side fixes (schema → empty-fields OAuth; redirectUrl override hardcoded) + one backend fix (login-url proxy with hardcoded origin) + one Phase3SdkBrokerModal change (remove from `IP_WHITELIST_BROKERS` if legacy doesn't gate).
-- **Last verified:** 2026-04-28, code-read audit. User-reported regression: "should have opened the partner based oauth, that also it did not do properly, asked api etc which is not needed".
+- **Last verified:** 2026-06-11 — **iOS device-verified working** after the WKWebView shim fix (SDK `c0d53d5`): dev rebuilt iOS with the new SDK and AliceBlue connect worked end-to-end. Android verified working by user same day. Prior: 2026-04-28 code-read audit (user-reported regression: "should have opened the partner based oauth, that also it did not do properly, asked api etc which is not needed").
 
 ---
 

@@ -3,6 +3,7 @@ import {View, Text, StyleSheet} from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Svg, {Circle} from 'react-native-svg';
 import {useConfig} from '../../context/ConfigContext';
+import useTokens from '../../theme/useTokens';
 
 const PortfolioCard = ({
   allHoldingsData,
@@ -10,10 +11,10 @@ const PortfolioCard = ({
   profitAndLoss,
   pnlPercentage,
 }) => {
-  // Get dynamic colors from config
   const config = useConfig();
-  const gradient1 = config?.gradient1 || 'rgba(0, 38, 81, 1)';
-  const gradient2 = config?.gradient2 || 'rgba(0, 86, 183, 1)';
+  const tokens = useTokens();
+  const gradient1 = tokens.colors.brand.gradientStart;
+  const gradient2 = tokens.colors.brand.gradientEnd;
 
   const invested = Number(allHoldingsData?.totalinvvalue) || 0;
   const pnl = Number(profitAndLoss) || 0;

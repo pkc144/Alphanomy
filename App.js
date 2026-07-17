@@ -20,50 +20,45 @@ import {CartProvider} from './src/components/CartContext';
 import {ModalProvider} from './src/components/ModalContext';
 import {SocialProofProvider} from './src/components/SocialProofProvider';
 import DesignProvider from './src/design/DesignProvider';
+import useTokens from './src/theme/useTokens';
 import server from './src/utils/serverConfig';
 import {TradeProvider} from './src/screens/TradeContext';
 import {ConfigProvider} from './src/context/ConfigContext';
+import SupportWidget from './src/components/SupportWidget/SupportWidget';
 import {GstConfigProvider} from './src/context/GstConfigContext';
 import {MarketDataProvider} from './src/context/MarketDataContext';
 import ModalManager from './src/GlobalUIModals/ModalManager';
 import BrokerAlertModal from './src/GlobalUIModals/BrokerAlertModal';
-import SupportWidget from './src/components/SupportWidget/SupportWidget';
 import UpdateAppModal, {AppUpdateChecker} from './src/UpdateAppModal';
 import SdkProviderRoot, {
   isSdkIntegrationEnabled,
 } from './src/sdk/SdkProviderRoot';
 
 // Module-level wrappers — hoisted out of the App body so their component
-// identity is STABLE across App re-renders. Previously these were declared
-// inline inside the App function (`const SdkRootWrapper = ...`,
-// `const CustomStatusBar = ...`), which created a new arrow function on
-// every App render. React saw a new component type at those nodes and
-// unmounted/remounted the subtree on every parent state change.
-//
-// Two production symptoms traced to this:
-//   1) TextInput values "fluctuating" / disappearing as the user typed —
-//      LoginScreen / SignupScreen `email`/`password` useState was being
-//      reset because the navigation tree was unmounting under the
-//      remounted SdkRootWrapper. (Fixed by inlining the SDK on/off
-//      branches as JSX in App's return.)
-//   2) Keyboard appearing for a moment then dismissing when tapping a
-//      TextInput — every CustomStatusBar remount called the native
-//      StatusBar setter, Android treated that as a window-focus event,
-//      and the IME dropped its connection to the focused EditText.
-//      (Fixed by hoisting CustomStatusBar here.)
-//
-// `isSdkIntegrationEnabled()` reads an env var (build-time), so the
-// off branch can resolve to a JSX fragment and no passthrough component
-// is needed.
+// identity is STABLE across App re-renders. Declaring them inline inside the
+// App function (`const SdkRootWrapper = ...`, `const CustomStatusBar = ...`)
+// created a new arrow-function component type on every App render. React then
+// unmounted/remounted the subtree on every parent state change, with two
+// production symptoms:
+//   1) TextInput values "fluctuating" / disappearing as the user typed — the
+//      navigation tree's screen useState (LoginScreen email/password) was
+//      reset because the subtree remounted under the recreated wrapper.
+//   2) Keyboard appearing then dismissing — every CustomStatusBar remount
+//      re-invoked the native StatusBar setter; Android treated that as a
+//      window-focus event and the IME dropped its connection.
+// `isSdkIntegrationEnabled()` reads a build-time env var, so the off branch
+// resolves to a JSX fragment (no passthrough component needed).
 const SdkOn = ({userEmail, children}) => (
   <SdkProviderRoot userEmail={userEmail}>{children}</SdkProviderRoot>
 );
 
 const CustomStatusBar = ({barStyle}) => {
   const insets = useSafeAreaInsets();
+  const tokens = useTokens();
+  const statusBg = tokens.colors.brand.gradientStart;
   return (
     <LinearGradient
-      colors={['rgba(0, 86, 183, 1)', 'rgba(0, 86, 183, 1)']}
+      colors={[statusBg, statusBg]}
       start={{x: 0, y: 0}}
       end={{x: 1, y: 0}}
       style={{height: insets.top}}>
@@ -239,31 +234,21 @@ const App = () => {
     }
   }, [!!user]);
 
-  // CustomStatusBar is hoisted to module scope (top of file) so its
-  // component identity stays stable across App re-renders. See the comment
-  // there for the production symptom that motivated the move.
-
-  // Wrap the app in <AqSdkProvider/> ONLY when SDK integration is on. When
-  // off, the JSX renders the navigation subtree directly (a fragment, not a
-  // wrapper component). Behind REACT_APP_SDK_INTEGRATION=true.
+  // CustomStatusBar + SdkOn are hoisted to module scope (top of file) so
+  // their component identity stays stable across App re-renders. See the
+  // comment there for the production symptoms that motivated the move.
   //
-  // The branches are inlined as JSX (not a wrapper variable) so the
-  // navigation subtree's parent component identity is stable across App
-  // re-renders. The earlier `const SdkRootWrapper = isSdkOn ? (...) : (...)`
-  // pattern recreated the wrapper function on every render — React then
-  // saw a new component type at this node and unmounted the entire tree on
-  // every render, wiping every screen's useState. Symptom was TextInput
-  // values "fluctuating" and disappearing as the user typed because the
-  // LoginScreen container's `email`/`password` state was being reset on
-  // each parent re-render triggered by ConfigContext / TradeContext /
-  // MarketDataProvider state changes.
+  // The SDK on/off branches are inlined as JSX below (not a wrapper variable)
+  // so the navigation subtree's parent component identity is stable —
+  // recreating a wrapper component on each render remounted the whole tree
+  // and wiped every screen's useState. Behind REACT_APP_SDK_INTEGRATION=true.
   const sdkOn = isSdkIntegrationEnabled();
 
   return (
     <SafeAreaProvider style={{flex: 1}}>
-      <CustomStatusBar barStyle={'dark-content'} />
       <GestureHandlerRootView style={{flex: 1}}>
         <DesignProvider>
+          <CustomStatusBar barStyle={'dark-content'} />
           <SocialProofProvider>
             <CartProvider>
               <ConfigProvider>

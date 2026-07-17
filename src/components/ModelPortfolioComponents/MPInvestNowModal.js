@@ -38,6 +38,7 @@ import APP_VARIANTS from '../../utils/Config';
 import RNFS from 'react-native-fs';
 import { useTrade } from '../../screens/TradeContext';
 import { useConfig } from '../../context/ConfigContext';
+import useTokens from '../../theme/useTokens';
 import { useGstConfig } from '../../context/GstConfigContext';
 import { withGst, gstLabel } from '../../utils/gstHelpers';
 import FormatDateTime, { FormatDate } from '../../utils/formatDateTime';
@@ -144,10 +145,12 @@ const MPInvestNowModal = ({
 
   const { configData } = useTrade();
 
-  // Get dynamic colors from config - use gradient2 as the primary accent color
+  // Brand colors via useTokens — variant supplies the fallback, backend
+  // config.gradient1 / gradient2 still override through legacy branding.
   const config = useConfig();
-  const gradient1 = config?.gradient1 || '#002651';
-  const gradient2 = config?.gradient2 || '#0076FB';
+  const tokens = useTokens();
+  const gradient1 = tokens.colors.brand.gradientStart;
+  const gradient2 = tokens.colors.brand.gradientEnd;
   const mainColor = gradient2;
   const stepCompletedColor = config?.paymentModal?.stepCompletedColor || '#29A400';
 

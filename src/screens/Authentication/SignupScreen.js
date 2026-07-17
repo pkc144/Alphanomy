@@ -17,10 +17,10 @@ import { useNavigation } from '@react-navigation/native';
 import server from '../../utils/serverConfig';
 import { generateToken } from '../../utils/SecurityTokenManager';
 import { useTrade } from '../TradeContext';
-import { validateEmail } from '../../utils/emailValidation';
 import { useConfig } from '../../context/ConfigContext';
 import { getAdvisorSubdomain } from '../../utils/variantHelper';
 import { getStoredCampaign } from '../../utils/smartLink';
+import { validateEmail } from '../../utils/emailValidation';
 import { useComponent } from '../../design/useDesign';
 import {
     checkAndFetchAdvisorConfig,
@@ -152,7 +152,6 @@ const SignupScreen = () => {
             setLoading(false);
             return;
         }
-
         // Gate malformed emails at the joining UI so they never reach
         // clientlistdatas. Firebase accepts "x@gmailcom" / "x@gmail" (no TLD
         // dot); those bad addresses later break ClientModel validation in the

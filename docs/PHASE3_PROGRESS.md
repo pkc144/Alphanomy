@@ -18,7 +18,47 @@
 
 ---
 
-## 2026-06-05 — _pending commit_ — fix(sdk-form): port legacy 30s TOTP-window cooldown into BrokerCredentialForm (Kotak Invalid-TOTP follow-up)
+## 2026-06-11 (2) — _pending commit_ — fix(sdk-webview): AliceBlue iOS blank — REAL root cause = firebase-messaging bootstrap abort; WKWebView API shims (serviceWorker + Notification)
+
+**Broker(s) affected:** AliceBlue only (shim lives inside the AliceBlue-gated injected script; no-op on Android).
+
+**Files touched:**
+- `../alphaquark-mobile-sdk/packages/rn/src/components/WebViewBrokerAuthFlow.tsx` (+ lib rebuild)
+- `../alphaquark-mobile-sdk/packages/flutter/lib/src/widgets/webview_auth_flow.dart` (parity)
+- `src/UIComponents/BrokerConnectionUI/AliceBlueConnectUI.js` (legacy lane — same latent bug; also copied to Alphanomy fork)
+- `docs/PHASE3_ARCHITECTURE.md`, `docs/PHASE3_BROKER_AUDIT.md` (root-cause correction)
+
+**Change summary:** The earlier same-day UA fix did NOT resolve the user's iOS blank screen (re-tested after a verified SDK pull + rebuild). Read AliceBlue's deployed bundle (`assets/index-6a09ab85.js`): their Vue entry module runs firebase-messaging at module top level before `mount("#app")` — `navigator.serviceWorker.addEventListener` unguarded, plus a UA-gated `Notification.requestPermission()`. iOS WKWebView has neither API → their bootstrap throws → `#app` never mounts → blank. Android WebView has both → works. Fix: the AliceBlue-gated document-start script now stubs `navigator.serviceWorker` and `window.Notification` before the page's scripts run. UA override stays (covers the UA-gated Notification branch; matches legacy). Same shim prepended to the legacy modal's interceptor in BOTH app repos (every code path, one cycle — CLAUDE.md broker-auth lesson).
+
+**Verdict change(s):** none — AliceBlue stays SDK-clean.
+
+**Regression(s) observed:** the 2026-06-11 (1) UA-only entry below attributed the blank to UA sniffing — necessary-but-insufficient; the serviceWorker abort happens on every UA. This entry corrects the record.
+
+**Rollback decision:** no.
+
+**Next step:** ~~dev pulls SDK + iOS retest~~ **DONE — iOS device-verified 2026-06-11**: dev rebuilt iOS with SDK `c0d53d5` and AliceBlue connect worked end-to-end. Alphanomy already carries both lanes (shared SDK symlink + legacy shim `460cdc6`).
+
+---
+
+## 2026-06-11 — _pending commit_ — fix(sdk-webview): AliceBlue blank screen on iOS — Safari UA + OTP-validate interceptor (AliceBlue-gated)
+
+**Broker(s) affected:** AliceBlue only (all other brokers explicitly unaffected — overrides are `broker === "AliceBlue"`-gated, `undefined` otherwise).
+
+**Files touched:**
+- `../alphaquark-mobile-sdk/packages/rn/src/components/WebViewBrokerAuthFlow.tsx` (+ `lib/` rebuild via tsc)
+- `../alphaquark-mobile-sdk/packages/flutter/lib/src/widgets/webview_auth_flow.dart` (parity port, same commit cycle)
+- `docs/PHASE3_ARCHITECTURE.md` § WebViewBrokerAuthFlow contract (new "AliceBlue-only WebView overrides" block)
+- `docs/PHASE3_BROKER_AUDIT.md` AliceBlue row (new quirk + last-verified)
+
+**Change summary:** User-reported (iOS, 2026-06-11): "connect AliceBlue → screen opens, spins, stays blank" — Android fine, every other broker fine on both platforms. Root cause: AliceBlue's portal SPA (ant.aliceblueonline.com) UA-sniffs and renders blank on iOS WKWebView's default UA (which has no `Version/x Safari/x` tokens); Android's default WebView UA carries Chrome tokens, so it passed. Legacy `AliceBlueConnectUI.js` solved exactly this with a spoofed Safari UA in commit `59e8e1f` ("aliceblue fix", 2026-03-02) — the SDK widget never inherited it (classic Phase 3 gap: legacy surface not fully mapped before SDK migration). Fix: AliceBlue-gated `userAgent` (iOS only) + AliceBlue-gated `injectedJavaScriptBeforeContentLoaded` carrying the legacy OTP-validate redirect interceptor (parity with legacy + tidi_new; self-deactivating if AliceBlue's portal behaves). Flutter package got the identical pair per the cross-platform parity rule.
+
+**Verdict change(s):** AliceBlue stays **SDK-clean** (promoted 2026-04-28) — the gap was discovered and closed in the same change; no allowlist movement.
+
+**Regression(s) observed:** the fix itself addresses a production-visible iOS regression that had been latent since AliceBlue's Phase 3 promotion (SDK lane never had the UA override the legacy lane had).
+
+**Rollback decision:** no.
+
+**Next step:** user to verify on an iOS device/simulator: connect AliceBlue end-to-end (login page renders → OTP → callback intercepted → connected). If the post-OTP redirect still sticks, the interceptor's `console.log` armed-marker + `[SDK WebView] handleNav` logs identify which stage fails.
 
 **Broker(s) affected:** Kotak (any `credentials_totp` flow).
 

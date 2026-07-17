@@ -143,7 +143,7 @@ WebRTC deps.**
 >
 > **Mirror docs in sibling repos** (point back to the canonical):
 > - `../../tidi_new/tidistockmobileapp/docs/SELL_AUTH_REFERENCE.md`
-> - `../../alphaquark-mobile-sdk/docs/SELL_AUTH_REFERENCE.md`
+> - `../alphaquark-mobile-sdk/docs/SELL_AUTH_REFERENCE.md`
 >
 > Every commit that touches sell-auth surfaces MUST update the canonical doc
 > in the SAME commit. Surfaces include:
@@ -279,7 +279,7 @@ This is the **AlphaQuark B2B Mobile App** — a React Native application enablin
 Run this mental pass at the end of a coding session:
 
 - [ ] Have I updated `docs/CHANGELOG.md` with an entry covering what I shipped today?
-- [ ] Have I updated the relevant architecture `.md` file's content (BROKER_CONNECTION.md for broker work, MODEL_PORTFOLIO.md for MP work, REBALANCING.md for rebalance flows, APP_ARCHITECTURE.md for anything system-level)?
+- [ ] Have I updated the relevant architecture `.md` file's content (BROKER_CONNECTION.md for broker work, **MODEL_PORTFOLIO_ARCHITECTURE.md** for MP work — note: merged 2026-05-11, the older `MODEL_PORTFOLIO.md` is now a pointer stub, REBALANCING.md for rebalance flows, APP_ARCHITECTURE.md for anything system-level)?
 - [ ] If I touched ccxt-india / aq_backend_github / scripmaster DB on tidi, did I document that here too (file paths on tidi, what was patched, why)?
 - [ ] If I added a new file (hook, utility), did I describe it in the architecture doc AND add a header docstring that references the doc?
 - [ ] If I changed the tidi_new Flutter app in parallel, did I update its `docs/BROKER_TRADING_ARCHITECTURE.md` as well?
@@ -373,7 +373,7 @@ All architecture docs are in the `docs/` folder:
 | [APP_ARCHITECTURE.md](docs/APP_ARCHITECTURE.md) | System architecture, broker flows, trade execution, state management |
 | [BROKER_CONNECTION.md](docs/BROKER_CONNECTION.md) | Per-broker auth details, WebView OAuth, credential flows |
 | [REBALANCING.md](docs/REBALANCING.md) | Rebalancing flow, decryption, broker payload building |
-| [MODEL_PORTFOLIO.md](docs/MODEL_PORTFOLIO.md) | Model portfolio subscription, basket execution, review trade flow |
+| [MODEL_PORTFOLIO_ARCHITECTURE.md](docs/MODEL_PORTFOLIO_ARCHITECTURE.md) | **Canonical MP doc** (merged 2026-05-11). Subscription, payment + Digio orchestration, basket execution, review trade flow, manual override, broker migration, SDK Phase C, web/mobile divergences, known limitations. Supersedes the older `MODEL_PORTFOLIO.md` (now a pointer stub). |
 | [PHASE3_ARCHITECTURE.md](docs/PHASE3_ARCHITECTURE.md) | Phase 3 SDK migration design — routing, allowlist, re-auth, SDK widget contract, backend routes |
 | [PHASE3_BROKER_AUDIT.md](docs/PHASE3_BROKER_AUDIT.md) | Per-broker legacy → SDK comparison matrix with verdicts (SDK-clean / SDK-with-gap / SDK-broken) |
 | [PHASE3_PROGRESS.md](docs/PHASE3_PROGRESS.md) | Phase 3 chronological work log — commits, broker verdict changes, regressions, rollbacks |
@@ -394,12 +394,18 @@ All architecture docs are in the `docs/` folder:
    - `src/utils/basketUtils.js`, `src/utils/portfolioEvents.js`
    - Any new screen, context, or global state change
 
-2. **MODEL_PORTFOLIO.md** — update when changing:
+2. **MODEL_PORTFOLIO_ARCHITECTURE.md** (canonical, merged from the older `MODEL_PORTFOLIO.md` on 2026-05-11) — update when changing:
    - `src/UIComponents/RebalanceAdvicesUI/RebalanceCard.js`
    - `src/components/AdviceScreenComponents/RebalanceAdvices.js`
-   - `src/components/ModelPortfolioComponents/` (any file)
+   - `src/components/ModelPortfolioComponents/` (any file — including `MPInvestNowModal.js`, `UserStrategySubscribeModal.js`, `MPReviewTradeModal.js`, `RecommendationSuccessModal.js`, `HoldingsMigrationModal.js`)
    - `src/screens/PortfolioScreen/ModelPFCard.js`
-   - `src/screens/Drawer/MPPerformanceScreen.js`
+   - `src/screens/Drawer/MPPerformanceScreen.js`, `src/screens/Drawer/ModelPortfolioScreen.js`
+   - `src/screens/Home/AfterSubscriptionScreen.js` (stale-broker banner — § 9e)
+   - `src/services/ModelPortfolioService.js`
+   - `src/utils/tradeVariant.js` (AMO computation)
+   - `aq_backend_github/Routes/modelPortfolio.js`, `Routes/modalPortfolioOrderPlace.js`, `Routes/sdk/v1/portfolios.js`, `Routes/sdk/v1/rebalance.js`, `Routes/sdk/v1/orders/index.js` (any MP-affecting handler)
+   - `ccxt-india apps/app_model_portfolio.py` `/rebalance/*` endpoints (request/response shape changes)
+   - **Cross-repo:** also update `prod-alphaquark-github/docs/MODEL_PORTFOLIO_ARCHITECTURE.md` (independent web copy) and `ccxt-india/docs/MODEL_PORTFOLIO_ARCHITECTURE.md` (pointer-grade) in the same commit cycle when backend / schema / ccxt endpoints change.
 
 3. **REBALANCING.md** — update when changing:
    - `src/components/AdviceScreenComponents/RebalanceModal.js`
@@ -539,6 +545,26 @@ src/
 Zerodha, Angel One, Upstox, ICICI Direct, Kotak, Dhan, Fyers, IIFL Securities, AliceBlue, Motilal Oswal, Hdfc Securities, Groww, Axis Securities, DummyBroker (simulation)
 
 ## Build & Run
+
+> **🔴 BUILD BRANCH: `feature/sdk-plus-config_forkv2`** — this is the SINGLE
+> branch BOTH the iOS and Android release artifacts (AAB/IPA) are built from
+> (confirmed 2026-06-25). Apply all RN app changes here; it is the source the
+> other forks/branches sync from. `feature/V2.5_brokerScreen` and
+> `feature/ios2.5` are legacy/deprecated — do NOT build from them or
+> double-maintain them unless explicitly told.
+>
+> **🔴 MANDATORY: dispatch multi-app iOS CI builds SEQUENTIALLY, never in
+> parallel** (user directive 2026-07-08). When the same change fans out to
+> several app repos (Alphab2bapp, Alphanomy, arfs_app, markup_app,
+> new_magnus_app, alphaquarkapp — they share the `ios-build.yml` template),
+> run ONE "iOS Build" workflow, confirm its TestFlight upload actually
+> succeeded (the altool "No errors uploading" line — NOT just a green step;
+> see the 2026-07-07 Alphanomy fake-green incident), and only then dispatch
+> the next repo's build. Rationale: a shared-template failure (version-train
+> rejection, toolchain break, SDK checkout) burns every parallel macOS runner
+> at once and produces N identical failures instead of one fixable one;
+> parallel macOS runners also contend for the org runner quota and slow each
+> other. Fix-once-then-fan-out.
 
 ```bash
 # Install dependencies

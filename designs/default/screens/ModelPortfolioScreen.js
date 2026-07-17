@@ -66,6 +66,7 @@ const ModelPortfolioScreen = ({ viewModel, actions, slots }) => {
     selectedPlan = null,
     showHeader = true,
     width = ScreenWidth,
+    config = null,
   } = viewModel || {};
 
   const {
@@ -114,7 +115,7 @@ const ModelPortfolioScreen = ({ viewModel, actions, slots }) => {
               ]}
             >
               <Text style={styles.planTagText}>
-                {selectedPlan?.type === 'bespoke' ? 'Bespoke' : 'MP'}
+                {selectedPlan?.type === 'bespoke' ? (config?.bespokePlanLabel || 'Bespoke') : 'MP'}
               </Text>
             </View>
           </View>
@@ -268,7 +269,7 @@ const ModelPortfolioScreen = ({ viewModel, actions, slots }) => {
           <View style={styles.textWrapper}>
             <Text style={styles.emptyTitle}>No Plans Available</Text>
             <Text style={styles.emptySubtitle}>
-              When your manager creates a plan, it will appear here.
+              When your advisor creates a plan, it will appear here.
             </Text>
           </View>
         </View>

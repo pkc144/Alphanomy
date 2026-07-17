@@ -26,6 +26,7 @@ import { useGstConfig } from '../../context/GstConfigContext';
 import { getAdvisorSubdomain } from '../../utils/variantHelper';
 import { useComponent } from '../../design/useDesign';
 import { getSubscriptionStatusString } from '../../utils/subscriptionStatus';
+import { useConfig } from '../../context/ConfigContext';
 
 const screenWidth = Dimensions.get('window').width;
 const ScreenHeight = Dimensions.get('window').height;
@@ -40,6 +41,7 @@ const colorPalette = [
 const BespokePerformanceScreen = ({ route }) => {
     const { modelName, specificPlan } = route.params;
     const { configData } = useTrade();
+    const config = useConfig();
     const navigation = useNavigation();
     const { gstConfigure: configGst, gstWithTextConfigure: configGstWithText } = useGstConfig();
 
@@ -458,6 +460,7 @@ const BespokePerformanceScreen = ({ route }) => {
         <Presentation
             viewModel={{
                 modelName,
+                config,
                 strategyDetails,
                 singleStrategyDetails,
                 latestRebalance,
@@ -514,6 +517,7 @@ const BespokePerformanceScreen = ({ route }) => {
             }}
             actions={{
                 onGoBack: () => navigation.goBack(),
+                onOpenResearchReports: () => navigation.navigate('ResearchReportScreen'),
                 onTabIndexChange: setIndex,
                 onSelectedPricingChange: setSelectedPricing,
                 onInvestNow: () => setPaymentModal(true),

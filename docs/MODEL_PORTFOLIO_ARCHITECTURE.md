@@ -347,11 +347,49 @@ adminpaymentPlatform ←  GET /api/adminControl/get-payment-platform
 ```
 Routes to one of `react-native-razorpay`, `react-native-cashfree-pg-sdk`, `PayUOneTimePayment`, `react-native-iap` (Play Store / App Store). Switcher is tenant-overridable via `appadvisors.paymentPlatform` in the backend.
 
-**Cashfree environment + install-source handling** (`MPInvestNowModal.js` one-time seam, recurring seam; helpers in `src/utils/cashfreeEnv.js`)
+> **⚠️ THREE payment-platform sources exist per tenant — they MUST agree (incident 2026-06-12).**
+> The live value the APP obeys is **`admin.paymentPlatform`** (the `is_primary` doc in the tenant DB's `admin` collection), served by `GET /api/adminControl/get-payment-platform` (`Routes/Admin/AdminControl/AdminControl.js:20`, default `'razorpay'` when unset). `appadvisors.paymentPlatform` is only the app's offline fallback, and the v3 `payment_gateway_configs.active_gateway` is what the **web** reads (`PaymentGatewayConfigService`). **Alphanomy incident:** `admin.paymentPlatform` was `'razorpay'` while only Cashfree was configured (`razorpay.key_id: null`) → app silently took the Razorpay branch → endless spinner on every payment, web fine (web read the v3 config). Evidence: server logs showed `POST /lead_user` then NO gateway-create call at all. Fix: set `admin.paymentPlatform: 'cashfree'` in the `alphanomy` DB (2026-06-12). **When debugging "payment spinner, no error": first compare `admin.paymentPlatform` vs `payment_gateway_configs.active_gateway` + `is_configured` in the tenant DB.** Backend hardening worth doing: make `get-payment-platform` derive from the v3 config when present, so the three sources can't drift.
 
-Both Cashfree seams (one-time `doPayment`, recurring `doSubscriptionPayment`) resolve the SDK environment through `getCashfreeEnvironment()` — the single source of truth shared with `CoursePurchaseSheet` / `BuyWebinarTicketSheet`. It honours `REACT_APP_CASHFREE_ENV`, defaults to `SANDBOX` in Metro debug, else maps `REACT_APP_ENV`. **Do not inline `Config.REACT_APP_ENV === 'production' ? …` or hardcode `CFEnvironment.PRODUCTION` again** — both were removed 2026-06-11 (ported from upstream Alphab2bapp).
+**Cashfree environment + install-source handling** (`MPInvestNowModal.js` one-time seam L1348, recurring seam L1659; helpers in `src/utils/cashfreeEnv.js`)
 
-Cashfree's native AAR enforces a **Play-Store-only install-source check in PRODUCTION**: a sideloaded APK (installer = `com.google.android.packageinstaller`, i.e. `adb install` / manual APK tap) makes `doPayment` / `doSubscriptionPayment` throw synchronously. The seam catches run `isInstallSourceError(err)` → `friendlyPaymentError(err)` and show an *"install from Play Store"* alert (the one-time seam also clears `paymentPollingMessage` and stops the 30s + 54×5s background poll, so the spinner no longer runs ~5 min on a build that can never open the sheet). **The DB payment config is unrelated** — verified 2026-06-11 that `alphanomy` has `paymentPlatform: 'cashfree'`, `active_gateway: 'cashfree'` (configured), and `features.recurring_enabled: true`. Legitimate fixes: install via Play Store Internal Testing, or whitelist the installer at Cashfree dashboard → Settings → Whitelisted Install Sources. `.env` here sets `REACT_APP_CASHFREE_ENV=production` so every build type talks to the live gateway.
+Both Cashfree seams (one-time `doPayment`, recurring `doSubscriptionPayment`) resolve the SDK environment through `getCashfreeEnvironment()` — the single source of truth shared with `CoursePurchaseSheet` / `BuyWebinarTicketSheet`. It honours `REACT_APP_CASHFREE_ENV`, defaults to `SANDBOX` in Metro debug, else maps `REACT_APP_ENV`. **Do not inline `Config.REACT_APP_ENV === 'production' ? …` or hardcode `CFEnvironment.PRODUCTION` again** — both were removed 2026-06-11 because they ran the PRODUCTION anti-fraud path even in dev.
+
+Cashfree's native AAR enforces a **Play-Store-only install-source check in PRODUCTION**: a sideloaded APK (installer = `com.google.android.packageinstaller`, i.e. `adb install` / manual APK tap) makes `doPayment` / `doSubscriptionPayment` throw synchronously. The seam catches now run `isInstallSourceError(err)` → `friendlyPaymentError(err)` and show an *"install from Play Store"* alert (the one-time seam also clears `paymentPollingMessage` and stops the 30s + 54×5s background poll, so the spinner no longer runs ~5 min on a build that can never open the sheet). **The DB payment config is unrelated** — verified 2026-06-11 that both `prod` and `alphanomy` have `paymentPlatform: 'cashfree'`, `active_gateway: 'cashfree'` (configured), and `features.recurring_enabled: true`; the gateway is fine, the block is purely the install source. Legitimate fixes: install via Play Store Internal Testing, or whitelist the installer at Cashfree dashboard → Settings → Whitelisted Install Sources.
+
+**Cashfree failure diagnostics — remote payment log (2026-06-18)**
+
+Release / Play-Store builds can't be inspected with `adb logcat`, and a failed
+GPay/UPI attempt leaves **no backend trace** (order is minted fine, no terminal
+webhook fires — the failure is reported only to the SDK `onError` on-device). To
+make release-build failures diagnosable server-side, the one-time Cashfree seam
+in `MPInvestNowModal.js` calls `logPayment(type, data, configData)` (POST
+`api/log-payment` → `aq_backend_github/Logs/payments/<IST-date>.log` on tidi) at
+every terminal: `CASHFREE_ONETIME_START` (with resolved `cashfreeEnv` +
+platform), `CASHFREE_ONETIME_ERROR` (SDK `onError` code/type/message +
+`isInstallSourceError`), `CASHFREE_ONETIME_SDK_ERROR` (synchronous `doPayment`
+throw), `CASHFREE_ONETIME_POLL_FAILED`, and `CASHFREE_RECURRING_ERROR` on the
+recurring seam. The `api/log-payment` route already runs in production — no
+backend deploy needed for the logging. Operator read:
+`ssh tidi 'grep CASHFREE servers/server1/aq_backend_github/Logs/payments/$(date +%F).log'`.
+The `cashfreeEnv` field exists specifically to catch a SANDBOX-SDK-vs-PRODUCTION-order
+mismatch (see install-source paragraph above + `cashfreeEnv.js`).
+
+**`order_tags.mobileNumber` comma bug (backend, fixed + deployed 2026-06-18).**
+`aq_backend_github Routes/CashFree/CashFree.js` minted the Cashfree phone
+metadata as `` `${countryCode},${mobileNumber}` `` → the malformed
+`"+91,7276689226"` (seen in the live order create). Fixed to space-separated
+`.trim()` at **all three** write sites (L479 one-time `order_tags`, L717
+admin-token-purchase, L2269 recurring `subscription_tags`). `customer_phone`
+(the field Cashfree validates, sanitized via `formatPhoneForCashfree`) was never
+affected, and the tag is **not read back** anywhere — pure data-hygiene.
+Deployed to `tidi:servers/server1/aq_backend_github`, `alphaquark.service`
+restarted.
+
+**Payment-log retention (backend cron, 2026-06-18).** `Logs/payments/<date>.log`
+(written by `api/log-payment`) had no rotation; entries carry PII. New
+`CronJob/CronPaymentLogCleanup.js` prunes files older than 90 days (daily 03:37 +
+startup), registered in `CronJob/index.js`, deployed + live (pruned 22 stale
+files on first run).
 
 **Digio e-signature** (`@digiotech/react-native`, lines 88-93, 904-1099)
 - `Digio` SDK gates the strategy activation behind a signed advisory PDF
@@ -359,6 +397,34 @@ Cashfree's native AAR enforces a **Play-Store-only install-source check in PRODU
 - Polled via `pollDigioStatus` until `DigioStatus.COMPLETED`
 - `savePendingDigio` / `getPendingDigio` persist a pending state in AsyncStorage so the modal can recover from app kill mid-signing
 - `digioSuccessModal` UI confirms completion before payment commit
+
+**Digio skip check — `isDigioAlreadyCompleted(planId)` (authoritative, matches web; 2026-06-18)**
+
+At pay-time `handleDigioPayment()` MUST decide whether the signer already has a
+valid signature and skip Digio. The correct source of truth is the backend
+endpoint **`GET /api/digio/check-digio-status/{email}/{planId?}`** — `needsDigio
+=== false` ⇒ skip. That handler (`aq_backend_github
+Routes/Digio/SignatureCompletion.js:604`) encodes all three policies in priority
+order: (1) `mitc_resign_every_payment` window, (2) `per_plan_digio` (signed
+within `DIGIO_SIGNATURE_VALIDITY_DAYS` = 10d **or** active sub for the plan),
+(3) default `user.digio_verification === true`. The planId is appended when
+available so the per-plan "active subscription" rule is honoured.
+
+> **🔴 Regression fixed 2026-06-18 (pratik@alphaquark.in).** The app previously
+> gated only on the **locally-cached** `advisorSpecificUserDetails
+> .digio_verification === true`, fetched ONCE on mount via `getUser`. That cache
+> is `undefined` during the fetch race **and** blind to the per-plan / 10-day /
+> MITC policies — so an already-signed user was re-prompted in the app even
+> though **web skipped correctly** (web calls `check-digio-status` in
+> `PricingPage.js handleOk → checkUserDigioVerification`). Because the user had
+> already signed, Digio short-circuited after the first OTP → "signature done"
+> with **no agreement view and no Aadhaar OTP**. Fix: `MPInvestNowModal.js`
+> `isDigioAlreadyCompleted()` now calls the same endpoint; on API error it falls
+> back to the cached flag so a transient outage can't force a re-sign.
+> **Known follow-up:** the `afterPayment` branch in
+> `handlePaymentSuccessWithTelegram()` still uses the cached flag (sync, ~6
+> callsites) — same staleness class, lower blast radius; migrate when that
+> function is made async.
 
 **Pending-payment recovery** (L428-588)
 ```
@@ -371,6 +437,18 @@ checkPendingPaymentRecovery()
 Without this guard, a user who Force-Quits during the Razorpay/Cashfree callback can be billed without becoming subscribed.
 
 **GST handling** — `withGst()`, `gstLabel()` from `src/utils/gstHelpers.js`. Adds 18% GST to displayed strategy price and embeds GST line items in payment payload (per `GstConfigContext.js`).
+
+> ⚠️ **Bespoke card pricing must always start from the PRE-GST base.**
+> `MPCardBespoke.js` `getPricingOptions()` builds each frequency option from
+> `data.pricingWithoutGst.<freq>` (the base). The card then renders the base +
+> a `+ GST` / `including GST` suffix driven by `gstConfigure` /
+> `gstWithTextConfigure`. **Do NOT read `data.pricing.<freq>`** here — that
+> field is GST-**inclusive**, so pairing it with the `+ GST` label
+> double-counts GST. This was the 2026-07-03 bug where a ₹20000/yr plan showed
+> `₹23600 + GST` (20000 × 1.18) — the **yearly** branch alone was reading
+> `data.pricing.yearly` while monthly/quarterly/half-yearly read
+> `pricingWithoutGst`. Fixed to `pricingWithoutGst.yearly` (fallback to
+> `pricing.yearly` only for legacy plans without the without-GST field).
 
 **Telegram collection** (L221-1271)
 ```
@@ -409,6 +487,8 @@ if (config?.modelPortfolioEnabled !== false) routes.push({key: 'modelportfolio',
 ```
 
 Both flags default to enabled when undefined (matching web `Home.js`). Each tab renders its own empty state when the underlying list is empty — users always see both tabs as long as both features are enabled, even when one list is empty. (Earlier behavior hid the tab when its list had zero items, collapsing the UI to a single full-width pill and hiding the feature from users; that was reverted on 2026-04-17.)
+
+**Bespoke tab title is per-tenant configurable (2026-07-06):** both `ModelPortfolioScreen.js` and `ProductCatalogScreen.js` (the catalog/explore variant of this tab view) render `config?.bespokePlanLabel || 'Bespoke Plan'` instead of a hardcoded literal. `bespokePlanLabel` is a plain field on the per-variant `whitelabel/appVariants.js` object — same mechanism as `themeColor`/`logo` — so it needs no backend or `ConfigContext.js` wiring; it flows through via `initialConfig`'s spread. Set today for the `zamzam_app` fork's `zamzamcapital` variant (`bespokePlanLabel: 'Stock Plans'`); every other tenant is unaffected and still shows `'Bespoke Plan'`.
 
 ---
 
@@ -1207,3 +1287,42 @@ Limitations are classified by impact:
 10. **Two parallel MP docs across repos.** Web (`prod-alphaquark-github/docs/MODEL_PORTFOLIO_ARCHITECTURE.md`) and ccxt-india (`ccxt-india/docs/MODEL_PORTFOLIO_ARCHITECTURE.md`) maintain their own MP docs. There is no single canonical. **Mitigation**: cross-link from each; update all three on any MP backend / schema change.
 
 11. **`UserStrategySubscribeModal.js` (mobile) bypasses `MPInvestNowModal` for the publisher-direct subscribe path.** Reads `aq-encrypted-key`, calls `record-publisher-results` (L640) and `api/zerodha/model-portfolio/update-reco-with-zerodha-model-pf` (L509) directly. By design (Zerodha publisher requires its own flow), but creates a second subscribe path that bypasses Digio/PendingPayment recovery.
+
+## 18. Plan logo resolution
+
+The MP/plan logo is stored on **two** collections and the two clients read
+different ones — the source of a recurring "wrong logo on mobile" bug:
+
+| Surface | Reads | Field |
+|---|---|---|
+| **Web** (plans/portfolios pages) | `plans` | `plans.image` |
+| **Mobile** MP detail (`MPPerformanceScreen.js`) | `model_portfolio` | `strategyDetails.image` → `${server.baseUrl}${image}`; fallback `Alpha100 = src/assets/alpha-100.png` (red "100") |
+
+Admin "upload logo" writes `plans.image`. The two `newPlanImage` upload
+endpoints in `aq_backend_github/Routes/modelPortfolio.js` mirror to **both**
+collections, but **admin plan-only edits** (Plans admin routes) write
+`plans.image` only, leaving `model_portfolio.image` `""`/null → mobile shows the
+red `Alpha100` placeholder while web looks correct.
+
+**Resolution (server-side, 2026-07-07, commit `ac56f8a`):** both read endpoints
+now backfill an empty `model_portfolio.image` from the matching plan
+(`plan_id` first, then normalized `model_name`) at response time:
+- `GET /portfolios/:advisor` (listing) — pre-existing.
+- `GET /portfolios/strategy/:modelName` (detail — what mobile reads) — added
+  2026-07-07. Row shape here is `{ originalData: {...} }`, so the image lives at
+  `originalData.image`.
+
+Because resolution is backend-side, **every client (Alphab2bapp, Alphanomy fork,
+tidi_new, all forks) and both platforms get the correct logo with no app
+rebuild**, and it self-heals for new plans.
+
+**Source-side fix (also shipped 2026-07-07, ccxt commit `79555160`):**
+`model_portfolio` docs are created lazily by ccxt
+(`ccxt-india/apps/app_model_portfolio.py` `create_modelpf_strategy`) on first
+rebalance — often AFTER the admin uploads the logo, so the mirror in Node's
+`/plan/newPlanImage` (which only updates an already-existing `model_portfolio`
+doc) misses and the doc is born with `image=None`. The creation code now seeds
+`image` from the matching plan (same block that already seeds `plan_id` +
+`volatility`) when the create request carries no image file. So the field is now
+populated **at rest** at creation; the Node read-side backfill above stays as the
+display safety net for any doc created before this fix.

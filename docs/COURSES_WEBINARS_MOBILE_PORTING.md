@@ -1,19 +1,49 @@
 # Courses + Webinars — Alphab2bapp porting spec
 
-> Status: **SPEC ONLY**. As of 2026-05-23, alphab2bapp ships zero
-> course/webinar UI (`grep` for `course|webinar|livekit|gumlet|vdocipher`
-> in `src/` and `designs/` returns nothing course-related). This doc
-> is the canonical reference for picking up the mobile implementation.
+> Status: **BUILT — Phases 0/1/2 shipped; live class now renders via the
+> WebView bridge.** (Header corrected 2026-06-19 — it previously said "SPEC
+> ONLY (2026-05-23)" and was never updated as the implementation landed.) The
+> full feature is live in the app: catalog (`MyCoursesScreen`), course detail
+> + VOD playback via `react-native-webview` (`composites.GumletPlayer`),
+> webinar discovery (`WebinarsListScreen`) + detail (`WebinarDetailScreen`),
+> free + paid purchase for both courses and webinars (`CoursePurchaseSheet` /
+> `BuyWebinarTicketSheet` via the Cashfree RN SDK), coupons (`CouponService`),
+> enrollment writes (`GumletService.addClientCourse`), magic-link join
+> (`/token-magic`, ported 2026-06-19), and Android FCM reminders
+> (`WebinarReminderHandler`). Navigation + per-advisor config gates
+> (`coursesEnabled` / `webinarsEnabled`) are wired.
+>
+> **Live-class video — WebView bridge (2026-06-19).**
+> `designs/default/composites/LiveRoom.js` now renders the LIVE class for
+> real: on "Join" it calls `LiveKitService.getJoinUrl` →
+> `POST /api/livekit/join-url/:lessonId` (Firebase + verifyEnrollment; the
+> server mints a magic `joinToken` for the caller and returns the per-advisor
+> `https://<advisor>.alphaquark.in/webinar/:id?joinToken=…` URL), then opens
+> that URL in a **full-screen Modal `react-native-webview`**. The existing web
+> webinar overlay runs the LiveKit room via the **device browser's WebRTC**,
+> so **no native LiveKit deps and no native rebuild** are required — it ships
+> with a normal JS release. Viewers are subscribe-only (no camera/mic), so no
+> media permissions are prompted. VOD replay continues to play via the Gumlet
+> WebView. **Remaining validation:** WebRTC-in-WKWebView must be confirmed on
+> a real iOS device (works iOS 14.3+); Android System WebView is fine. A
+> NATIVE LiveKit path (background audio / PiP) is preserved as **Option A** in
+> §4.2.1 but is not used.
 >
 > Web side: shipped 2026-05-22 → 2026-05-23 as Slices 1–4 of the LiveKit
-> + webinar work. Canonical web reference is
+> + webinar work, iterated through 2026-06-19. Canonical web reference is
 > `prod-alphaquark-github/docs/COURSES_ARCHITECTURE.md` §14 and the
-> Changelog rows dated 2026-05-23. This doc points back at those sections
-> rather than duplicating their prose.
+> Changelog rows dated 2026-05-23 onward. This doc points back at those
+> sections rather than duplicating their prose.
 >
 > Supersedes the earlier `LIVE_CLASS_INTEGRATION.md`, which covered only
 > the LiveKit live-class viewer in isolation. That file is now a one-line
 > pointer here.
+>
+> **Parity with the last 3 weeks of web courses/webinar changes (audited
+> 2026-06-19):** all web changes 2026-05-29 → 2026-06-19 are either already
+> reflected in the app or are web-only / admin-only and out of mobile scope.
+> See §10 "Web parity matrix (3-week audit)" at the bottom for the
+> item-by-item reconciliation.
 
 ---
 
@@ -346,11 +376,17 @@ export default function LiveRoom({ lesson, courseId, host = false }) {
   if (error) return <View><Text>{error}</Text></View>;
   if (!bundle) return <View><Text>Joining live class…</Text></View>;
 
+  // Full-screen presentation (see "Sizing contract" note below).
   return (
-    <LiveKitRoom serverUrl={bundle.url} token={bundle.token} connect
-                 audio={host} video={host}>
-      <RoomBody />
-    </LiveKitRoom>
+    <Modal visible animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: '#000' }}>
+        {/* slim dark header: lesson.title + Close (calls onClose) */}
+        <LiveKitRoom serverUrl={bundle.url} token={bundle.token} connect
+                     audio={host} video={host} style={{ flex: 1 }}>
+          <RoomBody />
+        </LiveKitRoom>
+      </View>
+    </Modal>
   );
 }
 
@@ -369,6 +405,110 @@ function RoomBody() {
 T-10min "Join now" gating is part of `LiveRoom` on web — port that
 logic into this composite too (compare `scheduledStartTime` against
 `Date.now()`; show countdown until 10min before).
+
+**Sizing contract — full-screen room (2026-06-19, parity with the web
+`courseDetailsPage.js` / `WebinarDetailPage.jsx` full-viewport fix).** Once a
+viewer joins, the room MUST present in a **full-screen RN `Modal`**
+(`presentationStyle="fullScreen"`) with a slim dark header (lesson title +
+Close) and a `flex:1` video body — NOT a fixed `height: 360` panel inside the
+detail screen's `ScrollView`. A small fixed-height panel is the mobile
+equivalent of the web "webinar fits very small / maximize doesn't help" bug
+that was fixed on the web side. The placeholder `LiveRoomActive`
+(`designs/default/composites/LiveRoom.js`) already renders this Modal shell
+(`styles.modalRoot` / `modalHeader` / `roomBody`); when activating LiveKit,
+drop `<LiveKitRoom style={{ flex: 1 }}>` into the `roomBody` slot and keep the
+Modal wrapper — do not revert to an inline fixed-height `<View>`. The
+activation snippet at the bottom of `LiveRoom.js` reflects this.
+
+**Magic-link join (ported 2026-06-19, web parity with the 2026-06-06 web
+feature).** `LiveKitService.getViewerToken(lessonId, courseId, { joinToken })`
+now branches: with `joinToken` it POSTs `/api/livekit/token-magic/:lessonId`
+(public headers, no Firebase — the signed JWT is the credential); without it,
+the Firebase `/token/:lessonId` path as before. `WebinarDetailScreen` reads a
+`joinToken` route param, flips straight into join mode, suppresses the sign-in
++ email-mismatch gating, and forwards it to `composites.LiveRoom` (which passes
+it to `getViewerToken`). The deep-link source (an Android App Link / iOS
+Universal Link on `<subdomain>.alphaquark.in/webinar/:lessonId?joinToken=…`
+that routes into `WebinarDetailScreen` with `{ joinToken }`) is NOT yet
+configured — until it is, magic links open the web page, and the in-app path
+is exercised only if a navigator passes `joinToken` explicitly. The
+service/screen plumbing is in place so wiring the deep link is the only
+remaining step for full magic-link parity.
+
+**Live-class WebView bridge (2026-06-19) — the live implementation.**
+`composites.LiveRoom` renders the live class by loading the existing **web**
+webinar room page in a full-screen `react-native-webview`, so the device
+browser's WebRTC stack runs LiveKit and we install **no native LiveKit deps**.
+Flow:
+1. `handleJoin` → `LiveKitService.getJoinUrl(lessonId, courseId)` →
+   `POST /api/livekit/join-url/:lessonId` (Firebase + `verifyEnrollment`).
+2. The server mints a magic `joinToken` for the caller's verified email
+   (`webinarJoinToken.signJoinToken`) and returns
+   `{ joinToken, joinUrl, lessonId }` with
+   `joinUrl = https://<advisor>.alphaquark.in/webinar/<lessonId>?joinToken=…`
+   (`buildMagicJoinUrl`, per-advisor subdomain from `req.subdomain`).
+3. `LiveRoomWebView` opens `joinUrl` in a full-screen Modal WebView. The web
+   page's full-viewport overlay (the 2026-06-19 web fix) renders the room +
+   chat; `/token-magic` is called by the web page, not the app.
+
+WebView config that matters: `allowsInlineMediaPlayback`,
+`mediaPlaybackRequiresUserAction={false}` (remote audio/video autoplay),
+`thirdPartyCookiesEnabled` + `sharedCookiesEnabled` (LiveKit/analytics),
+`limitsNavigationsToAppBoundDomains={false}` (iOS WKWebView signalling). Viewers
+are **subscribe-only** (no `getUserMedia`), so **no camera/mic permissions** are
+prompted — which is why this needs no manifest/Info.plist changes. **Validate
+on a real iOS device** (WKWebView WebRTC is supported iOS 14.3+); Android System
+WebView is fine. The backend endpoint is `aq_backend_github/Routes/livekit.js`
+(`/join-url/:lessonId`), tracked in `prod-alphaquark-github/docs/COURSES_ARCHITECTURE.md §14.3`.
+
+### 4.2.1 Option A — NATIVE LiveKit (optional upgrade, NOT used)
+
+> **The live class already works via the WebView bridge (§4.2 above) — this
+> section is an OPTIONAL future upgrade, not a required step.** Use it only if
+> you later want a native room (background audio, picture-in-picture, no
+> browser chrome). It is a **native build** — it changes the iOS Podfile +
+> Android Gradle and needs a real device/emulator rebuild, so it CANNOT be done
+> in a headless repo checkout. To adopt it, replace `LiveRoomWebView` with the
+> native snippet at the bottom of `LiveRoom.js` (which uses
+> `getViewerToken` / `getViewerToken({joinToken})` instead of `getJoinUrl`).
+
+1. **Install the native deps** (let the resolver pick a co-compatible matrix —
+   do not hand-pin unless a build fails):
+   ```bash
+   yarn add @livekit/react-native @livekit/react-native-webrtc livekit-client
+   cd ios && pod install && cd ..
+   ```
+2. **iOS `Info.plist`** — add:
+   - `NSCameraUsageDescription` + `NSMicrophoneUsageDescription` (viewer is
+     audio/video-OFF, but the WebRTC lib links the frameworks; Apple requires
+     the strings to exist).
+   - `UIBackgroundModes` → include `audio` and `voip`.
+3. **Android `AndroidManifest.xml`** — add `RECORD_AUDIO`, `CAMERA`,
+   `MODIFY_AUDIO_SETTINGS`, `BLUETOOTH`, `BLUETOOTH_CONNECT`, `INTERNET`, plus
+   camera/microphone `uses-feature` with `required="false"` (viewers without a
+   camera must still install).
+4. **Swap the `LiveRoomActive` body** in `designs/default/composites/LiveRoom.js`
+   with the activation snippet at the bottom of that file. **Keep the
+   full-screen `Modal` + header wrapper** (`styles.modalRoot` / `modalHeader` /
+   `roomBody`) — only the `roomBody` contents change: drop
+   `<LiveKitRoom serverUrl={bundle.url} token={bundle.token} connect audio={host}
+   video={host} style={{ flex: 1 }}>` + `<RoomBody />` into it, and add the
+   `AudioSession.startAudioSession()` / `stopAudioSession()` effect.
+5. **No JS-side token work needed** — `getViewerToken` already returns
+   `{ url, token, ttlSeconds }` for both the Firebase (`/token`) and magic-link
+   (`/token-magic`) paths, and the T-10min gate + countdown already work.
+6. **Env / backend** — nothing new on the client. The backend already mints
+   tokens (`/api/livekit/token/:lessonId` + `/token-magic/:lessonId`) and runs
+   the LiveKit Cloud webhook → Wasabi recording pipeline. Confirm the server's
+   `LIVEKIT_*` env is set (it is, on tidi) — a 503 `LIVEKIT_NOT_CONFIGURED`
+   from `/token` means the server side isn't configured, not the app.
+7. **Test**: schedule a webinar from admin, join from a second device within
+   the T-10min window, confirm the host's video/screenshare renders full-screen
+   and Close returns to the detail screen.
+
+After activation, update this doc's status header + the design-system docs
+(`DESIGN_MIGRATION_PROGRESS.md` etc.) + `CHANGELOG.md` per the repo's blocking
+doc rule, and add the new native deps to the "Open follow-ups" closed list.
 
 ### 4.3 WebinarsListScreen (P0)
 
@@ -620,3 +760,34 @@ The exceptions that DO warrant a backend touch:
   enforcement; will retire into COURSES_ARCHITECTURE.md after Phase 6.
 - `Alphab2bapp/CLAUDE.md` — broker-auth lesson + FCM-per-advisor setup.
 - Memory: `fcm_per_advisor.md`, `advisor_enumeration_gotcha.md`.
+
+---
+
+## 10. Web parity matrix (3-week audit, 2026-05-29 → 2026-06-19)
+
+Audited every courses/webinar change shipped on web in the trailing 3 weeks
+and reconciled against the app. Verdicts:
+
+| # | Web change (last 3 weeks) | Web files | Mobile status |
+|---|---|---|---|
+| 1 | Webinar security hardening — auth-gate purchase + caller.email==userEmail + signed-out redirect | `LiveKitService.js`, `BuyWebinarTicketModal.jsx`, `WebinarDetailPage.jsx` | ✅ **Already in app** — `getOptionalAuthHeaders` + `BuyWebinarTicketSheet` email lock + `EMAIL_MISMATCH` handling. |
+| 2 | Anonymous registration on shared links | `WebinarDetailPage.jsx`, `BuyWebinarTicketModal.jsx`, `LiveKitService.js` | ✅ **Already in app** — purchase uses optional-auth headers; anonymous register supported. |
+| 3 | Magic-link join (`/token-magic`, skip sign-in) | `WebinarDetailPage.jsx`, `LiveKitService.js`, `LiveRoom.jsx` | ✅ **Ported 2026-06-19** — `getViewerToken({joinToken})` + `WebinarDetailScreen` route-param + `LiveRoom` prop. Deep-link source still TODO (§4.2.1 note). |
+| 4 | Live-room sizing → full-viewport overlay (3 commits) | `WebinarDetailPage.jsx`, `LiveRoom.jsx`, `courseDetailsPage.js`, `HeaderForCourse.js` | ✅ **Ported 2026-06-19** — `composites.LiveRoom` full-screen Modal contract (§4.2). Mobile never had the cramped-modal bug (live → dedicated screen). |
+| 5 | Course-coupon UI + revenue-leak fix (₹0 guard) | `CoursePaymentModal.jsx`, `courseDetailsPage.js` | ✅ **Already in app** — `CoursePurchaseSheet` coupon chain + `normalizeDiscount` 100%-off guard + `validateChargeableAmount`. |
+| 6 | Phantom-enrollment fix (no "purchased" without payment) | `courseDetailsPage.js` | ✅ **Already in app** — `CoursePurchaseSheet` writes enrollment only in the post-payment SUCCESS branch. |
+| 7 | Published-only user catalog (`?includeDrafts`) | `GumletService.js`, `CoursePage.js`, `UserCourses.js` | ✅ **Already correct** — app `GumletService.listCollections` hits `/collections` which defaults to `isPublished:true` (BE `dc8eb45`); app is viewer-only so it never requests drafts. |
+| 8 | Lesson Discussion "Post Comment" email-source fix | `LessonComments.js` (admin) | ⛔ **Out of scope** — admin-only surface; lesson comments are P3/deferred on mobile (§5). |
+| 9 | Responsive hardening for public course cards/tabs | `CourseCard.js`, `CoursePage.js` | ✅ **N/A / already fine** — native layout; app cards use flex + `numberOfLines`, no CSS wrap bug. |
+| 10 | Admin: webinar status badges flip live + registration pills | `WebinarsList.js` (admin) | ⛔ **Out of scope** — admin web surface; the app is viewer-only (no admin webinar management). |
+| 11 | Admin: Manage Trailer Gumlet reconcile + failure banners | `AdminCourseComponent.js`, `LessonUploadModal.js`, `GumletService.js` (admin) | ⛔ **Out of scope** — admin-only. |
+| 12 | Admin: drop VdoCipher root-folder gate | `AdminVideoImport.js` (admin) | ⛔ **Out of scope** — admin-only; app never used VdoCipher (Gumlet from day one). |
+| 13 | Admin: lesson-attachments VdoCipher→Gumlet | `LessonAttachments.js`, `GumletService.js` (admin) | ⛔ **Out of scope** — admin-only. |
+| 14–18 | Admin UX: remove dead Quiz icon, unlock-settings modal fixes, bundle dark-mode, CourseList wrap, required-asterisk sweep | various `AdminVideoImport/*` (admin) | ⛔ **Out of scope** — admin web surfaces. |
+| — | LiveKit **live video stream** itself | `designs/default/sections/LiveRoom.jsx` (web, real LiveKit) | ✅ **Wired 2026-06-19 via the WebView bridge** — `composites.LiveRoom` loads the web join URL (`/api/livekit/join-url`) in a full-screen WebView; browser WebRTC runs the room, no native deps. Pending real-iOS-device WebRTC verification (§4.2). Native LiveKit kept as optional Option A (§4.2.1). |
+
+**Net:** every web courses/webinar change in the window is now reflected in the
+app or is web/admin-only and out of mobile scope. The app's viewer-facing
+course + webinar flows — including the **live** class via the WebView bridge —
+are at parity. The only open item is a real-device check of WebRTC-in-WKWebView
+on iOS.

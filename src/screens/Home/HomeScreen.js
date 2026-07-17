@@ -274,6 +274,48 @@ const HomeScreen = ({ }) => {
   const showNotification = useSocialProof();
   const navigation = useNavigation();
 
+  // mobile-deeplink Phase 1: consume a pending functional deep-link (rebalance/
+  // execute) that smartLink.js resolved + stashed, and route to the rebalance
+  // surface. Fires once per stash; clears it so a later focus doesn't re-open.
+  const _deeplinkConsumed = useRef(false);
+  useFocusEffect(
+    React.useCallback(() => {
+      let active = true;
+      (async () => {
+        try {
+          const raw = await AsyncStorage.getItem('pending_functional_deeplink');
+          if (!raw || !active) return;
+          const parsed = JSON.parse(raw) || {};
+          const resolved = parsed.resolved;
+          await AsyncStorage.removeItem('pending_functional_deeplink');
+          if (!resolved || _deeplinkConsumed.current) return;
+          _deeplinkConsumed.current = true;
+          const surface = String(resolved.surface || '');
+          if (
+            surface.startsWith('rebalance') ||
+            surface === 'trade_execute' ||
+            surface === 'basket_execute'
+          ) {
+            // Land on the rebalance/notifications surface with the resolved model.
+            // TODO(app team): in PushNotificationScreen, when deeplinkModelName is
+            // present, fetch that model's latest rebalance and render its
+            // RebalanceNotificationComponent (selectedNotification.modelName +
+            // .latestRebalance.adviceEntries) — same shape as a rebalance push.
+            navigation.navigate('PushNotificationScreen', {
+              deeplinkModelName: resolved.model_name,
+              deeplinkUniqueId: resolved.unique_id,
+            });
+          }
+        } catch (_) {
+          /* ignore — never block Home */
+        }
+      })();
+      return () => {
+        active = false;
+      };
+    }, [navigation]),
+  );
+
   const [isRefreshing, setIsRefreshing] = useState(false);
   const handleUserDataAndFcm = async () => {
     try {
@@ -1393,8 +1435,8 @@ const HomeScreen = ({ }) => {
                 </View>
                 <TouchableOpacity
                   onPress={() => setSeeAllMP(true)}
-                  style={styles.viewAll}>
-                  <Text style={styles.viewAllText}>View All</Text>
+                  style={[styles.viewAll, { borderColor: mainColor }]}>
+                  <Text style={[styles.viewAllText, { color: mainColor }]}>View All</Text>
                 </TouchableOpacity>
               </View>
               <View style={{ marginLeft: 14 }}>
@@ -1423,13 +1465,13 @@ const HomeScreen = ({ }) => {
                 <View>
                   <Text style={styles.StockTitle}>Recommendations</Text>
                   <Text style={styles.StockTitlebelow}>
-                    Bespoke Active Recommendations
+                    {config?.bespokePlanLabel || 'Bespoke'} Active Recommendations
                   </Text>
                 </View>
                 <TouchableOpacity
                   onPress={() => setSeeAllBespoke(true)}
-                  style={styles.viewAll}>
-                  <Text style={styles.viewAllText}>View All</Text>
+                  style={[styles.viewAll, { borderColor: mainColor }]}>
+                  <Text style={[styles.viewAllText, { color: mainColor }]}>View All</Text>
                 </TouchableOpacity>
               </View>
               <View style={{ marginLeft: 2 }}>
@@ -1470,8 +1512,8 @@ const HomeScreen = ({ }) => {
 
                   <TouchableOpacity
                     onPress={() => setSeeAllMPplan(true)}
-                    style={styles.viewAll}>
-                    <Text style={styles.viewAllText}>View All</Text>
+                    style={[styles.viewAll, { borderColor: mainColor }]}>
+                    <Text style={[styles.viewAllText, { color: mainColor }]}>View All</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -1500,7 +1542,10 @@ const HomeScreen = ({ }) => {
                     marginHorizontal: 15,
                   }}>
                   <View>
-                    <Text style={styles.StockTitle}>Top Bespoke Plans</Text>
+                    {/* Pluralize a custom tenant label here only ("Stock Plan" → "Top Stock
+                        Plans") — the label value stays singular everywhere else (tab,
+                        cards). Naive +s is fine: we control the tenant values. */}
+                    <Text style={styles.StockTitle}>Top {config?.bespokePlanLabel ? `${config.bespokePlanLabel}s` : 'Bespoke Plans'}</Text>
                     <Text style={styles.StockTitlebelow}>
                       Ranked based of user feedbacks
                     </Text>
@@ -1508,8 +1553,8 @@ const HomeScreen = ({ }) => {
 
                   <TouchableOpacity
                     onPress={() => setSeeAllBespokeplan(true)}
-                    style={styles.viewAll}>
-                    <Text style={styles.viewAllText}>View All</Text>
+                    style={[styles.viewAll, { borderColor: mainColor }]}>
+                    <Text style={[styles.viewAllText, { color: mainColor }]}>View All</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -1547,8 +1592,8 @@ const HomeScreen = ({ }) => {
                 </View>
                 <TouchableOpacity
                   onPress={() => setSeeAllMP(true)}
-                  style={styles.viewAll}>
-                  <Text style={styles.viewAllText}>View All</Text>
+                  style={[styles.viewAll, { borderColor: mainColor }]}>
+                  <Text style={[styles.viewAllText, { color: mainColor }]}>View All</Text>
                 </TouchableOpacity>
               </View>
               <View style={{ marginLeft: 14 }}>
@@ -1619,13 +1664,13 @@ const HomeScreen = ({ }) => {
                 <View>
                   <Text style={styles.StockTitle}>Recommendations</Text>
                   <Text style={styles.StockTitlebelow}>
-                    Bespoke Active Recommendations
+                    {config?.bespokePlanLabel || 'Bespoke'} Active Recommendations
                   </Text>
                 </View>
                 <TouchableOpacity
                   onPress={() => setSeeAllBespoke(true)}
-                  style={styles.viewAll}>
-                  <Text style={styles.viewAllText}>View All</Text>
+                  style={[styles.viewAll, { borderColor: mainColor }]}>
+                  <Text style={[styles.viewAllText, { color: mainColor }]}>View All</Text>
                 </TouchableOpacity>
               </View>
               <View style={{ marginLeft: 2 }}>

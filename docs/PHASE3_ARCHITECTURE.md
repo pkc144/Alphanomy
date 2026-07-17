@@ -169,7 +169,7 @@ When extending with new SDK error codes, add them to either `SDK_STAGE_COPY` (if
 
 ## `BrokerCredentialForm` — SDK widget contract
 
-Source: `../alphaquark-mobile-sdk/packages/rn/src/components/BrokerCredentialForm.tsx`. Schema: `brokerFormSchema.ts`.
+Source: `../../alphaquark-mobile-sdk/packages/rn/src/components/BrokerCredentialForm.tsx`. Schema: `brokerFormSchema.ts`.
 
 **Per-broker schema fields (key ones):**
 
@@ -217,7 +217,7 @@ Source: `../alphaquark-mobile-sdk/packages/rn/src/components/BrokerCredentialFor
 
 ## `WebViewBrokerAuthFlow` — SDK widget contract
 
-Source: `../alphaquark-mobile-sdk/packages/rn/src/components/WebViewBrokerAuthFlow.tsx`.
+Source: `../../alphaquark-mobile-sdk/packages/rn/src/components/WebViewBrokerAuthFlow.tsx`.
 
 **Inputs:**
 
@@ -234,6 +234,15 @@ Source: `../alphaquark-mobile-sdk/packages/rn/src/components/WebViewBrokerAuthFl
 5. Surface `onSuccess(BrokerExchangeResult)` or `onError(sdkError)`.
 
 **Known timing gap (Zerodha):** Android resolves server 302 redirects internally before the JS hooks fire, so when `prod.alphaquark.in/stock-recommendation` 302's an unauthenticated visitor to `/login`, the widget never sees the original `/stock-recommendation?request_token=…` URL. Fix is out-of-band — register a non-redirecting redirect URL on the Kite developer portal (e.g. `app-links.alphaquark.in/zerodha-callback`).
+
+**AliceBlue-only WebView overrides (2026-06-11).** Two props are conditionally set when `broker === "AliceBlue"` (undefined for every other broker — all verified working on platform defaults, and changing a working broker's UA is an unverified fan-out change):
+
+1. **`injectedJavaScriptBeforeContentLoaded` — WKWebView API shims + OTP interceptor. THE PRIMARY iOS blank-page fix.** Root cause (verified by reading AliceBlue's deployed bundle `assets/index-6a09ab85.js`): the portal's Vue entry module runs **firebase-messaging at module top level, BEFORE `mount("#app")`** — its factory calls `navigator.serviceWorker.addEventListener("message", …)` unguarded, and a UA-gated branch calls `Notification.requestPermission()`. **iOS WKWebView has neither API** (Service Workers / Web Push are Safari-only), so AliceBlue's own bootstrap throws a TypeError, aborts before mount, and `<div id="app">` stays empty → **blank page**. Android WebView supports both APIs → works — the exact iOS-blank/Android-fine signature. The injected script stubs `navigator.serviceWorker` (no-op listeners, rejecting `register`) and `window.Notification` (`permission='denied'`), then arms the legacy OTP-validate redirect interceptor (verbatim from `AliceBlueConnectUI.js` / tidi_new `BrokerAuthPage.dart`: patches fetch/XHR, watches `/omk/auth/access/v1/otp/validate`, force-navigates to its `redirectUrl` — covers AliceBlue's historically broken post-OTP redirect, their Keycloak `alice-kb` client allow-lists only localhost origins). Shims are no-ops on Android; interceptor self-deactivates unless an otp/validate response carries `authCode=`.
+2. **`userAgent` (iOS only) — supporting fix.** Safari-style iPhone UA. AliceBlue's bundle UA-gates the `Notification.requestPermission()` call — mobile-looking UAs skip it; desktop-class UAs (e.g. iPad's default desktop UA, no iPhone/iPad token) would call it. The iPhone UA keeps us on the safe branch and matches the legacy modal (`59e8e1f`, 2026-03-02). First shipped 2026-06-11 as the presumed root cause; insufficient alone — the serviceWorker abort happens on every UA.
+
+**Same shim added to the legacy lane** (`src/UIComponents/BrokerConnectionUI/AliceBlueConnectUI.js`, prepended to its `ALICEBLUE_REDIRECT_INTERCEPTOR`) in the same commit — legacy had the identical latent iOS bug; per the repo rule, every code path gets the fix in one cycle. Keep the SDK and legacy copies of the shim in sync.
+
+**Cross-platform parity:** the same shims + UA exist in the Flutter package (`packages/flutter/lib/src/widgets/webview_auth_flow.dart` — `_kAliceBlueIosUserAgent` via `setUserAgent` gated on `defaultTargetPlatform == TargetPlatform.iOS`; shims + interceptor injected on `onPageStarted`/`onPageFinished` for `aliceblueonline.com` pages). **Known Flutter caveat:** webview_flutter has no document-start injection hook, so on iOS the shim races the page's module script — the RN package's `injectedJavaScriptBeforeContentLoaded` (WKUserScript at document start) is the reliable mechanism.
 
 ## `EgressIpCallout` — IP-whitelist gate
 
@@ -309,8 +318,8 @@ Triggered by `ManageConnectionsModal`'s smart-reauth handler when an existing br
 - ModalManager: `src/GlobalUIModals/ModalManager.js`
 - Phase3SdkBrokerModal: `src/components/BrokerConnectionModal/Phase3SdkBrokerModal.js`
 - EgressIpCallout: `src/components/BrokerConnectionModal/EgressIpCallout.js`
-- SDK widgets: `../alphaquark-mobile-sdk/packages/rn/src/components/`
-- SDK schema: `../alphaquark-mobile-sdk/packages/rn/src/components/brokerFormSchema.ts`
+- SDK widgets: `../../alphaquark-mobile-sdk/packages/rn/src/components/`
+- SDK schema: `../../alphaquark-mobile-sdk/packages/rn/src/components/brokerFormSchema.ts`
 - Backend SDK routes: `../aq_backend_github/Routes/sdk/v1/connections.js`
 - Mint server: https://github.com/pk1762012/aq-sdk-mint-server
 - Phase 1/2 background: `docs/SDK_MOBILE_FIT_ASSESSMENT.md`

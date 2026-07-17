@@ -38,6 +38,7 @@ import PerformanceChart from '../../components/ModelPortfolioComponents/Performa
 import DistributionGrid from '../Drawer/DistributionRowGrid';
 import {useTrade} from '../TradeContext';
 import {useConfig} from '../../context/ConfigContext';
+import useTokens from '../../theme/useTokens';
 
 const screenWidth = Dimensions.get('window').width;
 const ScreenHeight = Dimensions.get('window').height;
@@ -60,12 +61,102 @@ const DistributionRow = ({label, percent}) => (
   </View>
 );
 
+// --- Methodology / performance-metrics helpers (web parity) ---------------
+// The ccxt performance_2/cagr calculator writes camelCase field names
+// (totalReturnCumulative / oneYear / volatilityAnnual / ulcerIndex /
+// drawdowns.maxDrawDown / timings.winRate); the read sites below expect the
+// snake/short aliases. Add read-side aliases non-destructively so the metric
+// tiles populate. Mirrors web src/utils/methodologyHelpers.js mapPerformanceData.
+const normalizePerformanceData = portfolioData => {
+  if (!portfolioData || typeof portfolioData !== 'object') return portfolioData;
+  const pd = portfolioData.performance_data;
+  if (!pd || typeof pd !== 'object') return portfolioData;
+  const out = {...pd};
+  if (pd.returns && typeof pd.returns === 'object') {
+    out.returns = {...pd.returns};
+    if (out.returns.total == null) out.returns.total = pd.returns.totalReturnCumulative;
+    if (out.returns['1y'] == null) out.returns['1y'] = pd.returns.oneYear;
+  }
+  if (pd.risk && typeof pd.risk === 'object') {
+    out.risk = {...pd.risk};
+    if (out.risk.ulcer_index == null) out.risk.ulcer_index = pd.risk.ulcerIndex;
+    if (out.risk.volatility == null) out.risk.volatility = pd.risk.volatilityAnnual;
+  }
+  const dd = pd.drawdowns || pd.drawdown;
+  if (dd && typeof dd === 'object') {
+    out.drawdown = {
+      ...(pd.drawdown || {}),
+      max_drawdown: (pd.drawdown && pd.drawdown.max_drawdown) ?? dd.maxDrawDown,
+      avg_drawdown: (pd.drawdown && pd.drawdown.avg_drawdown) ?? dd.avgDrawDown,
+      longest_dd_days: (pd.drawdown && pd.drawdown.longest_dd_days) ?? dd.longestDrawDownPeriod,
+    };
+  }
+  const tm = pd.timings || pd.timing;
+  if (tm && typeof tm === 'object') {
+    out.timing = {
+      ...(pd.timing || {}),
+      win_rate: (pd.timing && pd.timing.win_rate) ?? tm.winRate,
+      best_day: (pd.timing && pd.timing.best_day) ?? tm.bestDay,
+      worst_day: (pd.timing && pd.timing.worst_day) ?? tm.worstDay,
+    };
+  }
+  return {...portfolioData, performance_data: out};
+};
+
+const isMetricMissing = value =>
+  value === null ||
+  value === undefined ||
+  value === '' ||
+  Number.isNaN(Number(value));
+const formatMetric = (value, isPercent) =>
+  isMetricMissing(value)
+    ? 'NA'
+    : isPercent
+    ? `${Number(value).toFixed(2)}%`
+    : Number(value).toFixed(2);
+
+// A single label/value metric tile (2-up grid).
+const MetricTile = ({label, value, color}) => (
+  <View style={styles.metricTile}>
+    <Text style={styles.metricTileLabel}>{label}</Text>
+    <Text style={[styles.metricTileValue, color ? {color} : null]}>{value}</Text>
+  </View>
+);
+
+// A methodology section card: title + (multi-line aware) body text.
+const MethodologyCard = ({title, content}) => {
+  if (!content) return null;
+  const contentStr = String(content).replace(/\/n/g, '\n');
+  const lines = contentStr
+    .split('\n')
+    .map(l => l.trim())
+    .filter(l => l.length > 0);
+  return (
+    <View style={styles.methodCard}>
+      <View style={styles.methodTitleRow}>
+        <View style={styles.methodTitleBar} />
+        <Text style={styles.methodTitle}>{title}</Text>
+      </View>
+      {lines.length > 1 ? (
+        lines.map((line, i) => (
+          <Text key={i} style={styles.methodBody}>
+            {line}
+          </Text>
+        ))
+      ) : (
+        <Text style={styles.methodBody}>{contentStr}</Text>
+      )}
+    </View>
+  );
+};
+
 const AfterSubscriptionScreen = ({route}) => {
   const {configData} = useTrade();
   const config = useConfig();
-  const gradientStart = config?.gradient1 || '#002651';
-  const gradientEnd = config?.gradient2 || '#0056B7';
-  const themeColor = config?.themeColor || '#0056B7';
+  const tokens = useTokens();
+  const gradientStart = tokens.colors.brand.gradientStart;
+  const gradientEnd = tokens.colors.brand.gradientEnd;
+  const themeColor = tokens.colors.brand.accent;
   const {fileName} = route.params;
   const auth = getAuth();
   const user = auth.currentUser;
@@ -84,6 +175,7 @@ const AfterSubscriptionScreen = ({route}) => {
   const [routes] = useState([
     {key: 'holdings', title: 'Portfolio Holdings'},
     {key: 'portfolio', title: 'Portfolio Distribution'},
+    {key: 'methodology', title: 'Methodology'},
   ]);
   const handleTabLayout = index => event => {
     const {height} = event.nativeEvent.layout;
@@ -149,7 +241,9 @@ const AfterSubscriptionScreen = ({route}) => {
         )
         .then(res => {
           const portfolioData = res.data[0].originalData;
-          setStrategyDetails(portfolioData);
+          // Normalize performance_data field-name drift so the Methodology
+          // tab's metric tiles populate (web parity — methodologyHelpers).
+          setStrategyDetails(normalizePerformanceData(portfolioData));
           if (portfolioData?.model?.rebalanceHistory?.length > 0) {
             const latest = [...portfolioData.model.rebalanceHistory].sort(
               (a, b) => new Date(b.rebalanceDate) - new Date(a.rebalanceDate),
@@ -758,6 +852,153 @@ const AfterSubscriptionScreen = ({route}) => {
                       )}
                     </View>
                   ),
+
+                  methodology: () => {
+                    const pd = strategyDetails?.performance_data;
+                    const hasMethodology =
+                      strategyDetails?.overView ||
+                      strategyDetails?.definingUniverse ||
+                      strategyDetails?.researchOverView ||
+                      strategyDetails?.constituentScreening ||
+                      strategyDetails?.rebalanceMethodologyText ||
+                      pd;
+                    return (
+                      <ScrollView
+                        style={{flex: 1, backgroundColor: '#fff'}}
+                        contentContainerStyle={{padding: 16, paddingBottom: 24}}
+                        nestedScrollEnabled={true}>
+                        {/* Performance vs index chart */}
+                        <Text style={styles.methodSectionHeading}>
+                          Performance vs Index
+                        </Text>
+                        <PerformanceChart modelName={strategyDetails?.model_name} />
+
+                        {/* Overview */}
+                        {strategyDetails?.overView ? (
+                          <View style={styles.methodCard}>
+                            <View style={styles.methodTitleRow}>
+                              <View style={[styles.methodTitleBar, { backgroundColor: themeColor }]} />
+                              <Text style={[styles.methodTitle, { color: themeColor }]}>Overview</Text>
+                            </View>
+                            <Text style={styles.methodBody}>
+                              {strategyDetails.overView}
+                            </Text>
+                          </View>
+                        ) : null}
+
+                        {/* Methodology sections */}
+                        <MethodologyCard
+                          title="Defining the universe"
+                          content={strategyDetails?.definingUniverse}
+                        />
+                        <MethodologyCard
+                          title="Research"
+                          content={strategyDetails?.researchOverView}
+                        />
+                        <MethodologyCard
+                          title="Constituent Screening"
+                          content={strategyDetails?.constituentScreening}
+                        />
+                        <MethodologyCard
+                          title="Weighting"
+                          content={
+                            strategyDetails?.weighting &&
+                            !isNaN(Number.parseFloat(strategyDetails.weighting))
+                              ? Number.parseFloat(strategyDetails.weighting).toFixed(2)
+                              : strategyDetails?.weighting
+                          }
+                        />
+                        <MethodologyCard
+                          title="Rebalance"
+                          content={strategyDetails?.rebalanceMethodologyText}
+                        />
+                        <MethodologyCard
+                          title="Asset Allocation"
+                          content={strategyDetails?.assetAllocationText}
+                        />
+
+                        {/* Performance metrics */}
+                        {pd ? (
+                          <View style={{marginTop: 4}}>
+                            <Text style={styles.methodSectionHeading}>
+                              Performance Metrics
+                            </Text>
+
+                            <Text style={styles.metricGroupTitle}>Returns</Text>
+                            <View style={styles.metricGrid}>
+                              <MetricTile label="CAGR" value={formatMetric(pd.returns?.cagr, true)} />
+                              <MetricTile label="Total" value={formatMetric(pd.returns?.total, true)} />
+                              <MetricTile label="YTD" value={formatMetric(pd.returns?.ytd, true)} />
+                              <MetricTile label="1Y" value={formatMetric(pd.returns?.['1y'], true)} />
+                            </View>
+
+                            <Text style={styles.metricGroupTitle}>Risk</Text>
+                            <View style={styles.metricGrid}>
+                              <MetricTile label="Volatility" value={formatMetric(pd.risk?.volatility, true)} />
+                              <MetricTile label="VaR" value={formatMetric(pd.risk?.var, true)} />
+                              <MetricTile label="CVaR" value={formatMetric(pd.risk?.cvar, true)} />
+                              <MetricTile label="Ulcer Index" value={formatMetric(pd.risk?.ulcer_index, false)} />
+                            </View>
+
+                            <Text style={styles.metricGroupTitle}>Drawdown</Text>
+                            <View style={styles.metricGrid}>
+                              <MetricTile
+                                label="Max Drawdown"
+                                value={`${Number(pd.drawdown?.max_drawdown || 0).toFixed(2)}%`}
+                                color="#DC2626"
+                              />
+                              <MetricTile
+                                label="Avg Drawdown"
+                                value={`${Number(pd.drawdown?.avg_drawdown || 0).toFixed(2)}%`}
+                                color="#DC2626"
+                              />
+                              <MetricTile
+                                label="Longest DD (Days)"
+                                value={pd.drawdown?.longest_dd_days || '-'}
+                              />
+                            </View>
+
+                            <Text style={styles.metricGroupTitle}>Ratios</Text>
+                            <View style={styles.metricGrid}>
+                              <MetricTile label="Sharpe" value={Number(pd.ratios?.sharpe || 0).toFixed(2)} />
+                              <MetricTile label="Sortino" value={Number(pd.ratios?.sortino || 0).toFixed(2)} />
+                              <MetricTile label="Profit Factor" value={Number(pd.ratios?.profit_factor || 0).toFixed(2)} />
+                              <MetricTile label="Gain to Pain" value={Number(pd.ratios?.gain_to_pain || 0).toFixed(2)} />
+                            </View>
+
+                            <Text style={styles.metricGroupTitle}>Timing &amp; General</Text>
+                            <View style={styles.metricGrid}>
+                              <MetricTile
+                                label="Win Rate"
+                                value={`${Number(pd.timing?.win_rate || 0).toFixed(2)}%`}
+                              />
+                              <MetricTile
+                                label="Best Day"
+                                value={`${Number(pd.timing?.best_day || 0).toFixed(2)}%`}
+                                color="#16A34A"
+                              />
+                              <MetricTile
+                                label="Worst Day"
+                                value={`${Number(pd.timing?.worst_day || 0).toFixed(2)}%`}
+                                color="#DC2626"
+                              />
+                              <MetricTile
+                                label="Time in Market"
+                                value={`${Number(pd.general?.time_in_market || 0).toFixed(2)}%`}
+                              />
+                            </View>
+                          </View>
+                        ) : null}
+
+                        {!hasMethodology ? (
+                          <EmptyStateInfoMP
+                            title="No Methodology Details"
+                            subtitle="Methodology and performance details aren't available for this portfolio yet."
+                          />
+                        ) : null}
+                      </ScrollView>
+                    );
+                  },
                 })}
                 onIndexChange={setIndex}
                 initialLayout={{width: screenWidth}}
@@ -845,6 +1086,79 @@ const styles = StyleSheet.create({
   container: {flex: 1},
   safeArea: {flex: 1},
   content: {paddingBottom: 32, backgroundColor: '#F6F8FB'},
+
+  // Methodology tab
+  methodSectionHeading: {
+    fontSize: 15,
+    fontFamily: 'Poppins-SemiBold',
+    color: '#1F2937',
+    marginBottom: 10,
+    marginTop: 6,
+  },
+  methodCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#EEF1F6',
+    padding: 14,
+    marginBottom: 12,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 1},
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+  },
+  methodTitleRow: {flexDirection: 'row', alignItems: 'center', marginBottom: 8},
+  methodTitleBar: {
+    width: 4,
+    height: 18,
+    borderRadius: 2,
+    backgroundColor: '#2563EB',
+    marginRight: 8,
+  },
+  methodTitle: {
+    fontSize: 14,
+    fontFamily: 'Poppins-SemiBold',
+    color: '#2563EB',
+  },
+  methodBody: {
+    fontSize: 13,
+    fontFamily: 'Poppins-Regular',
+    color: '#374151',
+    lineHeight: 20,
+    marginBottom: 4,
+  },
+  metricGroupTitle: {
+    fontSize: 13,
+    fontFamily: 'Poppins-SemiBold',
+    color: '#4B5563',
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  metricGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  metricTile: {
+    width: (screenWidth - 32 - 8) / 2,
+    backgroundColor: '#F8FAFF',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#EEF1F6',
+    padding: 10,
+  },
+  metricTileLabel: {
+    fontSize: 11,
+    fontFamily: 'Poppins-Regular',
+    color: '#6B7280',
+    marginBottom: 3,
+  },
+  metricTileValue: {
+    fontSize: 14,
+    fontFamily: 'Poppins-SemiBold',
+    color: '#1F2937',
+  },
 
   headerCard: {
     backgroundColor: 'rgba(255,255,255,0.08)',

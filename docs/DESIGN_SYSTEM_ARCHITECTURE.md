@@ -19,8 +19,8 @@ These three rules are what keep the refactor safe. Every PR that touches `design
 The Phase 3 SDK migration is its own contract (`docs/PHASE3_ARCHITECTURE.md`). The following surfaces stay in `src/` and stay non-swappable:
 
 - `src/components/BrokerConnectionModal/Phase3SdkBrokerModal.js` — the SDK modal shell wrapping `BrokerCredentialForm` / `WebViewBrokerAuthFlow`
-- `../alphaquark-mobile-sdk/packages/rn/src/components/BrokerCredentialForm` — owned by the SDK package
-- `../alphaquark-mobile-sdk/packages/rn/src/components/WebViewBrokerAuthFlow` — owned by the SDK package
+- `../../alphaquark-mobile-sdk/packages/rn/src/components/BrokerCredentialForm` — owned by the SDK package
+- `../../alphaquark-mobile-sdk/packages/rn/src/components/WebViewBrokerAuthFlow` — owned by the SDK package
 - Any future SDK-routed widget added under `SDK_ELIGIBLE_MODALS`
 
 A custom design CAN theme the visual chrome around these (the modal backdrop, the header bar, the close button, the page background). It CANNOT replace the form rendering itself. The SDK is sacred because it owns the legal/security/correctness contract with the backend. Skinning the SDK form would re-introduce every Phase 3 regression we just fixed.
@@ -61,6 +61,14 @@ The container is the only place business logic touches the screen tree. Swapping
 | **Screens** | layout shell + which composites to render where | yes (layout only) | `designs/<variant>/screens/` | Today screens both fetch and render. To split. |
 | **Containers / hooks** | `TradeContext`, `useMultiBrokerHoldings`, `FunctionCall/*`, `services/*` | **no** | `src/` (unchanged) | Already isolated. Stays. |
 | **SDK-bound surfaces** | `Phase3SdkBrokerModal`, SDK widgets | **no** | `src/components/BrokerConnectionModal/`, SDK package | Stays. Phase 3 owns this. |
+
+> **Courses/Webinars composites note.** `composites.LiveRoom` and
+> `composites.GumletPlayer` (`designs/default/composites/`) were added by the
+> courses/webinars port; their per-surface verdicts live in
+> `COURSES_WEBINARS_MOBILE_PORTING.md`. Sizing contract (2026-06-19): the
+> live class room presents **full-screen** (RN `Modal`, `flex:1` body) so an
+> activated LiveKit room fills the device — parity with the web full-viewport
+> webinar fix. See `DESIGN_MIGRATION_PROGRESS.md` 2026-06-19.
 
 ### Tokens
 
@@ -111,6 +119,8 @@ Asset tokens are deliberately distinct from the other token families because RN'
 - `designs/default/composites/BasketCard.js`
 
 **2026-06-10 — `useTokens()` is now variant-aware for the `assets` slot.** It reads the active variant's `buildAssets` via `DesignContext` (`design.tokens.buildAssets`, from `resolveDesign`'s token-namespace merge), falling back to the default builder when called outside a `DesignProvider`. This closed the gap where `useTokens().assets.*` returned the default (AlphaQuark) logos even under a non-default `DESIGN_VARIANT`. The brand-logo `src/`-side consumers migrated in the same change: `BrandLogo`, `LogoSection`, and `SplashScreen` now render `useTokens().assets.logoPng` with no hardcoded variant name (`SplashScreen` is a Navigation stack screen, so it IS inside the providers — the earlier "renders before providers" note was inaccurate). The tenant-specific `src/components/AlphanomyLogo.js` was deleted (it was a brand leak in the default repo); each variant now supplies its own mark through `designs/<variant>/tokens/assets.js`. Only the `assets` family is variant-aware via `DesignContext`; colors/typography still resolve per-tenant through `ConfigContext` legacy-branding.
+
+**2026-07-11 — `useTokens()` is now variant-aware for the `colors` slot too.** Same pattern as assets: `useTokens()` reads `design.tokens.buildColors` from `DesignContext` and falls back to the local `buildColors` from `src/theme/colors.js`. This lets a fork variant ship hard-coded brand-color defaults (e.g. `designs/moneyman_app/tokens/index.js` starts from a green palette instead of upstream purple) that survive `src/` copies from Alphab2bapp. The advisor-config legacy-branding + `colorTokens` overrides still layer on top inside the variant's `buildColors`, so per-tenant admin-UI overrides continue to work unchanged. `src/theme/colors.js` also gained an optional `mpCardColorCycle` token slot (array of hex strings, or `null` for feature-off) — consumed by `src/screens/PortfolioScreen/ModelPFCard.js` to cycle a per-index accent color across the Portfolio-tab subscribed-MP rows. Default variant leaves the cycle `null` (no visual change); `moneyman_app` sets it to `['#005A00', '#00005A', '#5A005A']`.
 
 ### Primitives
 
@@ -299,7 +309,7 @@ The only surfaces that NEVER migrate to `designs/`:
 - All `src/UIComponents/BrokerConnectionUI/*` (12 broker-specific UIs — same fate)
 - `src/components/CrossPlatformOverlay.js` (used by SDK-bound surfaces only)
 - `src/screens/Drawer/ManageConnectionsModal.js`, `DisconnectBrokerModal.js`, `BrokerConnectionError.js`
-- The SDK package's own widgets (`BrokerCredentialForm`, `WebViewBrokerAuthFlow`) at `../alphaquark-mobile-sdk/packages/rn/src/components/`
+- The SDK package's own widgets (`BrokerCredentialForm`, `WebViewBrokerAuthFlow`) at `../../alphaquark-mobile-sdk/packages/rn/src/components/`
 
 These have their own contract under `docs/PHASE3_*.md`. The design-system migration may theme the visual chrome around them (modal backdrop, header bar) via primitives, but cannot replace the form rendering itself.
 

@@ -371,10 +371,12 @@ const currentName = currentTabRoute?.name || "";
   // avatar + ticker strip) wraps every tab screen in the default variant.
   // Variants that ship their own in-screen header (e.g. alphanomy's _AppHeader
   // helper used by HomeScreen / OrderScreen / ModelPortfolioScreen) suppress
-  // it to avoid the duplicate-header look. Tenants who want the legacy
-  // chrome simply leave DESIGN_VARIANT unset (or set it to "default").
+  // it to avoid the duplicate-header look. Variants that only theme the
+  // legacy chrome (moneyman_app — green paint, no bespoke header) opt into
+  // showing it. Default keeps showing it.
+  const HEADER_VARIANTS = new Set(['default', 'moneyman_app']);
   const showLegacyToolbar =
-    !Config?.DESIGN_VARIANT || Config.DESIGN_VARIANT === 'default';
+    !Config?.DESIGN_VARIANT || HEADER_VARIANTS.has(Config.DESIGN_VARIANT);
 
   return (
     <SafeAreaView style={{flex: 1}}>
