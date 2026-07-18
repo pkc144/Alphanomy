@@ -1,5 +1,14 @@
 # Changelog
 
+## [unreleased] - 2026-07-18 — sync(upstream): broker, portfolio and orders experience
+
+Content-port of Alphab2bapp `6200398`: shared broker connection/static-IP and
+payment status, in-app walkthrough, model-portfolio clarity, responsive
+portfolio/orders layouts, and cascading order-filter counts. Tenant identity,
+native shell, environment configuration, and variant overlay remain unchanged.
+
+---
+
 All notable changes to the AlphaQuark B2B Mobile App are documented here.
 
 ---

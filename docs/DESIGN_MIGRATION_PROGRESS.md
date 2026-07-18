@@ -19,6 +19,82 @@
 
 ---
 
+## 2026-07-11 — `moneyman_app` variant + variant-aware `buildColors` + `mpCardColorCycle` for Portfolio-tab MP rows
+
+- **Phase**: B (registry / variant plumbing) + I (Model Portfolio surfaces).
+- **Surfaces touched**:
+  - `src/theme/colors.js` — added `mpCardColorCycle: null` slot in `DEFAULT_TOKENS`.
+  - `src/theme/useTokens.js` — reads `design.tokens.buildColors` from `DesignContext`, falls back to local `buildColors`. Mirrors the existing `buildAssets` variant-aware pattern from 2026-06-10.
+  - `src/screens/PortfolioScreen/ModelPFCard.js` (container) — new `index` prop; reads `useTokens().colors.mpCardColorCycle`; computes `cardColor = cycle[index % cycle.length]`; passes into `viewModel.cardColor`.
+  - `src/screens/PortfolioScreen/PortfolioScreen.js` — passes `index` from `FlatList.renderItem` into the container.
+  - `designs/default/composites/ModelPFCard.js` — accepts `viewModel.cardColor`; when non-null, applies a 4px left-border accent + tints the model-name text. Default variant behavior unchanged (cycle is `null`).
+  - `designs/moneyman_app/` (NEW) — `tokens/index.js` with `MONEYMAN_DEFAULTS` (green `#005A00` brand.primary/accent/gradientStart, `#003300` gradientEnd, green nav.tabIconActive, green+dark-green basket, green border.focus, `mpCardColorCycle: ['#005A00', '#00005A', '#5A005A']`) + `applyLegacyBranding` + `merge` for backend overrides; `index.js` variant root with empty `components` (falls back to default).
+  - `designs/registry.js` — registered `moneyman_app`.
+- **Verdict changes**: `ModelPFCard` row in `DESIGN_COMPONENT_AUDIT.md` updated with the new `cardColor` viewModel prop.
+- **What shipped**: enables a portable fork palette for the `moneyman_app` sibling repo. Because `designs/moneyman_app/` lives outside `src/`, copying `src/` from upstream Alphab2bapp into moneyman_app no longer overwrites the fork's brand green. Activation on the fork side is `DESIGN_VARIANT=moneyman_app` in that repo's `.env`. The 3-color cycle (green/blue/purple) appears only on the Portfolio-tab subscribed-MP rows; it cycles by row index and repeats for lists longer than 3.
+- **Regressions / rollbacks**: none expected. Default variant renders identically — `mpCardColorCycle` defaults to `null`, and the presentation's `cardColor && …` gates keep the accent styles behind a truthy check.
+- **Next**: user copies `src/` + `designs/moneyman_app/` into the moneyman_app repo; sets `DESIGN_VARIANT=moneyman_app` in that repo's `.env`; runs the app to confirm green theme + 3-color card cycle. If the fork later needs a custom home hero or MP subscribe card, register it under `designs/moneyman_app/composites/` or `screens/` — the empty `components: {}` map is intentionally the extension point.
+
+### Follow-up in the same session: MP hardcoded-color sweep
+
+Purpose: token-migrated the fallback hex in every MP surface that was doing `const gradient1 = config?.gradient1 || '#hex'`. `useTokens()` already layers backend legacy branding (`config.gradient1 → brand.gradientStart`), so switching the fallback from a literal hex to `tokens.colors.brand.*` gives us: variant default (moneyman green) → tenant admin-UI override → `colorTokens` override — all through one hook. Non-brand semantic colors (P&L greens/reds, status success/danger, gray neutrals) left untouched.
+
+**MP surfaces migrated to `useTokens()` for brand-color fallbacks (all default variant appearance unchanged):**
+
+- `src/components/ModelPortfolioComponents/MPCard.js` — subscription-screen card. `gradient1/2/mainColor` fallbacks now read from `tokens.colors.brand.{gradientStart, gradientEnd, primary}`.
+- `src/components/ModelPortfolioComponents/MPCardBespoke.js` — bespoke subscription-screen card. Same replacement. `#ECF3FE` static-accent bgs in the expanded section (4 spots) left as-is — small, non-primary chrome.
+- `src/components/ModelPortfolioComponents/MPInvestNowModal.js` — invest-flow modal. Same replacement.
+- `src/components/ModelPortfolioComponents/RecommendationSuccessModal.js` — post-recommendation success. Same replacement + inline `#0056B7` and `#2563EB` in the manual-edit and inline-Info flows now read `brandPrimary` / `infoColor` from `tokens.colors.status.info`.
+- `src/components/ModelPortfolioComponents/UserStrategySubscribeModal.js` — subscribe flow. `mainColor` fallback (previously `'#000'`) now reads `brand.primary`.
+- `src/components/ModelPortfolioComponents/DigioModal.js` — Digio auth WebView. `mainColor` + `gradient2` fallbacks now read from tokens. Static `#002651` header bg is dead default (overridden inline by `gradient2`).
+- `src/components/ModelPortfolioComponents/DigioSuccessModal.js` — Digio success. `mainColor` fallback now reads `brand.primary`. Static-sheet `#2563EB` occurrences are dead defaults (overridden inline).
+- `src/components/ModelPortfolioComponents/TelegramCollectionModal.js` — Telegram-ID collector. Same. Static-sheet blues are dead defaults.
+- `src/components/ModelPortfolioComponents/VerificationMethodCheck.js` — auth-method picker. Same. Static-sheet blues are dead defaults.
+- `src/components/ModelPortfolioComponents/PricingCard.js` — plan pricing tile. Same. Static-sheet blues are dead defaults.
+- `src/components/ModelPortfolioComponents/PendingOrdersModal.js` — pending-orders retry modal. Static `#2563EB` on `actionButton` was NOT overridden inline; migrated by capturing `brandPrimary` in the component and overriding via inline style at all 3 call sites.
+- `src/screens/Home/AfterSubscriptionScreen.js` — post-subscription content screen. `gradient1/gradient2/themeColor` fallbacks now read from tokens. The Overview `methodTitleBar`/`methodTitle` overrides moved to inline reads of `themeColor` at that call site. The re-used `MethodSection` helper's static-sheet copy of the same styles left as-is — self-contained tail (only 2 usages, unlikely to be prominent under moneyman).
+- `src/screens/Drawer/MPPerformanceScreen.js` — MP performance. Same 3-color replacement.
+- `src/screens/Drawer/ModelPortfolioScreen.js` — MP subscription list. Same 3-color replacement.
+- `src/screens/PortfolioScreen/PortfolioScreen.js` — Portfolio tab container. `mainColor` fallback now reads `brand.primary`.
+- `src/screens/PortfolioScreen/PortFolioCard.js` — Portfolio-tab hero card. `gradient1/gradient2` fallbacks now read from tokens.
+- `src/screens/PortfolioScreen/EmptyMessageCard.js` — empty state. Same 3-color replacement.
+
+**Left as follow-up (not in this pass):**
+- Static-`StyleSheet.create` `#2563EB` / `#0056B7` occurrences that ARE overridden by inline `mainColor` at every use site — dead defaults; no visual effect. Safe.
+- Small light-blue accents like `#ECF3FE`, `#DBEAFE`, `#EFF6FF` — used for expanded-section bg / badge tints. Small enough to skip; a future pass can add a `surface.brandTint` token.
+- Non-MP surfaces (Home hero, Login/Signup chrome, Drawer, broker connect, Advice, rebalance): out of scope for this sweep per user direction.
+- Phase-3 SDK-bound broker modals (`src/components/BrokerConnectionModal/*`), sell-auth modals (`DdpiModal`, TPIN modals), SDK Phase C surfaces (`RebalanceModal`, `MPReviewTradeModal` — the latter is MP-adjacent but Phase-C-bound so intentionally skipped): not touched per the CLAUDE.md blocking rules.
+
+**Parse verification**: all 17 modified files pass `@babel/parser` (JSX+Flow) parse without errors.
+
+---
+
+## 2026-06-19 — `composites.LiveRoom` renders the live class via WebView bridge (no native LiveKit)
+
+- **Phase**: Courses/Webinars composites (tracked primarily by `COURSES_WEBINARS_MOBILE_PORTING.md` §4.2).
+- **Surfaces touched**: `designs/default/composites/LiveRoom.js` (placeholder `LiveRoomActive` → `LiveRoomWebView`), plus non-design `src/FunctionCall/services/LiveKitService.js` (`getJoinUrl`) and backend `aq_backend_github/Routes/livekit.js` (`/join-url`).
+- **Verdict changes**: `composites.LiveRoom` live render: placeholder (native LiveKit not installed) → **live via full-screen Modal `react-native-webview`** loading the web join URL; browser WebRTC runs the room. Native LiveKit demoted to optional Option A.
+- **What shipped**: closes the last courses/webinar parity gap without native deps. `handleJoin` → `getJoinUrl` → `POST /api/livekit/join-url/:lessonId` → full-screen WebView at `…/webinar/:id?joinToken=…`. Viewers subscribe-only → no media permissions. `react-native-webview` already installed (GumletPlayer).
+- **Regressions / rollbacks**: none; JS-only, babel-parses clean. Needs real-iOS-device WebRTC-in-WKWebView verification.
+- **Next**: device test on iOS; optionally adopt native Option A (§4.2.1) for background-audio/PiP.
+
+## 2026-06-19 — `composites.LiveRoom` gains `joinToken` (magic-link join port)
+
+- **Phase**: Courses/Webinars composites (tracked primarily by `COURSES_WEBINARS_MOBILE_PORTING.md` §4.2/§4.2.1).
+- **Surfaces touched**: `designs/default/composites/LiveRoom.js` (`joinToken` prop → `getViewerToken`), plus non-design `src/FunctionCall/services/LiveKitService.js` + `src/screens/Courses/WebinarDetailScreen.js`.
+- **What shipped**: ported the web 2026-06-06 magic-link join — `getViewerToken(lessonId, courseId, { joinToken })` hits `/token-magic` (no Firebase) when a signed join JWT is present; `LiveRoom` forwards a new `joinToken` prop. Part of the 3-week courses/webinar web-parity audit (see `CHANGELOG.md` + porting §10 matrix). Deep-link source not yet wired.
+- **Regressions / rollbacks**: none; JS-only, babel-parses clean.
+- **Next**: configure the Android App Link / iOS Universal Link that routes `…/webinar/:id?joinToken=` into `WebinarDetailScreen`; install LiveKit native deps per porting §4.2.1.
+
+## 2026-06-19 — `composites.LiveRoom` live-class presents full-screen (parity with web full-viewport webinar fix)
+
+- **Phase**: Courses/Webinars composites (tracked primarily by `COURSES_WEBINARS_MOBILE_PORTING.md §4.2`; logged here because `designs/default/composites/LiveRoom.js` is a design-system surface).
+- **Surfaces touched**: `designs/default/composites/LiveRoom.js` (the `LiveRoomActive` render + activation snippet + styles).
+- **Verdict changes**: `composites.LiveRoom` active-room presentation: inline fixed-height panel (activation snippet was `height: 360`) → **full-screen RN `Modal`** (`presentationStyle="fullScreen"`, slim dark header with title + Close, `flex:1` `roomBody`).
+- **What shipped**: ported the *intent* of the web 2026-06-19 fix (web live webinars moved out of a cramped `max-w-3xl` modal into a `fixed inset-0` overlay). On mobile the actual LiveKit video is still a placeholder (`@livekit/react-native` not installed), and live lessons already route to a dedicated full-screen `WebinarDetailScreen` — so there was no live runtime bug. The change hardens the sizing **contract** so that when LiveKit is activated, the room fills the screen instead of rendering as a small fixed box (the mobile equivalent of the "webinar fits very small / maximize doesn't help" report). VOD `composites.GumletPlayer` was already fluid (`width:100%, aspectRatio 16/9`) — unchanged.
+- **Regressions / rollbacks**: none; behavior is dark (placeholder feature). `LiveRoom.js` babel-parses clean. No native deps added.
+- **Next**: when activating LiveKit, drop `<LiveKitRoom style={{ flex:1 }}>` into the `roomBody` slot per the updated activation snippet — keep the Modal wrapper.
+
 ## 2026-06-10 — `useTokens()` asset slot made variant-aware; brand logo extracted from shared src/
 
 - **Phase**: Tokens (closes the deferred "useTokens variant-awareness" follow-up noted on 2026-05-04 and in `SYNC.md`).
@@ -222,6 +298,23 @@
     - **Dead code removed in same commit:** PanResponder system (every callback returned `false` — pan never fired); `tabs` array + `animateToTab` + `Animated.Value` refs (defunct tab UI never rendered — JSX only renders `<PlacedOrders />`); `imageUrl` state + `fetchUserProfile` (set but never read); `isModalOpen` state + `MODAL_STATE` EventEmitter listener (consumed only by the dead PanResponder); `renderStatusIcon` (orphan, references undefined `item`/`color2`).
   - **Presentation** (`designs/default/screens/OrderScreen.js`, ~250 lines): receives viewModel + actions; renders the search row + FlatList. Includes inline `BasketRow` helper for orders with `basket_advice`. Empty-state hero uses LinearGradient with `viewModel.gradient` (advisor-themable). Search + price-range filter state stays as local UI state in presentation (filter math is `useMemo`).
   - **Composite** (`designs/default/composites/OrderRow.js`, ~180 lines): the legacy `OrderItem` extracted. Uses `Pill` (variant=profit / loss for BUY / SELL), `Icon` (lucide Check / X / Pause for status icons — replaces vector-icons AntDesign), `Text` primitives, `useTokens()` for colours where mapping is unambiguous. Owns its `showReason` UI state internally. Receives `onDdpiHelpPress` callback for the rejection-reason DDPI help link.
+  - **2026-07-18 visual follow-up:** the presentation now uses the shared
+    page/canvas/search/card hierarchy; `OrderRow` is a contained white card
+    with an explicit broker, side and status grouping. This is visual-only:
+    filtering, data fetch and DDPI-help behaviour remain in the container.
+    Production-parity broker/type/status filters are intentionally local
+    presentation state, so opening or leaving Orders does not mutate trade
+    data, fetch state or the selected broker elsewhere in the app.
+  - **2026-07-18 scrolling follow-up:** the screen title is the only compact
+    fixed chrome. Search, count and broker/type/status filters are rendered as
+    `FlatList.ListHeaderComponent`, so they scroll with the list and cannot
+    permanently consume the area needed to read order cards on short phones.
+    The empty state distinguishes an intentionally filtered empty result from
+    a genuinely empty order history and states the current pending-order rule.
+    Legacy rows with no stored status are deliberately excluded from the
+    actionable Pending count rather than silently being treated as pending.
+    Broker/type/status chip counts are cascading local derivations of the
+    already-fetched order array; they update without a backend request.
   - **Utils** (`src/utils/orderUtils.js`, ~60 lines): `isToday`, `formatSymbol`, `formatOrderDate`, `getStatusColors`. Pure helpers — no hooks, no side effects. `getStatusColors` keeps the legacy hex pairs (`#F0FFE8` / `#16A085` for success, etc.) — a future PR may token-ify these.
 - **What shipped (docs)**:
   - `docs/DESIGN_SYSTEM_ARCHITECTURE.md § Migration order`: Phase E split into E.1 (shipped) and E.2 (HomeScreen — pending prep).
@@ -476,3 +569,48 @@
   3. Phase B — `DesignProvider` skeleton. No component registrations yet.
   4. Phase C onward — primitives, then one composite, then HomeScreen.
 - **Reassess MP freeze**: revisit when the SDK MP plan firms up (tracked separately, see `docs/SDK_MOBILE_FIT_ASSESSMENT.md`). If SDK MP is dropped, the freeze lifts and these surfaces enter `designs/` migration. If SDK MP ships, the freeze becomes permanent and these surfaces follow the Phase 3 contract instead.
+
+---
+
+## 2026-07-18 — Portfolio/MP presentation corrections
+
+- `PortfolioCard`: normalises currency only at render time (whole rupees for
+  invested, two decimals for P&L), preventing exposed IEEE floating-point
+  artefacts while preserving underlying broker calculation precision.
+- `PortfolioCard` is now the scrolling header of holdings and positions rather
+  than fixed chrome. Its source label resolves a named broker account and
+  describes dummy/demo/paper data as a simulated portfolio, so the data origin
+  is unambiguous without consuming most of a short screen.
+- `MPCard` Home presentation uses a bounded horizontal card width and two-line
+  title clamp. This is a layout contract for both Android and iOS, not a
+  platform-specific workaround. Entitlement copy on both this card and the
+  embedded Portfolio summary is sourced only from the server-filtered
+  `TradeContext` model-portfolio entitlement snapshot.
+- `MPPerformanceScreen` uses the same snapshot for the Portfolio and Research
+  tabs. Non-subscribers receive a clear report-benefit explanation and
+  subscription action, rather than an ambiguous “No reports” empty state.
+- `PortfolioScreenPresentation`: moved the Trade P&L entry into the Model
+  Portfolio list header so it participates in normal scrolling; removed the
+  duplicate fixed placement and an empty-state conflict.
+- `MPInvestNowModal` presentation: reserved header space and fixed the close
+  control position so it cannot be clipped beyond the right edge.
+- No registry, token, primitive, provider, or container/presentation ownership
+  change. This is a focused presentation-maintenance entry.
+- `LinkOpeningWeb` blog reader: constrains the article title and reserves a
+  fixed padded close target, preventing the close icon from being clipped by a
+  long title on narrow screens.
+- `PortfolioSummaryCard`: align the summary table, status treatment and helper
+  copy with the Portfolio screen’s Poppins hierarchy; expired status remains
+  available but never attaches to or wraps the fund name.
+- `MPCard` plan selection: add list clearance below tabs and correct card
+  containment/metric/action hierarchy without changing pricing or subscription
+  mechanics.
+- `MPPerformanceScreen`: moved the detailed summary into the Overview scroll
+  path, standardised header/action typography and tap targets, replaced the
+  headline CAGR treatment with a contextual historical-performance entry,
+  labelled volatility as manager-selected, and scrolls to the chart after
+  performance consent. Subscription, payment and chart-fetching logic remain
+  in the container.
+- `AfterSubscriptionScreen`: clarified the holdings/target/strategy hierarchy,
+  removed the duplicate/misleading expiry presentation, and moved Exit/Modify
+  into an adaptive safe-area action bar. Data ownership remains unchanged.

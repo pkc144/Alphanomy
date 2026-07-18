@@ -1,7 +1,7 @@
 # Model Portfolio Architecture
 
 > **Canonical doc.** Merged from the older `MODEL_PORTFOLIO.md` on 2026-05-11.
-> **Last updated:** 2026-05-11
+> **Last updated:** 2026-07-18
 > **Branch:** feature/sdk-plus-config-ui
 > **Covers:** Mobile app (Alphab2bapp), Web frontend (prod-alphaquark-github), Backend (aq_backend_github), and ccxt-india
 > **Mirrors:** `prod-alphaquark-github/docs/MODEL_PORTFOLIO_ARCHITECTURE.md` (~80 K, independent), `ccxt-india/docs/MODEL_PORTFOLIO_ARCHITECTURE.md` (pointer-grade). Update all three on any MP backend/schema change.
@@ -47,6 +47,57 @@ Model Portfolio (MP) is a strategy-subscription product where an advisor curates
 - **Model tier**: advisor-owned target allocation, stored in `model_portfolio` collection via `aq_backend_github`
 - **Subscription tier**: user's payment record and subscription status, stored in `subscriptions` collection
 - **Execution tier**: user's actual executed trades per broker, stored in `model_portfolio_user` collection via ccxt-india
+
+### Entitlement boundary (Home and subscribed portfolios)
+
+`model_portfolio.subscribed_by` is retained as a relationship/history list; it
+is **not** proof that a customer may view or execute a paid model portfolio.
+`GET /api/model-portfolio/subscribed-strategies/:email` must join it to a
+`Subscription` whose `status` is `active`, `is_active` is true,
+`is_cancelled` is false, and `end_date` is in the future. Pending checkouts,
+abandoned carts, cancelled records and expired records must therefore fall back
+to the plans/subscription surface rather than appearing as rebalance cards on
+Home.
+
+Home consumes this as the model-portfolio entitlement source. Its broad legacy
+`planList` flag may still gate bespoke recommendations, but it must not decide
+whether a model portfolio is an active rebalance: an unrelated legacy plan
+cannot unlock or hide the model-portfolio purchase catalogue.
+
+Mobile exposes this result once through `TradeContext` as
+`modelPortfolioStrategyfinal` plus `modelPortfolioEntitlementsLoaded`. Both
+the browse-card action state and the embedded Portfolio summary status badges
+must consume that snapshot. Holdings, the catalog's historical `subscription`
+field, and `ClientList.subscriptions` are not alternative entitlement sources.
+Until the server query resolves, the browse card says **“Checking status…”**;
+it must not label a plan active or expired speculatively.
+
+The Portfolio and Research tabs on `MPPerformanceScreen` are protected by the
+same entitlement. Research reports are a subscriber benefit: before an active
+subscription is confirmed, mobile must not expose report links or metadata and
+instead explains the benefit with a route into the subscription flow.
+
+On the mobile detail screen, historical performance is consent-gated in the
+Performance section. The summary header does not promote CAGR as a headline
+return: it links to the contextual performance view and identifies volatility
+as a manager-selected risk profile, not realised performance.
+
+The model-detail header must never show a stale rebalance date as the next
+event. If `nextRebalanceDate` is missing or before the current day, mobile
+shows **“Schedule to be announced”** until the manager publishes the next
+rebalance.
+
+Accepting the historical-performance consent from the header (or the inline
+disclaimer) selects the Overview tab and scrolls directly to the Performance
+section after the chart is revealed. Consent must never leave the customer at
+their old scroll position with no indication of what changed.
+
+For an active portfolio, the customer detail surface distinguishes **Holdings**
+(stocks currently recorded for the customer), **Target mix** (the manager's
+latest intended allocation), and **Strategy** (methodology and historical
+performance). The date shown as an upcoming rebalance is never labelled as an
+expiry date. Exit and investment actions use safe-area-aware minimum touch
+targets so they remain fully reachable on short phones.
 
 **Four server boundaries:**
 | Server | Role | Auth |
@@ -1326,3 +1377,24 @@ doc) misses and the doc is born with `image=None`. The creation code now seeds
 `volatility`) when the create request carries no image file. So the field is now
 populated **at rest** at creation; the Node read-side backfill above stays as the
 display safety net for any doc created before this fix.
+
+---
+
+## 2026-07-18 — Mobile MP presentation corrections
+
+- **Trade P&L navigation:** the Model Portfolio list owns the Trade P&L CTA in
+  its `ListHeaderComponent`. It therefore scrolls with the page instead of
+  remaining frozen over the content; it still navigates to `TradePnLScreen`.
+- **MP invest close affordance:** the presentation header reserves space and
+  absolutely positions the close action inside its bounds. This is visual only;
+  payment, Cashfree/Razorpay/PayU/IAP, Digio and subscription state remain in
+  `src/components/ModelPortfolioComponents/MPInvestNowModal.js`.
+- **Portfolio summary presentation:** expired subscriptions remain visible for
+  reference, but the expiry state is displayed as subordinate plan metadata and
+  a clear renewable notice. It must not be appended to a model name or distort
+  fund-row widths; summary/body typography follows the Portfolio tab. Customer
+  copy calls the resumed service **recommendations**, never “advice”.
+- **Plan-card presentation:** the Model Portfolio plan list gives its first card
+  explicit clearance below the tabs. Pricing, saving badge, metrics and actions
+  are presentation-only and must remain within the card bounds; the container
+  continues to own selected pricing and subscription actions.
