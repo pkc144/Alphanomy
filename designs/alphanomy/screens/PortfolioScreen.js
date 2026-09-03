@@ -265,23 +265,6 @@ const PortfolioScreenAlphanomy = ({ portfolio }) => {
                         </View>
                     ) : null}
 
-                    {selectedInnerTab === 1 ? (
-                        <TouchableOpacity
-                            activeOpacity={0.85}
-                            onPress={() => navigation?.navigate?.('TradePnLScreen')}
-                            style={{ marginTop: SPACING.sm }}>
-                            <LinearGradient
-                                colors={GRADIENTS.brand}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 1 }}
-                                style={styles.tradeReportBtn}>
-                                <Text style={styles.tradeReportBtnText}>
-                                    📊 View Trade P&amp;L Report
-                                </Text>
-                            </LinearGradient>
-                        </TouchableOpacity>
-                    ) : null}
-
                     {/* Plan picker row — only shown in holdings lane when MP active */}
                     {isHoldingsLane && modelPortfolioStrategy?.length > 0 ? (
                         <View style={styles.planSelectorRow}>
