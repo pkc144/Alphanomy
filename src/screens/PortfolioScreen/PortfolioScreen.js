@@ -237,7 +237,7 @@ const PortfolioScreen = () => {
         accessToken: jwtToken,
       });
     } else if (broker === 'Groww' && jwtToken) {
-      makeRequest(`${server.ccxtServer.baseUrl}groww/positions`, {
+      makeRequest(`${server.ccxtServer.baseUrl}groww/position`, {
         accessToken: jwtToken,
       });
     } else if (broker === 'Motilal Oswal' && jwtToken) {
