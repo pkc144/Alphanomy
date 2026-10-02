@@ -2,6 +2,22 @@
 
 > **Source of truth for whether a broker can move from legacy modal → SDK widget.** The `SDK_ELIGIBLE_MODALS` allowlist in `ModalManager.js` MUST be derived from this doc, not the other way around. See `CLAUDE.md § Phase 3 SDK Broker Migration — BLOCKING DOCUMENTATION REQUIREMENT`.
 
+## Zerodha runtime hardening — 2026-09-22
+
+The current AlphaB2B release configuration enables the SDK broker flow and the
+dispatcher fallback set contains only IIFL, so Zerodha reaches
+`Phase3SdkBrokerModal` → SDK `WebViewBrokerAuthFlow`. Following a report that
+the app closed from the Zerodha login page, the RN SDK now remounts a WebView
+whose Android renderer or Apple content process terminates. A second
+termination exits through the normal retryable error surface with code
+`broker_webview_process_gone`.
+
+This closes the unhandled dead-renderer lifecycle gap. It does not change URL
+minting, callback matching, token exchange, cookies, or the broker verdict.
+Device verification of the exact reported handset remains pending because no
+crash stack was supplied; source test `zerodhaWebViewSession.spec.ts` pins the
+recovery handlers, keyed remount, and terminal error code.
+
 ## Verdict definitions
 
 - **SDK-clean** — every legacy UX surface is mapped to a working SDK equivalent. Safe to add to `SDK_ELIGIBLE_MODALS`. End-to-end verified on emulator.
@@ -32,13 +48,13 @@ For each broker, the row captures:
 | Broker | visibleModal key | SDK BrokerName | Legacy modal | Verdict (today) |
 |--------|------------------|----------------|--------------|-----------------|
 | Zerodha | `Zerodha` | `Zerodha` | `ZerodhaConnectModal.js` (thin wrapper around `ZerodhaConnectUI`) | **Incomplete-audit** — Android intercept logic in UI component not yet read. Treat as SDK-broken. (User-reported Play Store hang 2026-05-26 — under live emulator investigation; see § Zerodha for live hypotheses.) |
-| Angel One | `Angel One` | `Angel One` | `AngleoneBookingModal.js` | **SDK-broken — added to `SDK_LEGACY_FALLBACK` 2026-04-30 (regression fix).** Two open gaps: (1) SDK schema always renders the per-customer `apiKey+secretKey+clientCode` form (Phase3SdkBrokerModal.js:264-268 "Tracked as Known Gap"); shared-mode advisors (default) need an empty-fields publisher-OAuth schema like Zerodha. (2) Backend `/sdk/v1/connections/Angel One/exchange-token` doesn't yet handle `auth_token` callback for shared mode. While both gaps are open the consumer routes to legacy `AngleOneBookingTrueSheet` so Connect Angel One works for every advisor today. Removal criterion: schema gap (1) + backend gap (2) both close — tracked in § Angel One open gaps below. |
+| Angel One | `Angel One` | `Angel One` | `Phase3SdkBrokerModal` (per-customer) | **SDK — per-customer only (2026-07-18; completed 2026-09-29).** Dispatcher always selects `Phase3SdkBrokerModal` (customer `apiKey`/`secretKey`/`clientCode` + static-IP gate), with SDK flag on or off. With `deviceTotpEnabled`, `DeviceTotpReconnectGate` wraps that SDK modal for biometric quick reconnect. The shared-SmartAPI `AngleoneBookingModal` is no longer reachable from the dispatcher (the device-TOTP fallback path to it was removed 2026-09-29). Guard: `src/__tests__/brokerDispatchRouting.test.js`. Earlier verdict (SDK-broken / `SDK_LEGACY_FALLBACK`, 2026-04-30) is historical. |
 | Upstox | `Upstox` | `Upstox` | `upstoxModal.js` | **SDK-clean** (PROMOTED 2026-04-28) — IP_WHITELIST_BROKERS + backend /exchange-token dispatch + SDK_ELIGIBLE_MODALS. Reauth still routes to legacy via `isReauthFlow` short-circuit. |
 | ICICI Direct | `ICICI` | `ICICI Direct` | `icicimodal.js` | **SDK-clean** (PROMOTED 2026-04-28) — backend `/exchange-token` ICICI dispatch already existed (connections.js:1180-1205, exchanges `apisession`→`session_token`); IP_WHITELIST_BROKERS already included; just needed allowlist promotion. |
 | Kotak Securities | `Kotak` | `Kotak` | `KotakModal.js` | **SDK-clean** (PROMOTED 2026-04-28, with documented minor diff) — credentials_totp; backend `/update-credentials` dispatches to `/api/kotak/connect-broker`. Minor diff: 30s TOTP debounce + TOTP error parsing not in SDK widget. |
 | Dhan | `Dhan` | `Dhan` | `DhanConnectModal.js` | **SDK-clean** (PROMOTED 2026-04-28) — partner-OAuth, no IP gate needed, backend `/exchange-token` fallthrough handles `dhan_client_id` + `dhan_access_token`. Just needed allowlist promotion. Minor diff: prefetch optimization + manual fallback path not in SDK widget. |
 | Fyers | `Fyers` | `Fyers` | `FyersConnect.js` | **SDK-clean** (PROMOTED 2026-04-28) — IP_WHITELIST extension + backend `/exchange-token` Fyers dispatch (translates field-naming inversion server-side: modal `apiKey` → ccxt `clientSecret`, modal `secretKey` → ccxt `clientId`). Reauth routes to legacy. |
-| IIFL Securities | `IIFL` / `IIFL Securities` | `IIFL Securities` | `src/components/iiflmodal.js` | **SDK-broken** (REVERTED 2026-04-29 audit) — SDK schema is `credentials_totp` but legacy is empty-fields OAuth at hardcoded `markets.iiflcapital.com`. No slug in `LEGACY_PER_BROKER_SLUG`, no `/login-url` dispatch, no `Phase3BrokerHelp` entry. Stays legacy until schema reshape + backend dispatches land. |
+| IIFL Securities | `IIFL` / `IIFL Securities` | `IIFL Securities` | `src/components/iiflmodal.js` | **SDK-broken / legacy-correct** (direct flow enabled 2026-09-27) — SDK schema still describes a different credentials/TOTP product. The deliberate fallback now collects the customer's App Key/App Secret, gates on the displayed Route64 IPv6, uses Node login-url/exchange routes, and persists the session in MongoDB. |
 | AliceBlue | `AliceBlue` | `AliceBlue` | `AliceBlueConnect.js` | **SDK-clean** (PROMOTED 2026-04-28) — schema changed to `flow=oauth, fields=[]`; backend `/login-url` hardcodes `origin=https://prod.alphaquark.in`; backend `/exchange-token` accepts `{access_token, client_id}`. |
 | Motilal Oswal | `Motilal` | `Motilal Oswal` | `MotilalModal.js` | **SDK-clean** (PROMOTED 2026-04-28, with documented minor diff) — IP_WHITELIST + backend `/exchange-token` Motilal dispatch + SDK_ELIGIBLE. Minor diff: SDK widget lacks 30s session-affinity debounce (user-accepted minor diff). |
 | HDFC Securities | `HDFC` | `Hdfc Securities` | `HDFCconnectModal.js` | **SDK-clean** (PROMOTED 2026-04-28) — added to `IP_WHITELIST_BROKERS` + backend `/exchange-token` HDFC dispatch + `BrokerConnectModalDispatch.SDK_ELIGIBLE_MODALS` |
@@ -49,7 +65,9 @@ For each broker, the row captures:
 ```
 {HDFC, Upstox, ICICI, Motilal, Dhan, Kotak, AliceBlue, Fyers, Axis Securities, Groww, DummyBroker}
 ```
-11 of 14 brokers promoted. 2 stay legacy via fallback (Angel One shared-mode, IIFL schema-mismatch). 1 unlisted (IIFL Securities).
+IIFL remains a documented legacy fallback because of the SDK schema mismatch;
+its fallback is now production-capable and enabled. Treat the promotion counts
+in older entries below as historical snapshots rather than current routing.
 
 ---
 
@@ -212,6 +230,19 @@ Live investigation in progress on emulator + adb logcat to pin the hang phase be
 
 ### Fyers — SDK-with-gap
 
+#### 2026-09-29 — first-connect host gate corrected
+
+The SDK Fyers schema remains SDK-clean and includes the setup guide plus
+`EgressIpCallout`. The apparent minimal TOTP/PIN form was not an SDK schema or
+fallback: `DeviceTotpReconnectGate` was rendering before dispatch for an
+unenrolled customer without carrying that guide. Fyers remains eligible for
+deferred first-connect enrolment, but the host gate now renders the same
+developer-portal instructions, redirect URL and `fyers` `EgressIpCallout`
+before offering the optional phone-TOTP fields. It then reaches the full
+SDK/legacy App ID/Secret + OAuth onboarding, and saves device values only after
+successful authorization. Connected customers retain the compact quick-
+reconnect path.
+
 - **Legacy modal file:** `src/components/BrokerConnectionModal/FyersConnect.js`
 - **Submit endpoint(s):**
   - `POST api/fyers/update-key` (line 300) — mints auth URL from `clientCode + secretKey`.
@@ -275,25 +306,26 @@ Backend already accepts the corrected mapping: `aq_backend_github/Routes/Broker/
 
 - **Legacy modal file:** `src/components/iiflmodal.js` (note: in `src/components/`, not `src/components/BrokerConnectionModal/`)
 - **Submit endpoint(s):**
-  - WebView at `https://markets.iiflcapital.com/?v=1&appkey=nHjYctmzvrHrYWA&redirect_url=${redirectUrl}` (hardcoded broker URL with embedded appkey, line 52).
-  - `POST /iifl/login/client` on ccxt-india (line 103) — exchanges `auth_token + clientid` for sessionToken.
-  - **No connect-broker step** — sessionToken stored in AsyncStorage (line 123), NOT MongoDB.
-- **Encryption envelope:** None — tokens passed plaintext.
-- **Form fields collected:** None. Pure OAuth/WebView.
-- **OAuth WebView flow:** Yes. Intercepts via `onNavigationStateChange` (line 83), detects `auth_token=` + `clientid=` (line 86).
-- **Reauth handling:** No `reauthConfig` prop.
-- **IP-whitelist callout:** None.
+  - `POST /api/iifl/update-key` — stores AES-wrapped customer App Key/App Secret and returns the customer-specific IIFL login URL.
+  - `POST /api/iifl/exchange` — Node retrieves the stored App Secret and exchanges callback `authcode + clientid` without returning the secret to app JavaScript.
+  - `PUT /api/user/connect-broker` — persists `clientCode + jwtToken` in the standard MongoDB `connected_brokers[]` record.
+  - `POST /api/iifl/reauth-url` — uses the saved App Key for later daily browser login.
+- **Encryption envelope:** `CryptoJS.AES.encrypt(value, 'ApiKeySecret')` for App Key and App Secret before the update-key request.
+- **Form fields collected:** App Key and App Secret from the customer's IIFL Individual Trader API app.
+- **OAuth WebView flow:** Yes. It accepts only the configured redirect URL and parses `authcode/clientid`, camel-case aliases, and retired `auth_token` compatibility callbacks.
+- **Reauth handling:** Yes. Explicit `reauthConfig.authUrl` is accepted; otherwise saved direct credentials trigger `/api/iifl/reauth-url` automatically.
+- **IP-whitelist callout:** Yes. `BrokerConnectStepperSheet` renders the `iifl` `EgressIpCallout`; the user must acknowledge that the exact displayed Route64 IPv6 is whitelisted.
 - **Broker-specific quirks:**
-  - **AsyncStorage-only persistence (no MongoDB record)** — major deviation. Every other broker writes `connected_brokers[]` in MongoDB; IIFL writes only to AsyncStorage on the device.
-  - **Hardcoded appkey** in WebView URL.
-  - SDK dual-write does call `/sdk/v1/connections/IIFL Securities/connect` for parity (lines 132–141).
-- **Success handling:** AsyncStorage write → SDK dual-write → Toast + fetchBrokerStatusModal.
-- **Error handling:** Toast with HTTP-vs-network distinction (lines 169–187).
+  - Browser login is required each trading day even though the developer app credentials are saved.
+  - AsyncStorage is retained as compatibility storage only; MongoDB is authoritative.
+  - The app and web instructions both require registering the displayed redirect URL and displayed IPv6 in the IIFL developer portal.
+- **Success handling:** MongoDB persistence → AsyncStorage compatibility write → status refresh → success toast with the daily-login reminder.
+- **Error handling:** Node/upstream response details are shown in the sheet/toast; duplicate callback exchange is guarded by a ref.
 - **Gap vs SDK widget:**
-  1. **No MongoDB persistence** — SDK widget assumes server-side persistence. IIFL's AsyncStorage-only model means SDK Phase 3 path can't replicate the legacy state shape (UI reads `connected_brokers[]`, not AsyncStorage).
-  2. SDK widget would need a special "AsyncStorage-only" persistence mode OR the IIFL backend must start writing MongoDB.
-- **Verdict:** **SDK-broken** until either (a) IIFL backend adds MongoDB persistence (server-side change) OR (b) SDK widget gains an AsyncStorage-only mode (architectural change). In neither case is this a near-term move.
-- **Last verified:** 2026-04-28, code-read audit.
+  1. SDK schema fields and authentication mode do not match the live Individual Trader API contract.
+  2. SDK lane does not yet reproduce the Node secret-preserving exchange plus IIFL IPv6 guide/gate.
+- **Verdict:** **SDK-broken / legacy-correct.** Keep `IIFL` in `SDK_LEGACY_FALLBACK` until the SDK implements the same direct OAuth contract. The production fallback itself is enabled and complete.
+- **Last verified:** 2026-09-27 — focused parser/support/order-book tests and release build pending in this change.
 
 ---
 
@@ -479,7 +511,7 @@ Never let `SDK_ELIGIBLE_MODALS` and this doc disagree.
 | Upstox and every configured guide | A paused inline YouTube iframe exposed YouTube's own external hand-off. | Explicit walkthrough control now mounts `BrokerWalkthroughPlayer` and starts playback in-app. Broker portal links are still intentionally external. |
 | ICICI Direct | SDK supplied `ICICI Direct`, while the guide map only had `ICICI`; it therefore displayed the older help component. | Display-name normalisation selects the shared guide card and current Egress flow. |
 | HDFC Securities | SDK supplied `Hdfc Securities`, while the guide map only had `HDFC`; same fall-through. | Display-name normalisation selects the shared guide card and current Egress flow. |
-| IIFL Securities | Instructions/UI did not match the live broker authorisation path and the connection could hang. | Disabled from new connections and from the IPv4 egress map pending a separately verified integration. |
+| IIFL Securities | Instructions/UI did not match the live broker authorisation path and the connection could hang. | Re-certified 2026-09-27: customer-owned App Key/App Secret, exact redirect URL + Route64 IPv6 instructions, Node exchange, MongoDB persistence, and deliberate SDK fallback. |
 
 This is not a broker API certification: the Android debug build and source paths
 were checked, but each broker still needs its normal real-account connection

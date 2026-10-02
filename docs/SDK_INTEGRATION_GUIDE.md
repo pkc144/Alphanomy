@@ -1,5 +1,27 @@
 # AlphaQuark Mobile SDK — Developer Integration Guide
 
+## Reading order results (2026-09-28)
+
+Render `row.status` from the SDK vocabulary and use `brokerOrderStatus` only
+for diagnostics. Do not interpret `COMPLETE` yourself: the SDK combines the
+broker word with fill/pending quantities. Hosts should keep `PENDING` rows
+pollable and route rejected/unfilled remainders through Repair, never resubmit
+the full original basket.
+
+## Durable order results (2026-08-28)
+
+Render `status: queued` using its `jobId`, then call `getAsyncOrderStatus(jobId)` or `cancelAsyncOrder(jobId)`. A paused `checking_broker` result means “do not resubmit.” Never switch placement paths; HTTP 409 active/duplicate identities are also non-retryable.
+
+The generic SDK contract is broker-agnostic, but registration, an explicit
+quota policy, live/UAT certification and customer-app release are separate
+states. The current configured direct-API set is Angel One, Upstox, Zerodha
+API, Dhan, Kotak, Fyers, ICICI Direct, HDFC Securities, Motilal Oswal, Groww,
+AliceBlue, Axis Securities, IIFL Securities, Arihant Capital and DefinEdge
+Securities. Zerodha Publisher, DummyBroker/manual, GTT and model portfolios use
+specialized paths. New broker registry entries must stay dispatch-allowlisted
+until the backend enforces the YAML `certified` flag. RN/Flutter source changes
+are not customer-live until the consuming app ships a signed OTA/store release.
+
 > **Audience**: Third-party developers integrating the AlphaQuark SDK
 > into their React Native or Flutter app. This is the single document
 > you need to go from zero to a working integration.
@@ -147,13 +169,17 @@ AqSdkScope(
 | `getOrderStatus(orderId)` | POST `/sdk/v1/orders/:id/status` | `orders:read` | Single order status check. |
 | `getOrderBook(query?)` | GET `/sdk/v1/orders/book` | `orders:read` | Order history with filters. |
 | `cancelOrder(orderId)` | POST `/sdk/v1/orders/:id/cancel` | `orders:write` | Cancel pending order. |
+| `openPublisherIntent(body)` | POST `/sdk/v1/orders/publisher/intent` | `orders:write` | Internal/advanced: persist exact tagged Zerodha legs before Kite opens. |
+| `getPublisherStatus(body)` | POST `/sdk/v1/orders/publisher/status` | `orders:read` | Internal/advanced: fetch only exact-tag broker orders. |
+| `getPublisherFunding(body)` | POST `/sdk/v1/orders/publisher/funding` | `orders:read` | Internal/advanced: refresh live cash and server-price all protected BUYs. |
+| `finalizePublisher(body)` | POST `/sdk/v1/orders/publisher/finalize` | `orders:write` | Internal/advanced: one exact-tag, idempotent reconciliation. Prefer `executeAdvice`. |
 
 ### Client Methods — Portfolio Management
 
 | Method | Endpoint | Scope | Description |
 |---|---|---|---|
 | `subscribe(body)` | POST `/sdk/v1/portfolios/subscribe` | `connections:write` | Create/renew model portfolio subscription. Auto-creates user if missing. |
-| `modifyInvestment(body)` | POST `/sdk/v1/rebalance/modify-investment` | `connections:write` | Update subscription capital amount. |
+| `modifyInvestment(body)` | POST `/sdk/v1/rebalance/modify-investment` | `connections:write` | Update subscription capital amount; preserves optional `changeMode` and incremental `changeAmount`. |
 | `calculateRebalance(body)` | POST `/sdk/v1/rebalance/calculate` | `connections:write` | Calculate rebalance trades for a model. |
 | `getPortfolioPnl(modelName)` | GET `/sdk/v1/portfolios/:modelName/pnl` | `connections:read` | Get P&L: invested, current value, costs, net P&L. |
 | `getSubscriptions()` | GET `/sdk/v1/portfolios/subscriptions` | `connections:read` | List user's subscribed model portfolios. |
@@ -227,7 +253,7 @@ sdk.executeAdvice({
       symbol: 'RELIANCE',
       transactionType: 'BUY',
       quantity: 10,
-      status: 'FILLED',       // PLACED | FILLED | PARTIAL | REJECTED | CANCELLED | PENDING | AMO_QUEUED
+      status: 'FILLED',       // PLACED | FILLED | PARTIAL | REJECTED | CANCELLED | PENDING | AMO_QUEUED | NOT_SUBMITTED
       variant: 'REGULAR',     // REGULAR | AMO
       filledQuantity: 10,
       averagePrice: 2450.50,
@@ -238,8 +264,27 @@ sdk.executeAdvice({
   capitalDeployed: 24505.00,
   hasAmoRows: false,
   completedAt: '2026-05-03T10:30:00.000Z',
+  executionState: 'complete' | 'paused',
+  recovery: undefined | {
+    reason: 'sell_pending' | 'sell_failed' | 'funds_unverified' | 'settlement_shortfall' | 'publisher_unconfirmed' | 'publisher_unavailable' | 'existing_publisher_attempt' | 'customer_stopped',
+    message: 'Human-readable next step',
+    remainingTrades: [...],
+    safeToRetryPlacement: false,
+  },
+  settlementRiskAccepted: false,
 }
 ```
+
+`paused` is a successful SDK handoff, not an invitation to retry placement.
+The host must display the rows/recovery message and must not invoke its legacy
+route. `NOT_SUBMITTED` means the safety gate deliberately withheld that leg;
+`PENDING` means a submitted exact tag is not yet fully reconciled.
+
+For mixed Zerodha MP baskets, RN runs SELL → full broker fill → fresh live funds
+→ BUY. If fresh funds show a numeric shortfall, the customer may explicitly
+continue (T+1/settlement risk); later low-funds rejections say to use Repair once
+margin releases. Auth, pricing, or unreadable-funds failures never expose that
+Continue action.
 
 ---
 
@@ -429,6 +474,20 @@ Body: { user_ref: "user@example.com", scopes: [...] }
 2. Add to mint server `.env`: `AQ_SDK_TENANT_SECRET_YOURTENANT=sk_live_...`
 3. Restart mint server: `sudo systemctl restart aq-sdk-mint.service`
 
+### Runtime tenant switching
+
+Treat `(tenant id, user_ref)` as the SDK session identity. A host that can
+change advisor tenant at runtime must discard its existing `AqSdkClient` and
+remount/rebind `AqSdkProvider` when the tenant changes, even when `user_ref`
+stays the same. Otherwise the provider's same-user optimization can retain a
+JWT minted for the previous tenant and route connection writes to the wrong
+database. Bind the mint callback to the resolved tenant value rather than
+reading mutable global configuration after the mint begins.
+
+AlphaB2B implements this in `src/sdk/SdkProviderRoot.js`: it subscribes to the
+runtime-advisor authority, creates a tenant-bound client, and keys the provider
+by `REACT_APP_HEADER_NAME`. Single-tenant hosts do not need extra handling.
+
 ---
 
 ## 11. Required Scopes
@@ -566,6 +625,13 @@ final result = await client.executeRebalance(
 // Portfolio
 await client.subscribe(modelId: 'abc', modelName: 'Alpha 100', investmentAmount: 50000);
 await client.modifyInvestment(modelName: 'Alpha 100', modelId: 'abc', amount: 75000);
+await client.modifyInvestment(
+  modelName: 'Alpha 100',
+  modelId: 'abc',
+  amount: 75000,
+  changeMode: 'topup',
+  changeAmount: 25000,
+);
 final pnl = await client.getPortfolioPnl('Alpha 100');
 ```
 
@@ -604,7 +670,7 @@ Lookup overrides in your widgets: `SdkComponentOverridesInherited.of(context)`
 | Email resolution | Sync from Firebase | Async polling (secure storage + Firebase) | Flutter ahead — cleaner race handling |
 | Sell-auth UI | 6 modals in `DdpiModal.js` | Unified `DdpiAuthPage.dart` | Flutter ahead — SDK adopts Flutter's pattern |
 | Fyers Publisher WebView | REST fallback | Disabled (loadHtmlString origin issue) | Both use REST |
-| Zerodha batch size | Not set (Kite default) | 60 items | Flutter configures explicitly |
+| Zerodha mixed MP Publisher | ✅ Guarded 60-leg batches, sells-first/full-fill/funds gate | ✅ Same guarded offsite Publisher flow | Parity; missing UI/key fails closed with no direct fallback |
 | Mark-expired-before-reauth | ✅ via `reauthHelpers.js` | ✅ via `ReauthHelper.dart` | Parity reached 2026-04-29 |
 | `BrokerSessionService.isSessionFresh` | Not implemented | ✅ Proactive daily check | Flutter ahead |
 | JWT clientCode extraction (Angel One) | Not implemented | ✅ Fallback for missing clientCode | Flutter ahead |

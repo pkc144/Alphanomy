@@ -13,6 +13,52 @@
 
 ## 1. Conceptual model
 
+### 2026-09-28 portal-broker execution invariant
+
+Sell authorization is broker-class specific:
+
+1. **Live check + in-app authorization:** Zerodha, Angel One and Dhan verify
+   current authorization and open the broker/CDSL flow when it is missing.
+2. **Broker-evidence-first in-app authorization:** Fyers submits the SELL
+   first. Its stored flag and profile `ddpi_enabled` value are advisory because
+   the profile has returned false for a broker account whose UI showed active
+   DDPI. Only backend `SELL_AUTH_REQUIRED` / `SELL_AUTH_REVOKED` evidence opens
+   the Fyers TPIN/holdings WebView.
+3. **External broker authorization:** Upstox, ICICI Direct, Kotak, HDFC
+   Securities, IIFL Securities, Motilal Oswal, Groww, Axis Securities and
+   AliceBlue are never stopped solely by a stale/false local flag. SELLs are
+   dispatched first. If every expected SELL has zero fill and there is no
+   stronger failure classification, ccxt emits `SELL_AUTH_REQUIRED`; the app
+   immediately shows broker-specific portal steps and a DDPI recommendation.
+
+Dependent BUY legs are withheld and returned as `NOT_ATTEMPTED` with
+`DEPENDENT_LEG_NOT_ATTEMPTED`. After manual confirmation, apps persist today's
+authorization and reopen a fresh protected review/calculation. They do not
+blindly replay the consumed frozen plan.
+
+### 2026-09-30 Dhan quantity evidence and SELL-phase rule
+
+Dhan `DH-906 Validate Qty from CDSL` is an explicit sell-authorization
+rejection and maps to `SELL_AUTH_REVOKED`. A CDSL callback or customer checkbox
+is not authorization evidence. The app must re-read `/dhan/edis-status` and
+require `edis=true` plus approved quantity greater than or equal to the
+aggregate requested quantity for every SELL, both after CDSL returns and before
+dispatch.
+
+The shared broker orchestrator remains SELL-first: it submits the complete SELL
+phase before any BUY. If zero SELLs succeed, all dependent BUYs are returned as
+`DEPENDENT_LEG_NOT_ATTEMPTED`; if at least one SELL succeeds, the approved BUY
+phase may proceed. This rule was not changed by the ICICI Repair correction.
+
+### 2026-09-22 RN SDK pre-dispatch verification invariant
+
+For `executeAdvice` with equity-delivery SELL legs, the RN SDK reads the
+authenticated SDK sell-auth endpoint before placement. The server response,
+not an empty SDK-local user object, is authoritative. When the host owns the
+review modal (`skipReview: true`), an unavailable or unauthorized verdict is a
+typed error to the host; the SDK must not open another modal behind it. This
+prevents the Groww Step 3 stall where no placement request reached the backend.
+
 When a customer SELLS shares from their demat account, SEBI requires explicit
 authorization that the broker is acting on their behalf. India brokers
 implement this through three different mechanisms — every flow in our system
@@ -101,14 +147,14 @@ shouldPreserveSellAuth(storedIsAuthorized, storedSetAt) // → boolean
 |---|---|---|---|---|---|
 | **Zerodha** | TPIN session (per-day) OR DDPI (permanent) | ✅ `/zerodha/save-ddpi-status` — refreshes both `ddpi_status` and `is_authorized_for_sell` from Kite session | Yes (overwritten by live check on rebalance entry) | tidi: `DdpiAuthPage.dart` `_zerodhaFlow`<br>Alphab2bapp: `DdpiModal.js` (Zerodha branch via `ZerodhaTpinModal`) | Web Kite Connect TPIN flow renders inside our WebView. |
 | **Angel One** | DDPI OR TPIN (CDSL form) | ✅ `/angelone/verify-dis` (server-side: `app_angelone.py:verify_dis`) — returns `{edis: bool, data: {DPId, ReqId, TransDtls}}`. `edis: true` ⇒ already authorized today / DDPI active. | Yes (preferred); live check is fallback when both flags are false (added 2026-05-02). | tidi: `DdpiAuthPage.dart` `_angelOneFlow`<br>Alphab2bapp: `DdpiModal.js` (auto-fetch `verify-edis` on open; auto-skip when `edis: true` — added 2026-05-02) | clientCode required for `verify-dis`. SmartAPI JWT payload's `username` claim carries it — JWT-fallback added 2026-05-02 in `DdpiAuthPage._angelOneFlow` for users whose `connected_brokers[Angel One].clientCode` is empty (older shared-mode connections didn't persist it; backend persist now extracts from JWT — `Routes/sdk/v1/connections.js` Angel One shared-mode branch). |
-| **Dhan** | TPIN (CDSL via Dhan portal) | ✅ `/dhan/edis-status` — returns per-holding `edis: bool`. Authorized iff ALL holdings have `edis === true`. | Yes (preferred); live check is fallback. | tidi: `DdpiAuthPage.dart` `_dhanFlow` (`generate-tpin` → `enter-tpin` → HTML form WebView)<br>Alphab2bapp: `DdpiModal.js` (Dhan branch) | Lives in `RebalanceReviewPage._checkDhanEdisStatus`. ISIN-per-holding flow. |
-| **Fyers** | TPIN (Fyers internal flow) | ❌ No `verify-dis` equivalent | Yes — only signal | tidi: `DdpiAuthPage.dart` `_fyersFlow` (`submit-holdings` → HTML form) | Manual flow only. |
-| **Upstox** | DDPI ONLY (no online TPIN) | ❌ No live check | Yes — only signal | tidi: `_buildManualAuthContent` (manual instructions screen) | User must set DDPI in Upstox app (one-time). After they confirm, manual flag stays TRUE for the day; resets each midnight IST. Without DDPI, can't sell programmatically — period. |
-| **HDFC Securities** | DDPI / POA | ❌ | Yes | Manual content | Same shape as Upstox. |
-| **Motilal Oswal** | DDPI / POA | ❌ | Yes | Manual content | Same. |
-| **AliceBlue** | DDPI / TPIN at broker portal | ❌ (no AliceBlue-side EDIS API) | Yes | Manual content | User authorizes at AliceBlue portal directly. |
-| **IIFL Securities** | DDPI / POA | ❌ | Yes | Manual content | Same. |
-| **Axis Securities** | DDPI / POA | ❌ | Yes | Manual content | Same. |
+| **Dhan** | TPIN (CDSL via Dhan portal) | ✅ `/dhan/edis-status` — returns per-holding eDIS state and approved quantity. Authorized iff every selected equity-delivery SELL has a matching `edis=true` row with enough aggregate approved quantity; unrelated holdings are ignored. | Hint only; callback/checkbox and a stale true flag never override live quantity evidence. | tidi: `DdpiAuthPage.dart` `_dhanFlow` (`generate-tpin` → `enter-tpin` → HTML form WebView)<br>Alphab2bapp: `DdpiModal.js` (Dhan branch) | AlphaB2B polls after CDSL completion and lifts fresh state into the parent; Tidi verifies after callback and final dispatch. `DH-906 Validate Qty from CDSL` reopens recovery as `SELL_AUTH_REVOKED`. |
+| **Fyers** | Standing DDPI or TPIN (Fyers/CDSL flow) | Advisory `GET /api/v3/profile data.ddpi_enabled`; false/unknown is not a gate | No pre-block; recovery/audit only | Alphab2bapp: `DdpiModal.js` `FyersTpinModal` (`submit-holdings` → app-root HTML WebView) | SELL first. Open authorization only for explicit `SELL_AUTH_REQUIRED` / `SELL_AUTH_REVOKED`. Empty results, timeouts, low funds, app-permission errors and generic rejected SELLs retain their real result. |
+| **Upstox** | DDPI / broker-portal authorization | ❌ No live check | Recorded after manual confirmation; not a pre-block signal | tidi: `_buildManualAuthContent` (manual instructions screen) | SELL first; all-zero-fill refusal opens portal recovery. DDPI is the recommended standing fix. |
+| **HDFC Securities** | DDPI / POA | ❌ | Recovery/audit signal only | Manual content | Same optimistic portal pattern as Upstox. |
+| **Motilal Oswal** | DDPI / POA | ❌ | Recovery/audit signal only | Manual content | Same. |
+| **AliceBlue** | DDPI / TPIN at broker portal | ❌ (no reliable account-wide pre-trade verdict) | Recovery/audit signal only | Manual content | SELL first; authorize at AliceBlue portal after an all-zero-fill refusal. |
+| **IIFL Securities** | DDPI / POA | ❌ | Recovery/audit signal only | Manual content | Same. |
+| **Axis Securities** | DDPI / POA | ❌ | Recovery/audit signal only | Manual content | Same. |
 | **Kotak** | DDPI / TPIN | ❌ | Yes | Manual content | Same. |
 | **Groww** | DDPI / TPIN | ❌ | Yes | Manual content | Same. |
 | **ICICI Direct** | DDPI / POA | ❌ | Yes | Manual content | Same. |
@@ -118,9 +164,11 @@ shouldPreserveSellAuth(storedIsAuthorized, storedSetAt) // → boolean
 live check is authoritative. Stored flag's day-scope still matters for the
 brief window between connect and the next live probe.
 
-**Flag-only brokers** (10): Upstox, HDFC, Motilal, AliceBlue, IIFL, Axis,
-Kotak, Groww, Fyers, ICICI. Stored flag is the ONLY signal we have. Day-scope
-is the user's safety net.
+**Broker-evidence-first brokers** include Fyers and the nine portal brokers
+(Upstox, HDFC, Motilal, AliceBlue, IIFL, Axis, Kotak, Groww, ICICI). Their
+stored flag is an audit/same-day convenience signal, not authority to
+pre-block execution. Fyers differs only in recovery: it can open the CDSL form
+inside the app after an explicit classification.
 
 ---
 
@@ -135,9 +183,11 @@ is the user's safety net.
    - If live returns "authorized" → DB flag flipped to true via update-edis-status,
      gate passes silently.
    - If live returns "not authorized" → manual EDIS UI opens.
-4. Flag-only brokers: gate checks DB flag directly.
-   - false → manual EDIS UI opens immediately.
-5. User completes manual TPIN/EDIS flow in WebView (CDSL/NSDL form).
+4. Fyers and portal brokers: submit SELL; do not block on a false/stale flag.
+   - explicit `SELL_AUTH_REQUIRED` / `SELL_AUTH_REVOKED` → recovery UI.
+   - any other failure → preserve and display the real broker result.
+5. When explicitly required, user completes manual TPIN/EDIS flow in WebView
+   (CDSL/NSDL form).
 6. On WebView success callback, frontend calls PUT /api/update-edis-status:
      { uid, is_authorized_for_sell: true, user_broker }
 7. Backend (UpdateEdisStatus.js):
@@ -188,12 +238,14 @@ is the user's safety net.
 ### 5d. ccxt-side auto-revoke (sell rejected because broker says not authorized)
 
 ```
-1. User attempts sell on a flag-only broker.
-2. Gate passes (flag is true from prior auth).
+1. User attempts sell on a no-live-check broker.
+2. Fyers and portal brokers proceed regardless of a stale local flag.
 3. ccxt forwards order to broker.
 4. Broker rejects with EDIS / POA error.
-5. ccxt classifies the rejection (sell_auth_revoke.py classifier) →
-   SELL_AUTH_REVOKED.
+5. ccxt classifies an actionable rejection as `SELL_AUTH_REVOKED`. For the
+   nine portal brokers, if every expected SELL instead returns only a generic
+   zero-fill failure and no stronger classification exists, the basket guard
+   stamps `SELL_AUTH_REQUIRED`.
 6. ccxt POSTs to internal endpoint:
      PUT /api/update-edis-status (X-Internal-Source header)
      { email, broker, is_authorized_for_sell: false,
@@ -233,6 +285,10 @@ The following code paths MUST handle sell-auth correctly:
 
 1. **Connect handlers** (userRoutes.js — 14 broker branches): preserve via
    `shouldPreserveSellAuth(currentUser?.is_authorized_for_sell, currentUser?.sell_auth_set_at)`.
+   The Zerodha branch also queues credential-free model-portfolio account
+   reconciliation after the validated token and preserved sell-auth state are
+   durably written (2026-09-16). This asynchronous hook does not read, reset or
+   change DDPI/TPIN/EDIS fields and cannot roll back broker connection success.
 2. **MultiBrokerService.addBrokerConnection**: same check on `existingEntry`.
 3. **UpdateEdisStatus.js** (both PUT paths): set `sell_auth_set_at = new Date()`
    when `is_authorized_for_sell` flips to TRUE; `null` on FALSE.
@@ -250,7 +306,7 @@ new auto-import flow), it MUST follow #1's pattern.
 
 | App | File | Pattern |
 |---|---|---|
-| **tidi_new** | `lib/components/home/portfolio/RebalanceReviewPage.dart` | Switch on `brokerLower`; live-check brokers (Zerodha, Angel One, Dhan) call broker-specific `_check<Broker>EdisStatus`; flag-only brokers read `effectiveBroker.isAuthorizedForSell`. If `canSell == false`, navigate to `DdpiAuthPage`. |
+| **tidi_new** | `RebalanceReviewPage.dart`, `ExecutionStatusPage.dart` | Zerodha, Angel One and Dhan live-check; Dhan requires exact broker-confirmed quantities after callback and before dispatch. Fyers uses today's flag then its WebView; portal brokers submit SELLs first. Explicit sell-auth classification or the guarded all-SELL-zero-fill fallback opens `DdpiAuthPage(postFailure: true)`. Only broker-confirmed Dhan completion persists the flag and opens a fresh protected review. |
 | **Alphab2bapp** | `src/components/AdviceScreenComponents/RebalanceModal.js` | Per-broker if-blocks read `userDetails.is_authorized_for_sell` (top-level). Opens broker-specific TPIN modal. **2026-05-03: derivatives (NFO/BFO/MCX exchanges, MIS/NRML product types) excluded from EDIS/DDPI checks** — only equity delivery (CNC) sells trigger the gate. DdpiModal auto-fetches `verify-edis` and short-circuits when `edis: true`. Zerodha WebView CDSL flow fixed: confirmation overlay no longer shows prematurely (waits for callback_url or user close). |
 | **SDK** | `@alphaquark/mobile-sdk` `SellAuthGate.tsx` `requireSellAuth()` | **2026-05-03: derivatives excluded** — filters to equity delivery (CNC) sells before checking DDPI flags. NFO/BFO/MCX exchanges and MIS/NRML product types pass through without sell-auth gate. |
 | **Alphab2bapp** (initial allocation) | `src/components/ModelPortfolioComponents/UserStrategySubscribeModal.js:218-310` | DDPI-priority gate added 2026-05-03. Pre-blocks ONLY for Zerodha (`!is_authorized_for_sell && !ddpi_status in ['physical','ddpi']`) + Angel One (`!ddpi_enabled && !is_authorized_for_sell`) + 8 portal-side brokers (`!is_authorized_for_sell`). **Dhan + Fyers NOT pre-blocked** — optimistic placement per § 7d below. |
@@ -265,16 +321,109 @@ new auto-import flow), it MUST follow #1's pattern.
 |---|---|---|
 | **DDPI-aware (cheap server-cached flag)** | Zerodha (`ddpi_status` populated by `/zerodha/save-ddpi-status`), Angel One (`ddpi_enabled` populated by `/angelone/verify-dis`) | Pre-block ONLY when `!ddpi_flag && !is_authorized_for_sell`. DDPI active ⇒ proceed. |
 | **Live-check available, expensive** | Dhan (`/dhan/edis-status`, per-holding) | Where pre-fetched (RebalanceModal does), use live check. Where not pre-fetched (UserStrategySubscribeModal), prefer optimistic placement over stored-flag fallback — stale flag would falsely block users who cleared EDIS at the portal between sessions. |
-| **Flag-only (no DDPI tracking in our schema)** | Fyers + 8 portal-side (Upstox, HDFC, Motilal, AliceBlue, IIFL, Axis, Kotak, Groww, ICICI Direct) | Existing pre-block on `!is_authorized_for_sell` is **acknowledged over-aggressive** — a user with permanent DDPI at the broker portal would be falsely blocked because our schema doesn't store DDPI state for these brokers. Phase D `requireSellAuth` softens to optimistic placement once the post-rejection cascade ships. |
+| **In-app, no reliable live check** | Fyers | If today's flag is not valid, open the Fyers TPIN/holdings WebView before placement. |
+| **External portal, no reliable live check** | Upstox, HDFC, Motilal, AliceBlue, IIFL, Axis, Kotak, Groww, ICICI Direct | Do not pre-block on the stored flag. Submit SELLs first; only an explicit sell-auth classification or guarded all-SELL-zero-fill generic failure opens manual recovery. |
 
-**Phase D direction (per `docs/SDK_ORCHESTRATION_PHASES.md`)**: SDK orchestrator `requireSellAuth` sub-orchestrator implements the canonical pattern:
+**Current orchestrated direction**: SDK/app ownership implements the canonical pattern:
 
 1. Check DDPI-aware flags (cheap, accurate). DDPI active ⇒ proceed.
 2. For DDPI-non-aware brokers, attempt the trade optimistically.
 3. If broker rejects with EDIS error (classified by ccxt), open the SDK `<SellAuthGate>` widget for in-app re-auth (Zerodha auth-sell, Angel One verify-dis, Dhan TPIN, Fyers TPIN) OR show "authorize at broker portal" instructions for portal-side brokers.
-4. After successful re-auth, retry the trade with the same `clientAdviceId` (idempotent).
+4. After successful re-auth, reopen a fresh protected calculation/review. The
+   old frozen plan is consumed and must not be directly replayed. The next
+   review retains SELL-first dispatch and does not resend prior fills.
 
-This collapses the current 5-modal cascade in RebalanceModal + the Toast pattern in UserStrategySubscribeModal into one unified flow. Until Phase D ships, mobile apps remain on the legacy pre-block-with-flag pattern documented in § 7a.
+AlphaB2B and Tidi retain different presentation components, but the broker
+classes, trigger conditions and retry safety rule are shared.
+
+### 7e. "I've authorized" retry and failure visibility (2026-10-01)
+
+- **`OtherBrokerModel` "Authorized — recalculate"** (`src/components/DdpiModal.js`):
+  saves `is_authorized_for_sell` (`PUT /api/update-edis-status`), refreshes
+  user details, then `POST /rebalance/calculate`. The sheet now **stays open**
+  with "Saving your authorization…" → "Recalculating your orders…" and closes
+  only after the recalculation succeeds; then the review reopens with the
+  tagged plan (`_sellAuthorizationRetry`) showing "Updated after your sell
+  authorization. No orders have been placed yet…", plus a toast. A failed save
+  does **not** block (block only on positive evidence) but is reported; a
+  failed recalculation stays on the sheet with "Try again". Double taps are
+  ignored. Previously the sheet closed first, the customer sat on the home
+  screen during the request, and both failures were silent.
+- **Layout:** the shared checkbox `label` wraps (`flexShrink: 1`); the sheet's
+  actions stack full-width (they clipped on ~360dp phones since 2026-09-30).
+- **Toasts over native modals:** `RebalanceModal` and every sell-auth modal in
+  `DdpiModal.js` (OtherBroker, Angel One, Dhan, Fyers TPIN) mount their own
+  `<Toast />`; the App.js host renders underneath an open native Modal, so
+  their error toasts were invisible.
+- **Fyers SDK refusal:** when the SDK's pre-placement sell-auth check returns
+  a positive "not authorized" (`OrchestrationError` `sell_auth_declined`),
+  `handleFyersRedirect` opens the Fyers TPIN flow ("No orders were placed")
+  instead of a dead-end error.
+- **SDK root cause of the 2026-10-01 "Place Order did nothing" (Fyers):** the
+  RN SDK's `request()` used `url.searchParams.set`, which React Native's
+  built-in URL does not implement; `getSellAuth` (which sends the SELL
+  symbols) threw on device before any network call since the 2026-09-22
+  pre-check, so every SDK-path rebalance with equity SELLs failed silently.
+  Fixed in alphaquark-mobile-sdk (`buildRequestUrl`); see
+  `alphaquark-mobile-sdk/docs/SELL_AUTH_REFERENCE.md`.
+- **Fyers "Retry Order" loop (3.9.167):** after the customer ticked "I've
+  authorized" and tapped Retry Order, the saved authorization was answered from
+  the server's 5-minute sell-auth cache (still `false`), so the SDK refused and
+  the TPIN sheet reopened. Fixed server-side (`aq_backend_github` `067141e`:
+  the customer `PUT /api/update-edis-status` clears the cache and mirrors onto
+  the broker it names) and in the SDK (`9e0d4e5`: the pre-check reads
+  `fresh=1`). The SDK also stopped blocking on an **unreadable** status: it
+  retries once and places; a broker refusal brings back the TPIN flow via the
+  existing post-placement `hasExplicitSellAuthRejection` path.
+- Pinned by `src/__tests__/sellAuthRetryFeedback.contract.test.js`.
+
+### 7f. One instruction source + one sheet layout (2026-10-01)
+
+Every sell-authorization sheet in `src/components/DdpiModal.js` renders
+`src/components/SellAuth/SellAuthGuideCard.js`:
+- **In-app brokers** — Zerodha `DdpiModal`, Angel One, Dhan, Fyers TPIN
+  modals: `variant="inApp"` shows the rule, the sells to approve and the
+  CDSL steps.
+- **Portal brokers** — `OtherBrokerModel` (main and how-to views):
+  `variant="portal"` shows the rule, the sells, the broker steps and
+  "Open <broker>".
+
+The copy comes from the server (`useSellAuthGuide` →
+`GET /api/sell-auth/guides/:broker`, aq_backend_github
+`utilities/sellAuthGuides.js`), with a generic built-in fallback. Copy
+changes go on the server.
+
+"DDPI Inactive: Proceed with TPIN Mandate" is gone: we cannot read DDPI for
+these brokers. The title is now "Approve today's sell with your CDSL TPIN".
+
+Render sites pass `sellOrders={sellOrdersForAuth(...)}`
+(`src/utils/sellAuthOrders.js`): broker-rejected equity SELLs first, else
+the planned SELLs. Display only, never a gate.
+
+The local `brokerInstructions` object now only supplies the YouTube
+walkthrough ids.
+
+Pinned by `src/__tests__/sellAuthGuide.contract.test.js` and
+`sellAuthGuideCard.render.test.js`.
+
+### 7g. DDPI question after connecting (plan item 4, 2026-10-01)
+
+`src/components/SellAuth/DdpiDeclarationPrompt.js` is mounted at the app root,
+next to `BrokerAlertModal`.
+
+When it asks:
+- once per connected broker (an AsyncStorage key per email + broker),
+  2.5 s after the account shows a connected `user_broker` whose
+  `connected_brokers[]` entry has no `ddpi_self_declared`;
+- never for Zerodha (DDPI is read from Kite) or DummyBroker.
+
+What it does:
+- Asks "Yes / No / Not sure", with a DDPI link from the server guide.
+- Saves via `PUT /api/sell-auth/ddpi-declaration`.
+- Never blocks, and never writes `ddpi_enabled` / `is_authorized_for_sell`.
+- The answer is a display hint only; nothing reads it as authorization yet.
+
+Pinned by `src/__tests__/ddpiDeclarationPrompt.test.js`.
 
 ### 7b. Write path (after WebView completes)
 
@@ -310,10 +459,23 @@ If we add the backend cron OR the per-app check, document it here.
   EDIS-related. Used by `EdisModal` widget to decide whether to surface the
   re-auth UI after a failed trade. Reads ccxt's `classification` field
   ONLY — no keyword fallback.
+- **Deferred-leg terminal normalization (Flutter, 2026-09-28):**
+  `NOT_ATTEMPTED` / `NOT_SUBMITTED` settle without polling and the exact status
+  plus `DEPENDENT_LEG_NOT_ATTEMPTED` classification reaches the host.
 - **Sell-auth status hook** (`useSellAuth.ts`): wraps
   `GET /sdk/v1/connections/:broker/sell-auth` for SDK consumers who want a
   pre-trade check. Currently advisory — Alphab2bapp + tidi_new read flags
   directly from `connected_brokers`.
+
+- **`SellAuthGate` design-passthrough slot (2026-10-01, SDK `7dc0fda`)**: a
+  host may replace the gate's presentation (`sellAuthGate` component
+  override, RN + Flutter). The SDK still applies the visibility check and the
+  DDPI / standing-authorization short-circuit (`DDPI_AWARE_BROKERS`; in
+  `requireSellAuth`, the server-verified `is_authorized_for_sell`) **before**
+  any host presentation renders, and the presentation can only answer via
+  `onAuthorized` / `onDeclined`. Neither AlphaPro nor tidi mounts the SDK
+  `SellAuthGate` today, so no shipped flow changed. SDK mirror:
+  `alphaquark-mobile-sdk/docs/SELL_AUTH_REFERENCE.md`.
 
 ### 8b. What the SDK does NOT own today
 
@@ -356,8 +518,10 @@ incidents. Add new rows when new quirks surface.
 | 2026-05-02 | **All 14 brokers** | Every connect handler hard-coded `is_authorized_for_sell: false` on connect, wiping the user's prior manual EDIS confirmation on every reconnect. | Backend fix: `userRoutes.js` 14 sites + `MultiBrokerService.addBrokerConnection` use `shouldPreserveSellAuth`. |
 | 2026-05-02 | **TPIN/EDIS class** | First "preserve" fix kept flag indefinitely — wrong, EDIS expires daily. Stored TRUE from yesterday → user thinks they can sell, broker rejects mid-trade with POA error. | `sell_auth_set_at` timestamp + `shouldPreserveSellAuth` IST day-check. |
 | (older) | **Zerodha** | `save-ddpi-status` is the only way to know if today's TPIN session is valid — there's no "is current TPIN session active" introspection on Kite. The endpoint returns the current state by attempting a holdings-margin probe under the user's session. | Pattern shipped in tidi_new `RebalanceReviewPage` line 1470-1488. |
-| (older) | **Dhan** | EDIS is per-HOLDING. `get-edis-status` returns per-holding flags; if ANY holding has `edis: false`, the user must re-authorize for that holding via `generate-tpin → enter-tpin` flow. | Pattern in `RebalanceReviewPage._checkDhanEdisStatus`. |
-| (older) | **Fyers** | No live-check API. The `submit-holdings` endpoint returns the CDSL form HTML directly; user completes in WebView; on success, frontend POSTs `update-edis-status` to flip the flag. | tidi `DdpiAuthPage._fyersFlow`. |
+| 2026-09-30 | **Dhan** | The TPIN completion handler updated only the database flag and reopened review while the parent retained its pre-authorization `edis:false` snapshot. Every subsequent Place Order reopened the same TPIN sheet. The gate also used `every()` across the full account, so an unrelated unauthorized holding could block the selected basket. | `DhanTpinModal` now polls `/dhan/edis-status` after the customer confirms CDSL completion, propagates the fresh response to its parent, and reopens review only when every selected SELL has enough approved quantity. All app Dhan gates use the same selected-trade helper. |
+| 2026-09-29 | **Fyers** | Mobile pre-blocked on cached `is_authorized_for_sell=false`, treated generic rejected/empty/transport failures as TPIN, and hosted `submit-holdings` HTML in a second native Modal that could sit behind the information sheet. | Removed the cached pre-gate across recommendation/cart/rebalance surfaces; `hasExplicitSellAuthRejection` is now the control-flow authority; the CDSL form uses the app-root `PublisherWebViewOverlay` while the native sheet is hidden. |
+| 2026-09-29 | **Groww / portal recovery** | After the customer acknowledged manual sell authorization, an empty recalculation was treated as authoritative alignment. The app showed a green success screen and could auto-mark the subscriber execution `executed`, even though the reviewed SELLs had no broker-confirmed completion. | Recovery calculations now carry UI-only sell-authorization context. An empty tagged result renders **Sell Authorization Still Pending**, keeps the rebalance incomplete, and is excluded from the already-aligned auto-acknowledgement path. Genuine zero-trade calculations without recovery context are unchanged. |
+| 2026-09-30 | **Dhan / Tidi quantity recovery** | Dhan rejected all requested SELLs with `DH-906 Validate Qty from CDSL`; ccxt left the rows unclassified and Tidi accepted the CDSL callback/attestation before live approved quantities had propagated. | ccxt maps the rejection to `SELL_AUTH_REVOKED`. Tidi requires exact live quantity coverage after callback and before dispatch. Zero successful SELLs continue to withhold every dependent BUY; at least one successful SELL preserves the established BUY continuation. |
 | 2026-05-04 | **IIFL, Axis, Kotak (2nd path), catch-all (Angel One)** | `ReferenceError: currentUser is not defined` → HTTP 500 on connect. The sell-auth-preserve sed replacement used `currentUser?.is_authorized_for_sell` but 4 of 14 broker blocks in `userRoutes.js` didn't declare `const currentUser = userData[0]`. JS optional chaining on an undeclared variable throws ReferenceError (unlike `typeof` which doesn't). | Fix: inserted `const currentUser = userData[0]` in the 4 missing blocks. Lesson: sed across many sites can introduce ReferenceErrors — always verify each block has the variables the replacement references. |
 | 2026-05-07 | **Angel One** (DDPI sync) | `userDetails.ddpi_enabled` was never updated when DDPI was activated at the broker — the DdpiModal `handleProceed` auto-skip path only set `is_authorized_for_sell: true`. Result: the RebalanceModal sell-auth gate (`!ddpi_enabled && !is_authorized_for_sell`) re-fired every day after the daily TPIN reset, even though DDPI was permanently active server-side. SmartAPI's `verifyDis` returning `errorcode: AG1000` is the canonical signal "DDPI is active at the broker"; we now use it. | `DdpiModal.handleProceed(ddpiActive)` accepts an optional flag; auto-skip path detects AG1000 (or the legacy "already registered with CDSL" message phrasing) and passes `ddpiActive: true`, which adds `ddpi_enabled: true` to the `PUT /api/update-edis-status` payload. Backend route already supported the field — frontend just wasn't passing it. TPIN-completion path (WebView returnURL hit) keeps the default `false` since TPIN doesn't imply DDPI is set. |
 | 2026-05-07 | **Angel One** | SmartAPI rate-limits BOTH `getHolding` AND `verifyDis` at ~1 req/sec. The mobile `AngleOneTpinModal` re-fired `/angelone/verify-edis` on every parent re-render (useEffect dep was the `userDetails` object reference, which flips frequently). Result: SmartAPI returned 403 "Access denied because of exceeding access rate" → ccxt threw `RATE_LIMITED` → either HTTP 500 to mobile OR (when `getHolding` was the rate-limited call) the backend fell into `create_error_response('no holdings found for user.')` and returned `200 { edis: false, data: {} }`. Mobile then opened the DDPI modal with empty form data, the "Proceed" button was enabled (because `!{}` is `false` in JS), user clicked it, and CDSL rejected with **"Some data is missing in posted Form"**. Three-bug compound failure. | Frontend fix (`src/components/DdpiModal.js`): (1) deps narrowed to primitive `jwtToken`/`userEmail` instead of `userDetails` object; (2) `verifyFiredRef` guard so verify-edis fires once per modal open; (3) reset guard on close; (4) button enable now checks `hasUsableEdisData` (DPId + ReqId + TransDtls all present) — not the truthy-empty `{}`. Backend fix (`brokers/angelone/angelone.py verify_dis`): retry once with 1.5s backoff on rate-limit for both `getHolding` and `verifyDis`, surface RATE_LIMITED as a clean error response with actionable message. Lesson: empty object `{}` is truthy — never use `!data` to gate UI; check the specific fields you need. |

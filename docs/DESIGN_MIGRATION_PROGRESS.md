@@ -19,6 +19,227 @@
 
 ---
 
+## 2026-10-01 — SDK design-passthrough slots consumed (SDK `7dc0fda`); default registry keeps SDK built-ins
+
+- **Phase**: SDK passthrough 7e/7f (`SDK_DESIGN_PASSTHROUGH.md § 7`)
+- **Surfaces touched**: `designs/default/sdk/index.js` (headers, `rebalancePnlChoice`, `brokerSelectionList` → `null`), `jest.config.js` (babel-runtime / React / React Native / webview mappings so tests can render the symlinked SDK package), `src/__tests__/sdkSlotPassthrough.render.test.js` (new, 11 tests)
+- **Verdict changes**: new audit row "SDK widget slots"
+- **What shipped**: the SDK now consumes every declared slot as a presentation-only override. Without the registry change, AlphaPro would have switched its broker-login and Kite headers to the never-rendered standalone files on its next build; `null` keeps the SDK built-ins. Registry entries that re-export SDK widgets are ignored by the SDK's `resolveSlot` guard.
+- **Tests**: 11/11 slot render tests; full Jest 1406/1407 (the one failure, `brokerTradeFlow` Kotak payload, pre-existing); audits pass.
+- **Next**: visual regression per slot (7g).
+
+## 2026-10-01 — configurable navigation: data-only manifest for tabs, More menu, pre-login order
+
+- **Phase**: registry-contract extension (new `navigation` variant field) + P0–P3 of `CONFIGURABLE_NAVIGATION_DESIGN.md`
+- **Surfaces touched**: `src/navigation/{screenCatalog,resolveNavigation,useNavigationLayout}.js` (new), `designs/default/navigation.js` (new), `designs/default/index.js`, `designs/default/shell/MainTabBar.js`, `src/design/resolveDesign.js`, `src/components/Navigation.js`, `src/screens/Home/AccountSettingsScreen.js`, `src/components/SplashScreen.js`, `src/utils/Logging.js`, `scripts/audit-design-boundaries.js`
+- **Verdict changes**: MainTabNavigator tab structure → `migrated (data manifest)` (new audit row); AccountSettingsScreen menu structure now manifest-driven
+- **What shipped**: tabs, first tab, More-menu sections, phone-first pre-login order and tab-bar height are declared per variant as a data-only manifest and resolved against a src-owned catalog (legacy route names kept; required More tab + legal/delete/logout rows re-added if dropped; money/compliance steps have no catalog keys). The hard-coded arfs News swap was removed from upstream (it belongs in the arfs fork's manifest). Default manifest reproduces the prior app exactly — pinned by `src/__tests__/navigation/defaultNavigationSnapshot.test.js`.
+- **P0 finding**: every mobile fork's remote `Navigation.js` predates `DesignTabBar`/`shell.MainTabBar`; most divergence is lag, not deliberate navigation. Only arfs (no More tab; News + Watchlist) and magnus changed the tab set. The arfs fork's shipped tab bar has no More tab — verify it still exposes Log Out / Delete Account elsewhere (Apple 5.1.1(v)).
+- **Tests**: 3 new suites (resolver, default-manifest snapshot, manifest contract incl. audit rule); full Jest 1391/1392 (the 1 failure, `brokerTradeFlow` Kotak payload, also fails on clean HEAD); Android release JS bundle builds; `audit:design` / `audit:styles` / `audit:imports` pass.
+- **Regressions / rollbacks**: none known. Rollback = revert the commit (JS-only; OTA-able).
+- **Next**: P4 — each fork adopts the current shell and declares its manifest (arfs first).
+
+## 2026-09-29 — warn when a recommendation SELL uses model-owned shares
+
+- **Phase**: Phase G behavior added before the planned review-modal extraction.
+- **Surfaces touched**: `src/components/ReviewTradeModal.js`,
+  `src/components/ReviewZerodhaTradeModal.js`,
+  `src/components/AdviceScreenComponents/SellModelImpactNotice.js`, and
+  `src/hooks/useSellModelImpact.js`.
+- **Verdict changes**: `ReviewTradeModal` remains
+  `needs-logic-extraction`; `SellModelImpactNotice` is pure enough to extract
+  after the parent container split.
+- **What shipped**: a token-compatible warn card renders only for a SELL that
+  reaches model-attributed shares. It offers pre-filled free-only or exact
+  model-reduction choices. Network/state/authorization logic remains in
+  `src/`; the card uses `designColor` and `designFont`, so the style ratchet
+  stays clean.
+- **Regressions / rollbacks**: none observed; warn mode never disables Place
+  Order and failed preview/reservation calls preserve the old flow.
+- **Next**: when Phase G extracts the review presentation, expose notice rows
+  and `onChoose` via viewModel/actions without moving API calls into
+  `designs/`.
+
+---
+
+## 2026-09-29 — audit dynamic import() in the design boundary
+
+- **Phase**: boundary hardening (post Phase I).
+- **Surfaces touched**: `scripts/audit-design-boundaries.js`,
+  `src/__tests__/designBoundaryDynamicImport.test.js`,
+  `docs/VARIANT_CREATION_GUIDE.md`, `docs/DESIGN_SYSTEM_ARCHITECTURE.md`,
+  `docs/DESIGN_COMPONENT_AUDIT.md`, `CLAUDE.md`, `AGENTS.md`.
+- **Verdict changes**: none.
+- **What shipped**: the audit inspects `import()` as a dependency edge
+  (string / template literal resolved like a static import; non-literal
+  rejected). `auditSource()` is exported for tests and the CLI runs only as
+  `main`. The variant guide gained a "which change needs what" table, the
+  boundary rule, build-time literal tokens and the current Maestro baseline
+  procedure; CLAUDE.md/AGENTS.md now route design work to it.
+- **Regressions / rollbacks**: none — baseline remains 0; the new test passes.
+  (`__tests__/maestroVisualBaseline.test.js` needs `npm install` for the
+  `pngjs`/`pixelmatch` devDependencies added in `c7a4d54`.)
+- **Next**: first green KVM Maestro comparison run; per-variant baselines as
+  real variants are added.
+
+---
+
+## 2026-09-28 — restore the source style ratchet after SELL-retry UI
+
+- **Phase**: Phase I debt containment before RebalanceCard extraction.
+- **Surfaces touched**: `src/UIComponents/RebalanceAdvicesUI/RebalanceCard.js`.
+- **Verdict changes**: none; RebalanceCard remains `needs-logic-extraction`.
+- **What shipped**: the newly added SELL-retry badge reads its inverse text
+  color and caption typography from `useTokens()` instead of adding one color
+  and one font literal. The enforced baseline is restored to 4,409 colors and
+  1,147 font-family literals.
+- **Regressions / rollbacks**: no behavior or copy change; 30 rebalance
+  lifecycle contracts and all three CI audits pass.
+- **Next**: split RebalanceCard into a src behavior container and registered
+  presentation before converting its remaining legacy styles.
+
+---
+
+## 2026-09-28 — clear the design presentation boundary
+
+- **Phase**: G–I boundary completion.
+- **Surfaces touched**: app header/bottom tabs, Home, Bespoke Performance, MP invest, Portfolio,
+  Knowledge Hub, authentication, stock/basket cards, Live Room, NBA,
+  Portfolio Health, and Portfolio Summary presentations and their src-owned
+  containers.
+- **Verdict changes**: the executable audit discovers **0 forbidden import
+  edges in 0 design files**, down from 55 edges in 15 files.
+- **What shipped**: app-owned visual collaborators are injected through
+  container-owned `slots`; network, storage, context, navigation, payment,
+  Digio, and SDK behavior stays in `src/`. New src containers own NBA ranking,
+  Portfolio Health consent/reconciliation, and Portfolio Summary fetching.
+  The unreferenced `AumPerformanceCard` registration was removed instead of
+  preserving an unreachable service consumer. The navigator now resolves
+  `shell.AppHeader` and `shell.MainTabBar`, while src retains route state and
+  tab event handling.
+- **Regressions / rollbacks**: the presentations retain their existing markup
+  and callbacks. Focused design/portfolio contracts pass 19/19; targeted lint
+  passes. Repository-wide lint remains blocked by the existing unrelated lint
+  backlog.
+- **Next**: establish a hardcoded-style ratchet/codemod, then add fixture-render
+  and screenshot coverage per variant.
+
+The first style-literal ratchet is now active in the same CI workflow:
+`npm run audit:styles` pins production `src/` at 4,409 hex-color literals and
+1,147 `fontFamily` literals (token definitions and tests excluded). Either
+count increasing fails; a decrease is also stale until the baseline is lowered.
+This is debt containment, not completion of tokenization.
+
+---
+
+## 2026-09-28 — extract provisional-banner logic and stabilize config tokens
+
+- **Phase**: G — container/presentation boundary reduction and contract hardening.
+- **Surfaces touched**: `src/context/ConfigContext.js`, the Home container and
+  presentation, `ProvisionalBanner`, `PortfolioTransitionCard`, the boundary
+  baseline, and the design contract test.
+- **Verdict changes**: `ProvisionalBanner` and `PortfolioTransitionCard` move
+  from `needs-logic-extraction` to `migrated`; the ratchet falls from 62 edges
+  in 17 files to 55 edges in 15 files.
+- **What shipped**: the Home container now owns the provisional mandate request,
+  identity/tenant headers, dismissal state and date formatting; variants receive
+  a stable `{viewModel, actions}` contract. The deferred transition presentation
+  receives its feature gate as `enabled`. `ConfigContext.Provider` memoizes its
+  value so unrelated provider renders do not rebuild every token family.
+- **Regressions / rollbacks**: the provisional banner retains the same endpoint,
+  headers, copy and hidden-on-error behavior. The transition card remains disabled
+  and unmounted unless a future src-owned caller explicitly enables it.
+- **Next**: extract `PortfolioHealthSheet`, then `PortfolioSummaryCard`; add real
+  fixture rendering and visual regression once those direct-side-effect surfaces
+  are prop-driven.
+
+---
+
+## 2026-09-27 — enforce the complete variant contract and stop new design-layer logic
+
+- **Phase**: post A–I contract hardening.
+- **Surfaces touched**: `src/theme/useTokens.js`, `src/design/resolveDesign.js`,
+  `src/design/useDesign.js`, `src/sdk/SdkProviderRoot.js`,
+  `scripts/audit-design-boundaries.js`,
+  `scripts/design-boundary-baseline.json`, the design contract test, npm script,
+  and the import-lint workflow.
+- **Verdict changes**: no historical leak is promoted to migrated. The first
+  machine audit classifies 62 forbidden import edges across 17 design files as
+  explicit `needs-logic-extraction` debt.
+- **What shipped**: all six token families now resolve through the active
+  variant; the registry merges app components and SDK slots over the default
+  floor; all registered variants fail fast on private component/SDK keys; and
+  `SdkProviderRoot` forwards the resolved SDK map to `AqSdkProvider`. CI now
+  blocks any new network/storage/Firebase/navigation/context/service/src-UI
+  dependency in `designs/**` while requiring baseline entries to be removed as
+  extractions land.
+- **Regressions / rollbacks**: default tokens and default SDK widgets fall back
+  to the same implementations, so the default build has no intended visual or
+  workflow change. Existing design-layer debt remains functional but visible.
+- **Next**: extract the six direct side-effect composites in the priority order
+  recorded in the architecture/audit docs, then remove src-owned child
+  containers from screen presentations. Add screenshot regression coverage
+  once the presentation boundary reaches zero.
+
+---
+
+## 2026-08-16 — BasketCard lifecycle and entry-gate presentation contract
+
+- **Phase**: G — existing container/presentation split extension.
+- **Surfaces touched**: `src/UIComponents/StockAdvicesUI/BasketCard.js`,
+  `designs/default/composites/BasketCard.js`.
+- **Verdict changes**: BasketCard stale `needs-logic-extraction` row corrected
+  to migrated; StockAdvicesUI folder now records mixed status.
+- **What shipped**: the container owns canonical lifecycle and five-second
+  server entry authorization; the presentation receives status badges,
+  disabled state and customer copy. Variants must consume those fields and
+  must not reinterpret raw cancel/closure flags.
+- **Regressions / rollbacks**: none. Zerodha remains one Publisher WebView;
+  the design layer does not own ordering or broker execution.
+- **Next**: custom variants may adjust visual treatment while preserving the
+  expanded viewModel contract.
+
+## 2026-07-28 — QA asset-fallback hardening for Payment History and MP cards
+
+- **Phase**: G (screen container/presentation refinement) + I (Model Portfolio
+  composite refinement).
+- **Surfaces touched**:
+  - `src/screens/Drawer/PaymentHistoryScreen.js` supplies
+    `advisorLogo`/`advisorLogoFallback`; the container remains responsible for
+    tenant configuration and invoice I/O.
+  - `designs/default/screens/PaymentHistoryScreen.js` owns the visual fallback
+    chain and advances to the next source on `Image.onError`.
+  - `src/components/ModelPortfolioComponents/MPCard.js` owns remote-image
+    failure state; `designs/default/composites/MPCard.js` only reports
+    `onImageError` and renders the supplied fallback source.
+- **Verdict changes**: `MPCard` is recorded as migrated in the component audit;
+  Payment History remains a container/presentation split.
+- **What shipped**: stale or missing remote image URLs no longer render retired
+  branding or an empty plan-logo tile. Presentation components remain free of
+  config contexts and network calls.
+- **Regressions / rollbacks**: the historical invoice logo remains the final
+  fallback for tenants with neither live nor bundled branding. A new image prop
+  resets the MP failure state, so list-cell reuse does not pin the prior
+  fallback.
+- **Next**: device smoke-test both rows after the next mobile build.
+
+---
+
+## 2026-07-24 — client "markup" PDF UPDATE 1 / 6 / 7 / 8 — design-system side of the fix batch
+
+- **Phase**: G (screen container/presentation splits, refinement) + I (Model Portfolio surfaces).
+- **Surfaces touched**:
+  - `designs/default/composites/MPCard.js` — added `marginRight: 10` to `styles.container` so horizontal MP carousels (Home tab) render with gaps between cards, matching the existing `MPCardBespoke` treatment. Vertical lists are unaffected because the card already had `marginBottom: 14`.
+  - `src/screens/Drawer/BespokePerformanceScreen.js` (container) — added `useTokens()` import; extracts `colors.brand.gradientStart / gradientEnd / primary` into local `gradient1 / gradient2 / mainColor`; adds those three fields to the viewModel passed into the `screens.BespokePerformanceScreen` presentation. Fixes the OverView-tab label casing to "Overview".
+  - `designs/default/screens/BespokePerformanceScreen.js` (presentation) — destructures `gradient1 / gradient2 / mainColor` from viewModel with the previous hardcoded fallbacks (`'#002651'`, `'#0076fb'`, `'#0056B7'`); header `LinearGradient` swapped from the hardcoded pair to `[gradient1, gradient2]`; Invest-now button gets an inline `{ backgroundColor: mainColor }` override on top of `styles.investButton`. Also refactored the two tab render functions from concise-body arrow returns to block bodies so we could add defensive shape normalization for `strategyDetails.keyFeature` / `keyBenefit` (Update 4) and read the admin-configured `investmentManagement` + `researchInvestment` fields into the Overview tab (Update 7). Fallback promo-block preserved for empty admin content.
+  - `src/components/ReviewTradeModal.js` — this modal is NOT under `designs/` today (it's still in `src/components/`); noted here because Update 8 substitutes `useConfig()` `gradient1 / gradient2 / mainColor` (already destructured but previously unused) into the two `LinearGradient` headers, the Fix-Size button, and the two Place-Order CTAs. When this file eventually moves under `designs/default/composites/` per Phase G/H, the switch will already be token-driven.
+- **Verdict changes**: none. All rows were already `migrated` (`MPCard`, `BespokePerformanceScreen` presentation). This is a **refinement pass** on already-migrated surfaces — same shape as the earlier 2026-07-11 MP hardcoded-color sweep. `DESIGN_COMPONENT_AUDIT.md` verdicts unchanged.
+- **What shipped**: cross-tenant fix for a clashing hardcoded blue that ignored `useTokens()` — every whitelabel gets its own header tone from `colors.brand.gradientStart/End` without any per-tenant fork edit. Bespoke-detail Overview tab now surfaces two admin content blocks (`investmentManagement`, `researchInvestment`) that were previously unread by mobile despite being required inputs on the admin plan editor.
+- **Regressions / rollbacks**: none expected. Every color read has the prior hardcoded value as a fallback, so a tenant without tokens (or a token bundle missing `brand.gradient*`) renders exactly as before. The two arrow-body-to-block-body refactors preserved JSX output byte-for-byte; only the closing `),` became `);\n},` per JS syntax.
+- **Next**: markup fork picks this up via content-port; see `../markup_app/docs/CHANGELOG.md` 2026-07-24 entry — a follow-up decision on markup's header color mismatch (light-gray tokens vs. dark home hardcode) is open. Watch for whether markup opts to migrate the Home screen off its hardcoded `['#000000', '#3A3A3A']` gradient onto the same tokens — that would close the loop cleanly without per-file overrides.
+
+---
+
 ## 2026-07-11 — `moneyman_app` variant + variant-aware `buildColors` + `mpCardColorCycle` for Portfolio-tab MP rows
 
 - **Phase**: B (registry / variant plumbing) + I (Model Portfolio surfaces).
@@ -613,4 +834,7 @@ Purpose: token-migrated the fallback hex in every MP surface that was doing `con
   in the container.
 - `AfterSubscriptionScreen`: clarified the holdings/target/strategy hierarchy,
   removed the duplicate/misleading expiry presentation, and moved Exit/Modify
-  into an adaptive safe-area action bar. Data ownership remains unchanged.
+  into an adaptive safe-area action bar. The detail hero and Holdings tab now
+  keep a dedicated loading presentation until broker/subscription data settles,
+  preventing a completed portfolio from briefly appearing empty. Data ownership
+  remains unchanged.

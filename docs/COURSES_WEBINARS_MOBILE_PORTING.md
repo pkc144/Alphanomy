@@ -791,3 +791,21 @@ app or is web/admin-only and out of mobile scope. The app's viewer-facing
 course + webinar flows — including the **live** class via the WebView bridge —
 are at parity. The only open item is a real-device check of WebRTC-in-WKWebView
 on iOS.
+
+---
+
+## 11. QA verification — Buy Ticket registration failure (2026-07-28)
+
+The QA document's paid-webinar screenshot matches the host-registration
+collision fixed on 2026-06-26 by backend commit `4e50aa3`, which is present on
+the production backend:
+
+- `/public` enrollment lookup excludes `{isHost: true}`;
+- `/purchase` already-enrolled lookup excludes `{isHost: true}`;
+- `/purchase-status` enrollment lookup excludes `{isHost: true}`; and
+- the registration upsert key keeps host and customer rows separate for the
+  same lesson/email.
+
+An admin who is auto-registered as the webinar host can therefore still use the
+customer Buy Ticket flow for testing. No mobile API, Cashfree invocation, or
+form change was needed in the 2026-07-28 QA batch.

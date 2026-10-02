@@ -29,7 +29,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import moment from 'moment';
 import { useTrade } from '../TradeContext';
 import { generateToken } from '../../utils/SecurityTokenManager';
-import { getAdvisorSubdomain } from '../../utils/variantHelper';
+import {getAdvisorSubdomain, getBuildTenantSubdomain} from '../../utils/variantHelper';
+import { setAccountEmail, isPlaceholderName } from '../../utils/accountEmail';
 import { useConfig } from '../../context/ConfigContext';
 import { useComponent } from '../../design/useDesign';
 
@@ -114,7 +115,17 @@ const LoginScreen = () => {
             }
 
             const inlineConfig = userDetails.data?.advisorConfig;
-            if (inlineConfig) {
+            // The inline advisorConfig blob is keyed to the user's mongo
+            // advisor_ra_code, not the env-pinned Config.ADVISOR_RA_CODE.
+            // For users registered under multiple advisors (cross-fork
+            // signups), those two diverge — trusting the inline blob then
+            // writes prod's REACT_APP_HEADER_NAME ("prod") into AsyncStorage
+            // and every subsequent API call sends X-Advisor-Subdomain: prod.
+            const inlineMatchesEnvRa =
+                !Config?.ADVISOR_RA_CODE ||
+                (userData?.advisor_ra_code || '').toUpperCase().trim() ===
+                    Config.ADVISOR_RA_CODE.toUpperCase().trim();
+            if (inlineConfig && inlineMatchesEnvRa) {
                 await storeLoginData({
                     raCode: advisorRaCode,
                     userData: { email: userEmail, advisor_ra_code: advisorRaCode, profileCompleted: true, ...userData },
@@ -165,7 +176,7 @@ const LoginScreen = () => {
                         {
                             headers: {
                                 'Content-Type': 'application/json',
-                                'X-Advisor-Subdomain': getAdvisorSubdomain(),
+                                'X-Advisor-Subdomain': getBuildTenantSubdomain(),
                                 'aq-encrypted-key': generateToken(Config.REACT_APP_AQ_KEYS, Config.REACT_APP_AQ_SECRET),
                             },
                             timeout: 10000,
@@ -178,7 +189,7 @@ const LoginScreen = () => {
                         {
                             headers: {
                                 'Content-Type': 'application/json',
-                                'X-Advisor-Subdomain': getAdvisorSubdomain(),
+                                'X-Advisor-Subdomain': getBuildTenantSubdomain(),
                                 'aq-encrypted-key': generateToken(Config.REACT_APP_AQ_KEYS, Config.REACT_APP_AQ_SECRET),
                             },
                             timeout: 10000,
@@ -209,6 +220,35 @@ const LoginScreen = () => {
             let userMessage = 'Something went wrong. Please try again.';
             if (e.code === 'auth/invalid-credential' || e.code === 'auth/wrong-password') {
                 userMessage = 'Invalid email or password. Please check your credentials and try again.';
+                // A wrong password and "this account never set a password"
+                // both surface as invalid-credential. Ask the backend which
+                // providers the account has; if it's Google-only, point the
+                // user at Google sign-in instead of retrying a password that
+                // was never set. Best-effort, async override (web parity:
+                // prod-alphaquark-github SignInEmail.js checkProviderForHint).
+                (async () => {
+                    try {
+                        const resp = await axios.post(
+                            `${server.server.baseUrl}api/auth/check-provider`,
+                            { email: trimmedEmail },
+                            {
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-Advisor-Subdomain': getBuildTenantSubdomain(),
+                                    'aq-encrypted-key': generateToken(Config.REACT_APP_AQ_KEYS, Config.REACT_APP_AQ_SECRET),
+                                },
+                                timeout: 8000,
+                            },
+                        );
+                        const data = resp?.data || {};
+                        if (data.hasGoogle && !data.hasPassword) {
+                            setError('This account signed up with Google. Please use "Continue with Google" to sign in.');
+                            setErrorShow(true);
+                        }
+                    } catch (_) {
+                        // best-effort hint only — generic message already shown
+                    }
+                })();
             } else if (e.code === 'auth/user-not-found') {
                 userMessage = 'No account found with this email. Please sign up first.';
             } else if (e.code === 'auth/invalid-email') {
@@ -229,46 +269,86 @@ const LoginScreen = () => {
     }, [email, password]);
 
     const handleGoogleLogin = useCallback(async () => {
+        if (loading) return;
         try {
             setErrorShow(false);
+            // Set loading BEFORE the sign-in sheet is presented so the button
+            // is disabled while the hosted Google flow is up. A second tap
+            // would otherwise call signIn() again and GIDSignIn cancels the
+            // first session with -5 "user canceled" (observed on both
+            // simulators: two SafariViewService presentations ~4s apart).
+            setLoading(true);
             await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-            const { idToken } = await GoogleSignin.signIn();
+            const signInResult = await GoogleSignin.signIn();
+            // v12 shape: { user: { email, ... }, idToken, ... }. Some
+            // consumers may still see the older { data: { ... } } wrapping.
+            const idToken =
+                signInResult?.idToken ||
+                signInResult?.data?.idToken ||
+                null;
+            // On iOS Firebase's signInWithCredential can leave FIRUser.email
+            // null when the accessToken slot is empty (we only pass idToken),
+            // so the backend gets `getUser/null` and every downstream call
+            // fails. Use the email GoogleSignin itself returned as the
+            // authoritative identity, mirroring the Apple Sign-In path
+            // (which trusts the provider's email over Firebase's user.email
+            // for the same reason).
+            const googleEmailFromSDK =
+                signInResult?.user?.email ||
+                signInResult?.data?.user?.email ||
+                null;
+            const googleNameFromSDK =
+                signInResult?.user?.name ||
+                signInResult?.data?.user?.name ||
+                null;
+            const googlePhotoFromSDK =
+                signInResult?.user?.photo ||
+                signInResult?.data?.user?.photo ||
+                null;
             if (!idToken) throw new Error('No ID token returned');
 
             const googleCredential = auth.GoogleAuthProvider.credential(idToken);
-            setLoading(true);
             const response = await auth().signInWithCredential(googleCredential);
 
             if (response) {
                 const user = response.user;
+                const effectiveEmail = String(user?.email || googleEmailFromSDK || '')
+                    .trim()
+                    .toLowerCase();
+                if (!effectiveEmail) {
+                    throw new Error('Google did not return an email for this account. Please try again.');
+                }
+                const effectiveName = user?.displayName || googleNameFromSDK || null;
+                const effectivePhoto = user?.photoURL || googlePhotoFromSDK || null;
+
                 await axios.post(
                     `${server.server.baseUrl}api/user/`,
-                    { email: user.email, name: user.displayName, imageUrl: user.photoURL },
+                    { email: effectiveEmail, name: effectiveName, imageUrl: effectivePhoto, firebaseId: user.uid },
                     {
                         headers: {
                             'Content-Type': 'application/json',
-                            'X-Advisor-Subdomain': getAdvisorSubdomain(),
+                            'X-Advisor-Subdomain': getBuildTenantSubdomain(),
                             'aq-encrypted-key': generateToken(Config.REACT_APP_AQ_KEYS, Config.REACT_APP_AQ_SECRET),
                         },
                     },
                 );
 
                 const userDetails = await axios.get(
-                    `${server.server.baseUrl}api/user/getUser/${user.email}?includeAdvisorConfig=true`,
+                    `${server.server.baseUrl}api/user/getUser/${effectiveEmail}?includeAdvisorConfig=true`,
                     {
                         headers: {
                             'Content-Type': 'application/json',
-                            'X-Advisor-Subdomain': getAdvisorSubdomain(),
+                            'X-Advisor-Subdomain': getBuildTenantSubdomain(),
                             'aq-encrypted-key': generateToken(Config.REACT_APP_AQ_KEYS, Config.REACT_APP_AQ_SECRET),
                         },
                     },
                 );
 
                 const subdomain = config?.subdomain || config?.advisorRaCode?.toLowerCase();
-                trackAppUser({ email: user.email, firebase_id: user.uid, name: user.displayName, login_method: 'google', advisor_subdomain: subdomain });
-                logLoginAttempt({ email: user.email, firebase_id: user.uid, status: 'success', login_method: 'google', advisor_subdomain: subdomain });
+                trackAppUser({ email: effectiveEmail, firebase_id: user.uid, name: effectiveName, login_method: 'google', advisor_subdomain: subdomain });
+                logLoginAttempt({ email: effectiveEmail, firebase_id: user.uid, status: 'success', login_method: 'google', advisor_subdomain: subdomain });
 
-                await handlePostLoginNavigation(userDetails, user.email);
+                await handlePostLoginNavigation(userDetails, effectiveEmail);
             }
         } catch (e) {
             console.error('❌ Google login error:', e.code, e.message);
@@ -317,41 +397,120 @@ const LoginScreen = () => {
     const completeAppleSignIn = async (user, userEmail, fullName) => {
         try {
             setLoading(true);
+            // Apple returns `fullName` ONLY on the first-ever authorization
+            // for an Apple ID — on any re-install or re-login it is null. The
+            // old code fell through to the literal 'Apple User', wrote it onto
+            // the Firebase profile AND POSTed it as the backend account name,
+            // so `userDetails.name` itself became "Apple User" and every
+            // greeting rendered it permanently. Never persist a placeholder:
+            // fall back to the typed email's local part, which is a real,
+            // user-recognisable identity.
+            const nameFromEmail = String(userEmail || '').split('@')[0].trim();
             let displayName = user.displayName;
+            if (isPlaceholderName(displayName)) {
+                displayName = null;
+            }
             if (!displayName && fullName) {
                 const nameParts = [fullName.givenName, fullName.familyName].filter(Boolean);
-                displayName = nameParts.join(' ') || 'Apple User';
+                displayName = nameParts.join(' ') || null;
             }
-            displayName = displayName || 'Apple User';
+            displayName = displayName || nameFromEmail || '';
+
+            // Persist displayName onto the Firebase user so downstream reads
+            // (TradeContext auth.currentUser.displayName, Home greeting) have
+            // it. Apple's identityToken doesn't carry displayName the way
+            // Google's credential does — without updateProfile the Firebase
+            // user stays permanently nameless, which is why the Home header
+            // renders "Hello," with no name after Apple sign-in even when
+            // the backend user was created with the right name.
+            try {
+                // Also repair a profile that already carries the old
+                // 'Apple User' placeholder from a previous build.
+                if (
+                    displayName &&
+                    (!user.displayName ||
+                        isPlaceholderName(user.displayName) ||
+                        user.photoURL == null)
+                ) {
+                    await user.updateProfile({
+                        displayName,
+                        photoURL: user.photoURL || null,
+                    });
+                }
+            } catch (updateErr) {
+                console.warn('Apple: user.updateProfile failed (non-fatal):', updateErr?.message);
+            }
+
+            // CRITICAL: lowercase the email before every backend call.
+            // The backend's POST /api/user/ (aq_backend_github/Routes/userRoutes.js:381)
+            // stores email VERBATIM but its GET /api/user/getUser/:email
+            // (same file line 278) lowercases the URL param before the mongo
+            // lookup. Apple's identityToken can carry a mixed-case email
+            // (Firebase preserves the case) — if we POST as-is, backend
+            // stores "Pratik@Gmail.com"; when the downstream
+            // TradeContext.getUserDeatils() GETs, backend lowercases the
+            // URL to "pratik@gmail.com" and returns 404 because the stored
+            // email doesn't match. Google's flow doesn't hit this because
+            // Google always issues lowercase emails.
+            // Normalize once, use everywhere so POST and every GET agree.
+            // The PASSED userEmail wins over Firebase's user.email: for
+            // Apple "Hide My Email" flows user.email is a
+            // @privaterelay.appleid.com alias (or null) and userEmail is
+            // the real address the user typed on EmailScreenAppleLogin —
+            // creating the record under the relay alias orphans the user
+            // from their subscription/plans (2026-07-20).
+            const effectiveEmail = String(userEmail || user.email).trim().toLowerCase();
+
+            // Persist the resolved account identity: every consumer of
+            // utils/accountEmail (TradeContext, App.js, SplashScreen, and
+            // every screen using useAccountEmail/getAccountEmail) cannot
+            // rely on auth.currentUser.email for Apple sign-ins — it stays
+            // null / relay-aliased for the life of the Firebase user.
+            // setAccountEmail persists AND updates the in-memory cache that
+            // getAccountEmail() serves synchronously, then emits
+            // ACCOUNT_EMAIL_EVENT so already-mounted screens (whose auth
+            // listener fired BEFORE this point, at signInWithCredential,
+            // and read an empty key) hydrate without waiting for another
+            // auth-state change.
+            try {
+                await setAccountEmail(effectiveEmail);
+            } catch (persistErr) {
+                console.warn('aq_account_email persist failed (non-fatal):', persistErr?.message);
+            }
 
             await axios.post(
                 `${server.server.baseUrl}api/user/`,
-                { email: userEmail, name: displayName, imageUrl: user.photoURL || null },
+                {
+                    email: effectiveEmail,
+                    name: displayName,
+                    imageUrl: user.photoURL || null,
+                    firebaseId: user.uid,
+                },
                 {
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-Advisor-Subdomain': getAdvisorSubdomain(),
+                        'X-Advisor-Subdomain': getBuildTenantSubdomain(),
                         'aq-encrypted-key': generateToken(Config.REACT_APP_AQ_KEYS, Config.REACT_APP_AQ_SECRET),
                     },
                 },
             );
 
             const userDetails = await axios.get(
-                `${server.server.baseUrl}api/user/getUser/${userEmail}?includeAdvisorConfig=true`,
+                `${server.server.baseUrl}api/user/getUser/${effectiveEmail}?includeAdvisorConfig=true`,
                 {
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-Advisor-Subdomain': getAdvisorSubdomain(),
+                        'X-Advisor-Subdomain': getBuildTenantSubdomain(),
                         'aq-encrypted-key': generateToken(Config.REACT_APP_AQ_KEYS, Config.REACT_APP_AQ_SECRET),
                     },
                 },
             );
 
             const subdomain = config?.subdomain || config?.advisorRaCode?.toLowerCase();
-            trackAppUser({ email: userEmail, firebase_id: user.uid, name: displayName, login_method: 'apple', advisor_subdomain: subdomain });
-            logLoginAttempt({ email: userEmail, firebase_id: user.uid, status: 'success', login_method: 'apple', advisor_subdomain: subdomain });
+            trackAppUser({ email: effectiveEmail, firebase_id: user.uid, name: displayName, login_method: 'apple', advisor_subdomain: subdomain });
+            logLoginAttempt({ email: effectiveEmail, firebase_id: user.uid, status: 'success', login_method: 'apple', advisor_subdomain: subdomain });
 
-            await handlePostLoginNavigation(userDetails, userEmail);
+            await handlePostLoginNavigation(userDetails, effectiveEmail);
         } catch (e) {
             console.error('Error completing Apple Sign-In:', e);
             setError(e.message || 'Failed to complete sign in');
@@ -366,30 +525,59 @@ const LoginScreen = () => {
         try {
             setErrorShow(false);
             setLoading(true);
+            if (!appleAuth.isSupported) {
+                throw new Error('Sign in with Apple is not supported on this device.');
+            }
             const appleAuthRequestResponse = await appleAuth.performRequest({
                 requestedOperation: appleAuth.Operation.LOGIN,
                 requestedScopes: [appleAuth.Scope.EMAIL, appleAuth.Scope.FULL_NAME],
             });
-            const credentialState = await appleAuth.getCredentialStateForUser(appleAuthRequestResponse.user);
-            if (credentialState !== appleAuth.State.AUTHORIZED) {
-                throw new Error('Apple Sign-In was not authorized');
-            }
             const { identityToken, nonce, fullName, email: appleEmail } = appleAuthRequestResponse;
             if (!identityToken) throw new Error('Apple Sign-In failed - no identity token returned');
+            // getCredentialStateForUser is best-effort: on some devices (esp. iPad)
+            // it can return NOT_FOUND immediately after a successful login even
+            // though the identityToken is valid. Log and continue rather than
+            // erroring out — Firebase will reject the token if it's actually bad.
+            try {
+                const credentialState = await appleAuth.getCredentialStateForUser(appleAuthRequestResponse.user);
+                if (credentialState !== appleAuth.State.AUTHORIZED) {
+                    console.warn('Apple credentialState was not AUTHORIZED:', credentialState);
+                }
+            } catch (stateErr) {
+                console.warn('Apple credentialState check failed:', stateErr?.message);
+            }
 
             const appleCredential = auth.AppleAuthProvider.credential(identityToken, nonce);
             const response = await auth().signInWithCredential(appleCredential);
 
             if (response) {
                 const user = response.user;
-                let userEmail = appleEmail || user.email;
+                // Apple ALWAYS returns an email — either the real address
+                // ("Share My Email") or a @privaterelay.appleid.com alias
+                // ("Hide My Email"). The relay is a real, forwarding address
+                // and therefore a valid, STABLE account identity (it is the
+                // same alias on every login for this Apple ID + app). Per App
+                // Store Review Guideline 4 (Design → Sign in with Apple) we
+                // MUST use the email the Authentication Services framework
+                // provides and MUST NOT require the user to type it — so we
+                // accept whatever Apple gives, relay included, as the identity.
+                //   • appleEmail is populated ONLY on the first authorization.
+                //   • user.email (Firebase) carries it on every subsequent
+                //     login, since Firebase persists the address from first
+                //     sign-in.
+                // Account-linking to a different (real-email) account is a
+                // separate, OPTIONAL, user-initiated flow after login — never
+                // a gate here (that mandatory email screen is exactly what
+                // Guideline 4 rejects).
+                const userEmail = user.email || appleEmail || null;
                 if (!userEmail) {
+                    // Should not happen after a valid first authorization
+                    // (Apple always supplies an email and Firebase persists
+                    // it). If it somehow does, surface an error rather than
+                    // blocking on an email-entry screen (Guideline 4).
                     setLoading(false);
-                    navigation.navigate('EmailScreenAppleLogin', {
-                        onSubmit: async (collectedEmail) => {
-                            if (collectedEmail) await completeAppleSignIn(user, collectedEmail, fullName);
-                        },
-                    });
+                    setError('Apple did not return an email for this account. Please try signing in again.');
+                    setErrorShow(true);
                     return;
                 }
                 await completeAppleSignIn(user, userEmail, fullName);

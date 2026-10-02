@@ -1,5 +1,23 @@
 # SDK Orchestration Contract — TS + Dart Parallel API Surface
 
+## Order-result status amendment (2026-09-28)
+
+Public rows use `FILLED`, `PARTIAL`, `REJECTED`, `CANCELLED`, `AMO_QUEUED`,
+`PLACED`, or `PENDING`; `brokerOrderStatus` retains the adapter word. Explicit
+zero-filled/full-pending evidence wins over `COMPLETE` and remains `PENDING`.
+Status polling accepts the optional leg `exchange`. A capital-reservation
+Calculate refusal uses `recompute:false` and
+`customerAction.code=REVIEW_OTHER_PORTFOLIO`; clients must not loop Calculate.
+
+> **2026-09-27 funding-state amendment:** the backend rebalance contract may
+> return `funding.classification=INSUFFICIENT_BROKER_BALANCE`,
+> `customerAction.code=ADD_FUNDS`, and `fundingConsent.options=["add_funds"]`
+> after a successful broker balance read of zero. This is a calculated but
+> non-executable result. Hosts must show target/available/shortfall, must not
+> offer Continue with available funds, and must not call `executeAdvice`.
+
+> **2026-08-28 durable amendment:** eligible non-model API orders return `status=queued`, `executionState=queued`, and `jobId`. Unknown outcomes are paused/`checking_broker` with `safeToRetryPlacement=false`; HTTP 409 is never automatically retried. Model portfolios remain guarded, SELL-before-BUY, and carry plan id/version/hash plus stable advice identity.
+
 > **Status**: drafting (started 2026-05-02). Companion to
 > `SDK_ORCHESTRATION_VISION.md`, `SDK_ORCHESTRATION_AUDIT.md`,
 > `SDK_ORCHESTRATION_PHASES.md`.
@@ -187,6 +205,27 @@ interface AdviceResult {
 
   /** ISO 8601 of when the orchestrator received its terminal result. */
   completedAt: string;
+
+  /** `paused` means some legs may be at the broker or were intentionally
+   * withheld by a safety gate. Hosts MUST NOT invoke a legacy fallback. */
+  executionState?: 'complete' | 'paused';
+
+  recovery?: {
+    reason:
+      | 'existing_publisher_attempt'
+      | 'publisher_unavailable'
+      | 'publisher_unconfirmed'
+      | 'sell_pending'
+      | 'sell_failed'
+      | 'funds_unverified'
+      | 'settlement_shortfall'
+      | 'customer_stopped';
+    message: string;
+    remainingTrades: TradeIntent[];
+    safeToRetryPlacement: false;
+  };
+
+  settlementRiskAccepted?: boolean;
 }
 
 interface TradeResultRow {
@@ -212,8 +251,17 @@ type OrderStatus =
   | 'REJECTED'
   | 'CANCELLED'
   | 'PENDING'
-  | 'AMO_QUEUED';
+  | 'AMO_QUEUED'
+  | 'NOT_SUBMITTED';
 ```
+
+For the React Native and Flutter mixed-Zerodha MP lane, `executeAdvice` persists
+uniquely tagged intent before opening Kite, requires broker-confirmed full SELL
+quantities, refreshes live funds and server-prices all BUY legs, then reconciles
+the same tags. Only a verified numeric shortfall may offer an explicit
+"Continue with buys" choice. Redirect completion and mere order detection are
+not fill signals. If Publisher cannot open, both return paused `NOT_SUBMITTED`
+rows and do not direct-place the mixed basket.
 
 `OrderStatus` is normalized by the SDK route layer in
 `aq_backend_github/Routes/sdk/v1/orders/_normalizeStatus.js`. Brokers
@@ -617,6 +665,23 @@ drift (Fyers form fields, Angel One scope-readiness).
 - **Multi-leg / cover orders.** Complex per-broker UX; out of MVP.
 - **Smart order routing** (split between brokers). Out of scope.
 - **Position management** (intraday squaring off). Stays app-side.
+
+### Legacy rebalance funding-choice extension (2026-09-27)
+
+Until the rebalance lane moves behind the SDK orchestrator, its calculate
+request accepts exactly one of these calculation-scoped booleans:
+
+- `continueWithAvailableFunds: true` — size to a positive verified funded
+  budget and preserve the higher investment target.
+- `attemptWithInsufficientFunds: true` — after a verified zero/insufficient
+  warning, size the existing target for review and deliberately allow broker
+  submission. The broker may reject some or all BUY orders.
+
+The second choice is not a cash assertion. The response retains
+`activeBudget: 0`, returns `funding.classification =
+READY_WITH_FUNDING_RISK`, and records `fundingContinuation.choice =
+attempt_broker`. It is executable only with non-empty server-generated frozen
+legs. A client-supplied execution request cannot manufacture this state.
 - **`manageConnections()` as a top-level method.** Per AUDIT § 7.tidi
   verdict, the list view is host-territory; SDK exposes per-broker
   actions instead.

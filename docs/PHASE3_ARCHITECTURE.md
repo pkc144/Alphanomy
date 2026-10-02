@@ -2,6 +2,23 @@
 
 > **Source of truth for the Phase 3 SDK migration design.** Update this doc BEFORE writing the matching code change. See `CLAUDE.md § Phase 3 SDK Broker Migration — BLOCKING DOCUMENTATION REQUIREMENT`.
 
+## Broker WebView renderer lifecycle (2026-09-22)
+
+`WebViewBrokerAuthFlow` owns recovery when the operating system terminates its
+native web-content process. Android reports this through
+`onRenderProcessGone`; Apple WebKit uses `onContentProcessDidTerminate`. The
+dead native view cannot be reused, so the RN SDK replaces it with a newly keyed
+WebView at the same broker login URL. One automatic recovery is allowed. If the
+replacement process also terminates, the widget emits
+`broker_webview_process_gone` through its existing `onError` contract and the
+host returns to its retryable broker form instead of leaving a dead login page.
+
+This is SDK-owned behavior for all OAuth brokers. The AlphaB2B build has
+`REACT_APP_USE_SDK_BROKER_FLOW=true`, so Zerodha uses this SDK WebView path;
+IIFL remains the explicit legacy fallback. The 2026-09-22 user report did not
+include an Android stack trace, so renderer termination is treated as the
+guarded crash class, not claimed as a log-confirmed diagnosis.
+
 ## What Phase 3 is
 
 Phase 3 replaces the per-broker legacy connect modals (`src/components/BrokerConnectionModal/*`) with widgets from the in-house React Native SDK package `@alphaquark/mobile-sdk` (`BrokerCredentialForm`, `WebViewBrokerAuthFlow`). The replacement is gated by:
@@ -53,7 +70,16 @@ if (REACT_APP_USE_SDK_BROKER_FLOW is on) {
 // else legacy switch
 ```
 
-When the flag is on, ALL 13 brokers (Zerodha, Angel One, Upstox, ICICI Direct, Kotak, Dhan, Fyers, IIFL Securities, AliceBlue, Motilal Oswal, Hdfc Securities, Groww, Axis Securities) plus `DummyBroker` route through `Phase3SdkBrokerModal` for BOTH first-connect AND re-auth. tidi_new (Flutter) has shipped the same single-flag, no-allowlist routing since commit `bd1b501`; Alphab2bapp's reauth-pre-fill wiring shipped 2026-04-29.
+When the flag is on, the dispatcher normally routes brokers through `Phase3SdkBrokerModal` for both first-connect and re-auth. IIFL is the explicit exception: `SDK_LEGACY_FALLBACK` sends it to the re-certified native `IIFLModal`, because the current SDK schema models a different credentials/TOTP product rather than IIFL's customer-owned App Key/App Secret + OAuth flow. This exception is required for correctness, not a staged rollout preference.
+
+`deviceTotpEnabled` may wrap this dispatch for assisted reconnect, but it must
+not shadow first-time Fyers onboarding. With no persisted Fyers broker slot,
+`DeviceTotpReconnectGate` renders the canonical Fyers developer-portal guide,
+redirect URL and dedicated-static-IP acknowledgement alongside the optional
+phone-TOTP fields. It then hands off to `Phase3SdkBrokerModal` (or the legacy
+equivalent) for App ID/Secret entry and OAuth. The staged device values are
+persisted only after that authorization succeeds. This sequencing is made by
+the host and does not indicate SDK failure or legacy fallback.
 
 **Re-auth pre-fill (no authUrl path).** When the user reconnects an already-connected broker, `Phase3SdkBrokerModal` fetches `userDetails` on mount, reads `connected_brokers[broker]` via `src/utils/brokerCredentials.js#getStoredBrokerCreds`, and builds a per-broker `schemaOverride` whose fields carry `initialValue`. The SDK form's `useState` initialiser merges these with the base schema and seeds the controllers. One unified path.
 
@@ -76,7 +102,7 @@ The legacy pre-signed `authUrl` flow (`src/utils/reauthHelpers.js#handleSmartRea
 | Fyers | apiKey + secretKey + clientCode | `getStoredBrokerCreds` already inverts Fyers' DB naming (DB.secretKey → modal.apiKey, DB.clientCode → modal.secretKey + modal.clientCode); see `brokerCredentials.js:46-53`. We pass through what it returns. |
 | Angel One (per-customer) | apiKey + secretKey + clientCode | Shared mode would need a different override (empty-fields like Zerodha); first-connect for shared advisors today still surfaces the per-customer form. Tracked as Known Gap. |
 | Upstox / ICICI Direct / Hdfc Securities | apiKey + secretKey | Standard two-field credential schema. |
-| IIFL Securities | (none — legacy) | Schema mismatch keeps IIFL on legacy upstream. If ever promoted, override apiKey + clientCode + password + dob here. |
+| IIFL Securities | (legacy-owned App Key/App Secret) | Schema mismatch keeps IIFL on the deliberate fallback. The legacy modal uses Node `/api/iifl/reauth-url` to reuse saved direct credentials, so no SDK override applies. |
 
 **If a specific broker is broken in the SDK at any point, the fix is to fix the SDK widget — NOT to re-introduce a per-app allowlist.** The SDK package is the single point of broker-flow truth; per-app exception lists encourage drift between Alphab2bapp and tidi_new (which is exactly what `docs/SDK_PARITY_AUDIT.md § 2` flagged).
 
@@ -87,6 +113,8 @@ The legacy pre-signed `authUrl` flow (`src/utils/reauthHelpers.js#handleSmartRea
 3. Any backend SDK-route changes the broker depends on are deployed and documented in `PHASE3_ARCHITECTURE.md § Backend routes`.
 
 **Future enhancement:** consider per-broker env flags (e.g. `REACT_APP_USE_SDK_KOTAK=true`) for staged rollout. The master flag `REACT_APP_USE_SDK_BROKER_FLOW=true` remains the on-switch.
+
+> **Superseded 2026-09-29:** today the dispatcher has `SDK_LEGACY_FALLBACK = new Set(['IIFL'])`, and device-TOTP brokers leave the SDK lane via `secureTotpHostFlow` / `secureAliceBlueHostFlow`, not via this set. The current per-broker routing is the canonical table in `docs/BROKER_CONNECTION.md` § "Broker connect routing matrix". The paragraph below is historical.
 
 **`SDK_LEGACY_FALLBACK = new Set(['Angel One', 'Zerodha'])`** is kept defensively while the allowlist is empty; it has no practical effect (the broker has to be in the allowlist for the fallback to even matter). Once a broker is promoted, `SDK_LEGACY_FALLBACK` is the immediate kill-switch for that broker without removing it from the allowlist. If the allowlist stays empty long-term, `SDK_LEGACY_FALLBACK` and the entire `useSdkBrokerFlow() && !isReauthFlow && ...` block become dead code and can be deleted.
 
@@ -103,6 +131,15 @@ reachable connect route.
 `REACT_APP_ANGEL_ONE_API_KEY` may remain in cached/backend configuration for
 legacy data and other clients, but they must not select a mobile connection
 path. Do not reintroduce shared-mode instructions or a one-tap publisher login.
+
+**2026-09-29 correction:** the statement above was not true for device-TOTP
+tenants. The dispatcher used `angelOnePerCustomer && !secureTotpHostFlow`, so
+with `deviceTotpEnabled=true` Angel One went to `renderLegacyModal` →
+`AngleoneBookingTrueSheet` (shared SmartAPI key) as the
+`DeviceTotpReconnectGate` fallback. Now `angelOnePerCustomer` alone selects
+`Phase3SdkBrokerModal` (the gate wraps it for quick reconnect) and the
+`'Angel One'` case was removed from `renderLegacyModal`. Guarded by
+`src/__tests__/brokerDispatchRouting.test.js`.
 
 ## `Phase3SdkBrokerModal` — component contract
 
@@ -366,5 +403,9 @@ Triggered by `ManageConnectionsModal`'s smart-reauth handler when an existing br
   customer to select **Login to Kite web** on the next screen. That preserves
   the Kite web session for the broker's normal next-few-hours session window;
   it is instructional only and does not claim to change Kite's expiry policy.
-- IIFL remains intentionally unavailable pending a re-certified broker flow;
-  it is not an SDK fallback or IPv4/IPv6 registration candidate.
+- IIFL is enabled through the deliberate legacy fallback. Its re-certified
+  customer-owned direct flow shows the IIFL developer portal, the exact
+  redirect URL, and the customer's assigned Route64 IPv6; both values must be
+  registered before continuing. App Key/App Secret are AES-wrapped for Node
+  `/api/iifl/update-key`, callbacks exchange through `/api/iifl/exchange`, and
+  the resulting session is persisted by `/api/user/connect-broker`.

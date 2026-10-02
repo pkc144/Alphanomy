@@ -1,5 +1,20 @@
 # SDK Orchestration Vision — North-Star Architecture for AlphaQuark Mobile SDK
 
+## Cross-broker terminal truth (2026-09-28)
+
+The Node boundary and both mobile packages expose one status vocabulary while
+preserving raw broker words separately. Terminal classification uses the full
+row, including requested, filled and unfilled quantity; a broker word alone
+cannot contradict explicit quantity evidence. Broker polling is implemented
+once through ccxt's production order-book adapters.
+
+## Host-owned reconciliation bridge (2026-08-26)
+
+Until MP execution moves fully into the SDK, the host owns frozen identity on
+post-sell refit, verified-cash fail-closed behavior, timed Repair suppression and
+the server-directed retry. A future SDK widget must preserve these semantics and must not treat
+temporarily empty Repair legs as completion.
+
 > **Status**: design source-of-truth (drafted 2026-05-02). Companion docs:
 > `SDK_ORCHESTRATION_AUDIT.md` (per-flow code walks for both apps),
 > `SDK_ORCHESTRATION_CONTRACT.md` (TS + Dart parallel API surface),
@@ -154,6 +169,12 @@ What the SDK absorbs:
   `MPReviewTradeModal` post-place flow).
 - Token-expired retry path (was app: `TokenExpireBrokerModal`).
 - Per-broker error humanization (was app: scattered).
+- Basket execution policy: consume the server-projected lifecycle, authorize
+  `(user_email,basketId)` at handoff, let EXIT bypass entry ranges, preserve
+  explicit leg priority, and keep Zerodha inside one Publisher navigation.
+  Publisher ordering is submission order only; the SDK must never claim a
+  hedge-fill dependency that Kite cannot guarantee. This policy is host-owned
+  in the 2026-08-16 legacy lane and moves into `executeAdvice` in Phase C.
 
 What the SDK does NOT own:
 
@@ -185,6 +206,13 @@ The orchestrator handles broker session, sell-auth gate, review,
 place, poll, result. The app receives one terminal result and either
 shows its own success card OR opts into the SDK's themed result
 modal — that's a per-call decision via a `presentResult` flag.
+
+For a mixed Zerodha MP basket, `place` is a guarded two-phase operation:
+the SDK records immutable tagged intent, opens SELL baskets first, waits for
+every requested sell quantity to be broker-confirmed, refreshes live buying
+power, and only then opens BUY baskets. A verified numeric shortfall may be
+continued explicitly because settlement credit can arrive later; unknown funds,
+auth errors, partial sells, or missing broker tags pause without a fallback.
 
 ### `connectBroker(brokerName) → BrokerConnection`
 
@@ -340,7 +368,8 @@ of the box.
 
 ## 8. Failure semantics (the part most likely to cause bugs)
 
-Every public orchestrator method either:
+Before any external broker surface is opened, every public orchestrator method
+either:
 
 - **Resolves** with a terminal result envelope (success, partial,
   rejected — but always typed and complete), OR
@@ -354,10 +383,14 @@ Every public orchestrator method either:
   - `network_error` — terminal network failure after retry budget
   - `internal_error` — unexpected SDK bug; report to Sentry
 
-There is no mid-flow half-state. The orchestrator either drives the
-flow to a terminal point (rendering its own UI for failures the user
-can resolve) OR it fails fast with a typed error the host can handle.
-This is the single most important contract for host-app authors.
+After an external Publisher surface is opened, uncertainty cannot safely be
+represented as a retryable exception: the order may already exist at Zerodha.
+In that case `executeAdvice` resolves an `AdviceResult` with
+`executionState: 'paused'`, exact per-leg rows, recovery guidance, and
+`safeToRetryPlacement: false`. The host MUST show that result and MUST NOT call a
+legacy placement fallback. Backend intent reconciliation remains the recovery
+witness. This explicit paused state replaces the earlier, unsafe “no mid-flow
+half-state” assumption.
 
 The SDK never throws `Error` with a string message into the host's
 catch block. Every error is one of the typed codes above with a
@@ -421,6 +454,10 @@ surfaces. Risk: drift. Mitigation:
   reviewers to confirm parity.
 - A new orchestrator method is gated on Flutter parity — RN-only ships
   cause drift.
+- Broker capability gaps fail closed. Both packages host the guarded Zerodha
+  Publisher UI and return `publisher_unavailable` with affected legs
+  `NOT_SUBMITTED` when the UI or Kite key cannot open; neither emulates safety
+  by direct-placing the mixed basket.
 - AUDIT-pass refresh after every major orchestrator landing — the
   same parallel-agent technique that worked for the design-system
   audit on 2026-05-02 works here.

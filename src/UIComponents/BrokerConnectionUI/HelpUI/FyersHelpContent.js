@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Linking, TouchableOpacity, Dimensions } from 'r
 import Config from 'react-native-config';
 import YoutubePlayer from "react-native-youtube-iframe";
 import LinkifiedUrl from './LinkifiedUrl';
+import { designColor, designFont } from '../../../design/literalTokens';
 const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
 
 const FyersHelpContent = ({expanded, onExpandChange }) => {
@@ -43,15 +44,22 @@ const FyersHelpContent = ({expanded, onExpandChange }) => {
       {expanded && (
         <>
         <Text style={styles.instruction}>
-                          3. Click on the "Create App" button. Provide an app name, paste the redirect URL as specified in the instructions, add a description, and delete the webhook. {"\n\n"}
+                          3. On that page, click the app already listed as <Text style={{fontWeight: '700'}}>"Algo trading app"</Text> (it sits at the top). {"\n\n"}
+                          ⚠️ <Text style={{fontWeight: '700'}}>Do NOT press "Create App"</Text> — that makes an ordinary app which can never place orders, and it is the most common reason a Fyers connection looks fine but every sell fails. {"\n\n"}
+                          Paste the redirect URL as specified in the instructions. {"\n\n"}
                           ⚠️ <Text style={{fontWeight: '700'}}>You MUST tick the "Order Placement" permission</Text> — without it Fyers rejects every basket order with "algo orders are not allowed for this app". The checkbox is OFF by default. {"\n\n"}
+                          ⚠️ <Text style={{fontWeight: '700'}}>Enter the static IP shown on the connect screen</Text> under Static IP — it must match exactly, or Fyers rejects orders with the same "algo orders are not allowed" message. Then click <Text style={{fontWeight: '700'}}>Activate</Text>. Fyers only issues an order-capable App ID once the app is activated. {"\n\n"}
                           Tick all other permissions you want (Holdings, Funds, Orders read, etc.), accept the API Usage Terms and Conditions, and click "Create App."
                         </Text>
                         <Text style={styles.instruction}>
-                          4. Scroll down to find the newly created app. Copy the App ID and Secret ID and paste them into your platform.
+                          4. Scroll down to find the newly created app. Copy the <Text style={{fontWeight: '700'}}>App ID</Text> and Secret ID and paste them into your platform. {"\n\n"}
+                          ⚠️ <Text style={{fontWeight: '700'}}>The App ID must end in -200</Text> (for example UMEG2NCP7W-200). That suffix is what tells Fyers this is an activated algo app. {"\n\n"}
+                          ⚠️ <Text style={{fontWeight: '700'}}>The App ID is NOT your Fyers login ID</Text> (the one that looks like YR12345 or XL12345). Pasting your login ID here is the most common mistake — the connection will appear to work and then every sell order will fail.
                         </Text>
                         <Text style={styles.instruction}>
-                          5. <Text style={{fontWeight: '700'}}>Already created the app and seeing "algo orders are not allowed"?</Text> Go back to https://fyers.in/web/api-dashboard/user-apps → click your app → "Edit" → tick the Order Placement permission → Save. No need to delete and recreate the app or re-paste your keys.
+                          5. <Text style={{fontWeight: '700'}}>Already connected and seeing "algo orders are not allowed"?</Text> First check the App ID you pasted. {"\n\n"}
+                          • <Text style={{fontWeight: '700'}}>It ends in -200:</Text> the app just needs the permission. Go to https://fyers.in/web/api-dashboard/user-apps → click your app → "Edit" → tick Order Placement → Save. No need to recreate the app or re-paste your keys. {"\n\n"}
+                          • <Text style={{fontWeight: '700'}}>It does NOT end in -200</Text> (it ends in -100, has no suffix, or is your YR/XL login ID): the app itself cannot place orders, and ticking Order Placement will not change that. Since April 2026 Fyers only accepts orders from an activated Algo trading app. Create one as in step 3 — Fyers issues a <Text style={{fontWeight: '700'}}>new App ID and a new Secret ID</Text>, and you must reconnect with both. The old ones cannot be converted.
                         </Text>
         </>
       )}
@@ -65,7 +73,7 @@ const FyersHelpContent = ({expanded, onExpandChange }) => {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: "#fff",
+    backgroundColor: designColor('fff'),
     paddingHorizontal: 12,
   },
   videoBox: {
@@ -74,17 +82,17 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 13,
-    fontFamily:'Poppins-Medium',
-    color: "#222",
+    fontFamily:designFont('Poppins-Medium'),
+    color: designColor('222'),
     marginBottom: 9,
   },
   instruction: {
     fontSize: 14,
-    color: "#222",
+    color: designColor('222'),
     marginBottom: 8,
   },
   link: {
-    color: "#1890FF",
+    color: designColor('1890ff'),
     textDecorationLine: 'underline',
   },
   toggleContainer: {
@@ -94,7 +102,7 @@ const styles = StyleSheet.create({
   toggleText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#1890FF',
+    color: designColor('1890ff'),
   },
 });
 

@@ -1,5 +1,80 @@
 # SDK Orchestration Audit — Per-Flow Code Walks
 
+## 2026-09-29 Rebalance review layout audit
+
+The host-owned `RebalanceModal` now reserves its flexible area for the trade
+rows. Optional funding disclosures are list-footer content and the verbose
+low-funds explanation is collapsed by default. The fixed action remains
+reachable. Phase C's future TradeReviewSheet must retain this behavior for
+large baskets; no SDK ownership or placement behavior changed in this slice.
+
+## 2026-09-29 Zerodha continuation audit
+
+The host-owned `RebalanceModal` now prices MARKET BUY legs before post-SELL
+refit, preserves the priced durable attempt for recovery, and consumes a
+continuation only after the Publisher surface opens. The result modal has one
+owner (`RebalanceAdvices`); the nested callback-less copy was removed. These
+guards remain required inputs to the future Phase-C orchestrator migration.
+
+## 2026-09-28 cross-broker status audit
+
+The Flutter and RN execute-advice clients formerly carried separate terminal
+sets from their shared `order_status` modules. Those copies omitted broker
+`COMPLETE` in Flutter and treated working broker words inconsistently in RN.
+Both now call the shared evidence-aware classifier. The Node proxy additionally
+projects canonical status for already-installed clients; raw persistence is
+unchanged. ccxt status reads use the reconciliation adapters, fixing stale
+Upstox and ICICI constructors and ICICI NSE/BSE lookup parity.
+
+## 2026-09-27 verified-zero funding presentation
+
+The host-owned rebalance review surfaces now consume the backend's additive
+funding-consent options. A successfully verified zero broker balance remains a
+calculated, non-executable result: the app shows target, available amount and
+shortfall, offers only Add Funds, and never dispatches a zero-budget refresh or
+an execution request. Non-zero fitted baskets retain the existing Continue
+with available funds path. Ownership and SDK migration verdicts are unchanged.
+
+## 2026-09-22 runtime correction: host-owned review + sell-auth
+
+`AqSdkClient.executeAdvice` called `requireSellAuth` with `{}`. Groww SELL
+rebalances therefore opened the SDK gate after the app had already validated
+authorization; under `skipReview: true` it could be obscured by
+`RebalanceModal`, leaving a spinner and sending no placement request. RN now
+reads the authenticated sell-auth endpoint before dispatch and fails closed to
+the host if needed. App SDK errors join the terminal handler and never fall
+through to legacy placement.
+
+## 2026-09-07 Publisher acknowledgement and foreground recovery
+
+The host-owned model-portfolio Publisher paths in RebalanceModal,
+MPReviewTradeModal and UserStrategySubscribeModal share
+`src/utils/publisherAcknowledgement.js`: Node intent and Python activation
+requests allow 15 seconds; activation requires status 0, recorded true,
+reconciliationEnrolled true, and no explicit allowExecution denial. Activation
+is not automatically retried on a timeout, and acknowledgement is not a fill.
+
+TradeContext subscribes once to app resume through
+`src/utils/portfolioResume.js`, using the current account/config callback.
+It refreshes both subscriber status and Repair, with in-flight deduplication,
+a 15-second resume throttle and listener cleanup. Normal silent polling still
+skips Repair. No client execution-record writes or automatic retry placement
+are introduced. Existing Publisher routing, plan identity and sell-auth remain
+unchanged; this is host-lane hardening, not an SDK migration.
+
+## 2026-08-28 — Lost-response and async parity closure
+
+RN, Flutter, AlphaB2B, and the Node SDK proxy agree on durable acceptance for eligible bespoke API orders and paused reconciliation for ambiguous placement. The legacy fallback is removed, rebalance helpers are SELL-first and frozen-plan metadata plus SDK request identity now reach CCXT.
+
+## 2026-08-26 — Post-sell and Repair reconciliation audit
+
+| Surface | Owner | Verdict |
+|---|---|---|
+| Frozen refit identity and cash usability | `RebalanceModal` host flow | Host-correct; migrate intact later |
+| Repair review entry | `RebalanceCard` → `RebalanceModal` | Host opens frozen repair review directly after broker preflight; preference/holdings screens are not orchestration prerequisites |
+| Pending/delay parsing and retry | `TradeContext` | Host-correct; additive backend contract |
+| Reconciliation message | `RebalanceAdvices` | Host presentation; Repair stays hidden |
+
 > **Status**: drafting (started 2026-05-02). Companion to
 > `SDK_ORCHESTRATION_VISION.md` (north-star), `SDK_ORCHESTRATION_CONTRACT.md`
 > (TS + Dart API surface), `SDK_ORCHESTRATION_PHASES.md` (sequencing).
@@ -20,6 +95,10 @@
 > - **2026-05-02 pass 1** — initial draft. 4 parallel exploration agents
 >   walking bespoke (RN), MP (RN), connect/reauth (RN), all flows
 >   (Flutter). Findings folded in below.
+> - **2026-08-16 basket legacy-lane pass** — `StockAdvices`, BasketCard and
+>   `ReviewZerodhaTradeModal` now consume a server lifecycle/range decision,
+>   re-authorize at handoff and preserve explicit priority in one Kite window.
+>   Phase C must absorb this policy; no SDK contract changed in this pass.
 > - Future passes — date + commit hash here when re-audited.
 
 ---
@@ -79,8 +158,32 @@ For each numbered step, an inline tag indicates the migration target:
 8. **[BACKEND]** POST `${ccxtServer}orders/process-trade` (line 751) with `aq-encrypted-key` header. Body: `{trades: [{...trade, variant, clientTradeId}], user_broker, user_email, accessToken}`. Timeout 120s. Today: direct app call. Tomorrow: SDK calls `/sdk/v1/orders/place` (already shipped B-1).
 9. **[ORCHESTRATOR]** Fallback to legacy Node `${server}api/process-trades/order-place` on 5xx/network (lines 781-796). Today: gated by env. Tomorrow: SDK absorbs the retry logic; the env flag retires.
 10. **[SDK-WIDGET]** Per-broker post-placement Zerodha Publisher path (lines 1015-1161) — validate exchanges, build Kite basket, market-protection 1% buffer for GSM/T2T/BE, generate HTML form, open WebView, post-WebView record-orders. Today: app-screen-coupled WebView. Tomorrow: SDK orchestrator opens the WebView; host never sees the basket exception.
+    - **2026-07-27 safety correction:** the host now re-resolves the account
+      email immediately before `record-orders`. Once Kite Publisher has
+      submitted, any identity/recording failure stays `pending`; it must never
+      be converted into a synthetic broker rejection. Phase C must preserve
+      this two-stage failure contract when ownership moves into the SDK.
+    - **2026-08-16 basket policy correction:** before any basket REST or
+      Publisher handoff, the host calls `/orders/basket-entry/authorize` with
+      `(user_email,basketId)` and leg purpose; denied/stale/missing decisions
+      fail closed, EXIT bypasses the entry range. Zerodha basket legs are
+      sorted by explicit priority and more than ten legs are rejected rather
+      than split. The future orchestrator must preserve these semantics and
+      must not advertise Publisher fill-order guarantees.
+    - **2026-08-17 visibility/routing correction:** both legacy callers pass
+      `isVisible`, so the host now normalizes `visible ?? isVisible` before
+      rendering either modal branch. Previously the hidden WebView still
+      started its 90-second poll and could surface false pending. Zerodha is
+      now Publisher-only even for GTT-flagged recommendations and cart
+      execution; WebView load failures stop polling and fail as not sent.
 11. **[ORCHESTRATOR]** Post-placement TPIN re-trigger (lines 878-889) — for sell/mixed with rejected≥1 + success=0, re-open broker's TPIN modal which re-calls `placeOrder` after auth. Today: 5-modal cascade with closure-bound stale state. Tomorrow: orchestrator-internal retry; host never sees the cascade.
 12. **[SDK-WIDGET]** Success modal `RecommendationSuccessModal` (line 1102). Today: 1102-LOC component. Tomorrow: SDK `<TradeResultModal>` (already shipped B-1) when `presentResult: true`.
+    - **2026-08-18 broker-confirmation correction:** OPEN-row refresh now calls
+      the shared `OrderService.refreshSingleOrderStatus` path. Its canonical
+      route map includes DefinEdge and its auth envelope includes
+      `X-Advisor-Subdomain`; the former modal-local map omitted DefinEdge and
+      silently made Refresh a no-op. Phase C's `<TradeResultModal>` must retain
+      both broker-route coverage and tenant-scoped credential lookup.
 13. **[STAY]** Holdings refresh side-effect (lines 897-908) — `updatePortfolioData()`, `getAllTrades()`, AsyncStorage clear cart, EventEmitter `cartUpdated`. Today: Promise.all in component. Tomorrow: host-app's `onTradePlaced` hook fires; host owns refresh.
 
 ### Hidden coupling (must be addressed in SDK design)
@@ -653,3 +756,34 @@ The doc trio is **structurally sound**. Pass 2 found:
 - **5 newly discovered orchestration patterns** (GTT routing, AfterPlaceOrderDdpiModal, JWT clientCode fallback, BrokerSessionService.isSessionFresh, sealed exception types) that the contract should accommodate. None require contract changes — they're internal sub-orchestrator concerns.
 
 **Branch policy**: Pass 2 is doc-only. The 8 suspected code defects need their own branch + verification + per-defect fix. Flagged but not addressed in this commit.
+
+## 2026-08-15 order-entry concurrency follow-up
+
+The legacy mobile entry points used React `loading` state as their broad submit
+guard. Because state commits after the event handler returns, rapid taps could
+enter the async broker path more than once. `StockAdvices` and `AddtoCartModal`
+now wrap the full handler in a synchronous ref latch. This is a legacy-lane
+hardening change; the SDK contract and payload schema are unchanged.
+
+## 2026-08-18 rebalance identity-correlation follow-up
+
+The active RN `RebalanceModal` legacy lane now resolves `plan_id`,
+`plan_version`, `unique_id`, and model name from one reviewed attempt. When a
+stale repair row coexists with a fresh calculate response, the fresh response
+wins; repair identity is used only when the modal data has no fresh `uniqueId`.
+The same resolved object feeds direct brokers, Fyers, Zerodha buy refit, and
+DummyBroker. This is legacy-lane correctness only; the SDK contract is
+unchanged, but the future orchestrator must preserve this correlation rule.
+
+## 2026-09-27 verified-shortfall broker-attempt follow-up
+
+The three active RN rebalance review surfaces now distinguish two explicit
+shortfall choices. A positive funded budget can still be recalculated with
+`continueWithAvailableFunds`; a verified zero budget instead offers
+`attemptWithInsufficientFunds`, labelled **Review stocks and attempt buy**.
+The latter asks the server to size and freeze the existing target basket while
+retaining verified cash at zero. The reviewed basket is executable only when
+the server returns `READY_WITH_FUNDING_RISK`; broker rejection remains a valid
+terminal result. The choice is calculation-scoped and is recorded in the
+frozen plan. Phase C must preserve this distinction and must never infer the
+attempt choice from an empty balance alone.

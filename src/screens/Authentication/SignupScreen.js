@@ -18,7 +18,7 @@ import server from '../../utils/serverConfig';
 import { generateToken } from '../../utils/SecurityTokenManager';
 import { useTrade } from '../TradeContext';
 import { useConfig } from '../../context/ConfigContext';
-import { getAdvisorSubdomain } from '../../utils/variantHelper';
+import {getAdvisorSubdomain, getBuildTenantSubdomain} from '../../utils/variantHelper';
 import { getStoredCampaign } from '../../utils/smartLink';
 import { validateEmail } from '../../utils/emailValidation';
 import { useComponent } from '../../design/useDesign';
@@ -190,7 +190,7 @@ const SignupScreen = () => {
                     {
                         headers: {
                             'Content-Type': 'application/json',
-                            'X-Advisor-Subdomain': getAdvisorSubdomain(),
+                            'X-Advisor-Subdomain': getBuildTenantSubdomain(),
                             'aq-encrypted-key': generateToken(Config.REACT_APP_AQ_KEYS, Config.REACT_APP_AQ_SECRET),
                         },
                     },
@@ -201,7 +201,7 @@ const SignupScreen = () => {
                     {
                         headers: {
                             'Content-Type': 'application/json',
-                            'X-Advisor-Subdomain': getAdvisorSubdomain(),
+                            'X-Advisor-Subdomain': getBuildTenantSubdomain(),
                             'aq-encrypted-key': generateToken(Config.REACT_APP_AQ_KEYS, Config.REACT_APP_AQ_SECRET),
                         },
                     },
@@ -213,7 +213,10 @@ const SignupScreen = () => {
                 await handlePostSignupNavigation(userDetails, email);
             }
         } catch (e) {
-            console.error('❌ Signup error:', e);
+            // Expected form validation is shown inline below, not as a runtime error.
+            if (!['auth/weak-password', 'auth/invalid-email', 'auth/email-already-in-use'].includes(e.code) && e.response?.status !== 409) {
+                console.error('Signup failed:', e.code || e.response?.status || e.message);
+            }
             logLoginAttempt({
                 email: email || 'unknown',
                 status: 'failed',

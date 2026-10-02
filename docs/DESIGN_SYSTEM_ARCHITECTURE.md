@@ -10,6 +10,20 @@ This is a **layered, opt-in extension of the existing theme system** (`src/theme
 
 This is **not** a bundling change, not a package extraction, not a separate npm release. Everything ships in this repo. A future variant lives at `designs/<variant>/` next to `designs/default/`.
 
+### Warn-mode SELL ownership notice (2026-09-29)
+
+`SellModelImpactNotice` currently remains in `src/` beside the existing
+non-model trade-review containers. The visible card is small, but its choices
+mutate reviewed quantities and attach backend authorization metadata, so this
+is a behavior-bearing surface rather than a token-only design override. Its
+colors and fonts use `designColor` / `designFont`, keeping the source style
+ratchet clean and allowing literal-token remapping per variant.
+
+The eventual Phase G extraction must keep preview/reservation networking and
+choice application in the `src` container. A registered presentation may
+receive only display-ready notice rows plus `onChoose`; it must not call the
+preview/reserve endpoints or construct `modelAuthorization` itself.
+
 ## The non-negotiable boundaries
 
 These three rules are what keep the refactor safe. Every PR that touches `designs/` is reviewed against them.
@@ -77,6 +91,28 @@ Tokens live in two layers:
 - **Implementation** in `src/theme/` (existing pattern — integrates with `ConfigContext` for advisor overrides). Phase A (2026-05-01) shipped `colors.js`, `spacing.js`, `typography.js`, `radii.js`, `shadows.js`, plus a composite `useTokens()` hook.
 - **Registry-facing surface** at `designs/<variant>/tokens/index.js` — re-exports the `DEFAULT_*` objects + `build*()` builders. The `DesignProvider` (Phase B) imports from here. A custom variant ships `designs/<variant>/tokens/index.js` with variant-specific values in the same shape.
 
+The source style migration is complete as of 2026-09-28: the CI ratchet is at
+zero raw hex colours and zero literal `fontFamily` declarations outside the
+token layer. New semantic work should use `useTokens()`. Existing screens that
+have not yet received semantic names use build-time compatibility markers:
+`designColor('0056b7')` and `designFont('Satoshi-Medium')`. The Babel compiler
+resolves those markers back to their byte-equivalent defaults, or to entries in
+`designs/<variant>/tokens/literals.json`, and removes the marker import. This
+makes every migrated colour/font variant-controlled without adding runtime
+lookups to thousands of React Native style objects.
+
+`literals.json` is a compatibility bridge, not the preferred vocabulary for
+new UI. Variants may remap brand colours and fonts there. They must not remap
+profit, loss, warning, or error values globally; those belong to the semantic
+tokens in `src/theme/colors.js`. Run `npm run validate:design-literals` after
+changing the compiler or a literal-token map.
+
+The compiler resolves `DESIGN_VARIANT` / `APP_VARIANT` from the shell first and
+then from the repository `.env`; this is intentionally independent of Babel's
+later `dotenv-import` pass. Metro's `cacheVersion` includes the resolved variant
+and the contents of the default and selected `literals.json` files. After
+changing either value, restart Metro normally; `--reset-cache` is not required.
+
 Default values shipped in Phase A:
 
 ```js
@@ -118,9 +154,25 @@ Asset tokens are deliberately distinct from the other token families because RN'
 - `designs/default/screens/ChangeAdvisor.js`
 - `designs/default/composites/BasketCard.js`
 
-**2026-06-10 — `useTokens()` is now variant-aware for the `assets` slot.** It reads the active variant's `buildAssets` via `DesignContext` (`design.tokens.buildAssets`, from `resolveDesign`'s token-namespace merge), falling back to the default builder when called outside a `DesignProvider`. This closed the gap where `useTokens().assets.*` returned the default (AlphaQuark) logos even under a non-default `DESIGN_VARIANT`. The brand-logo `src/`-side consumers migrated in the same change: `BrandLogo`, `LogoSection`, and `SplashScreen` now render `useTokens().assets.logoPng` with no hardcoded variant name (`SplashScreen` is a Navigation stack screen, so it IS inside the providers — the earlier "renders before providers" note was inaccurate). The tenant-specific `src/components/AlphanomyLogo.js` was deleted (it was a brand leak in the default repo); each variant now supplies its own mark through `designs/<variant>/tokens/assets.js`. Only the `assets` family is variant-aware via `DesignContext`; colors/typography still resolve per-tenant through `ConfigContext` legacy-branding.
+**2026-08-16 — BasketCard policy contract widened without moving business
+logic into the design layer.** The `src/UIComponents/StockAdvicesUI/BasketCard.js`
+container owns lifecycle/range polling and click authorization. The default
+composite receives presentation-only fields (`isCancelled`, `isClosed`,
+`isClosurePending`, `entryBlocked`, `entryChecking`, `entryGateMessage`) and
+renders badges/CTA state. Variant implementations must treat these fields as
+authoritative and must not re-infer lifecycle from legacy cancel flags.
+
+**2026-06-10 — `useTokens()` became variant-aware for the `assets` slot.** It reads the active variant's `buildAssets` via `DesignContext` (`design.tokens.buildAssets`, from `resolveDesign`'s token-namespace merge), falling back to the default builder when called outside a `DesignProvider`. This closed the gap where `useTokens().assets.*` returned the default (AlphaQuark) logos even under a non-default `DESIGN_VARIANT`. The brand-logo `src/`-side consumers migrated in the same change: `BrandLogo`, `LogoSection`, and `SplashScreen` now render `useTokens().assets.logoPng` with no hardcoded variant name (`SplashScreen` is a Navigation stack screen, so it IS inside the providers — the earlier "renders before providers" note was inaccurate). The tenant-specific `src/components/AlphanomyLogo.js` was deleted (it was a brand leak in the default repo); each variant now supplies its own mark through `designs/<variant>/tokens/assets.js`.
 
 **2026-07-11 — `useTokens()` is now variant-aware for the `colors` slot too.** Same pattern as assets: `useTokens()` reads `design.tokens.buildColors` from `DesignContext` and falls back to the local `buildColors` from `src/theme/colors.js`. This lets a fork variant ship hard-coded brand-color defaults (e.g. `designs/moneyman_app/tokens/index.js` starts from a green palette instead of upstream purple) that survive `src/` copies from Alphab2bapp. The advisor-config legacy-branding + `colorTokens` overrides still layer on top inside the variant's `buildColors`, so per-tenant admin-UI overrides continue to work unchanged. `src/theme/colors.js` also gained an optional `mpCardColorCycle` token slot (array of hex strings, or `null` for feature-off) — consumed by `src/screens/PortfolioScreen/ModelPFCard.js` to cycle a per-index accent color across the Portfolio-tab subscribed-MP rows. Default variant leaves the cycle `null` (no visual change); `moneyman_app` sets it to `['#005A00', '#00005A', '#5A005A']`.
+
+**2026-09-27 — every token family is variant-aware.** `useTokens()` now
+resolves `buildSpacing`, `buildTypography`, `buildRadii`, and `buildShadows`
+from `DesignContext` in addition to `buildColors` and `buildAssets`. Every
+family falls back independently to the canonical `src/theme/` builder, so a
+variant can override only typography (for example) without copying any other
+token implementation. This closes the prior contract gap where a variant
+could export non-color builders but the runtime silently ignored them.
 
 ### Primitives
 
@@ -178,9 +230,13 @@ A single React context at the app root, mounted just inside `GestureHandlerRootV
 
 **Shipped Phase B (2026-05-01)** — files:
 
-- `src/design/DesignProvider.js` — the provider component. Uses `useRef` to freeze the resolved registry at mount (the `variant` prop is read once and ignored thereafter; runtime variant switching is not supported in v1).
+- `src/design/DesignProvider.js` — the provider component. Explicit `variant`
+  props and fork `DESIGN_VARIANT` values remain build-owned. The AlphaB2B
+  master build may additionally select a bundled runtime design after advisor
+  resolution; the selected advisor config is the authority and the provider
+  re-resolves only when that advisor identity changes.
 - `src/design/resolveDesign.js` — pure resolution function. Throws at startup if `designs/default/` is missing from the registry. Warns in dev when a non-default variant is requested via `DESIGN_VARIANT` or the `variant` prop but isn't registered.
-- `src/design/useDesign.js` — exports `useDesign()` (returns `{ variant, tokens, components }`) and `useComponent(key)` (throws if key is missing in active variant or default).
+- `src/design/useDesign.js` — exports `useDesign()` (returns `{ variant, tokens, components, sdk, navigation }`) and `useComponent(key)` (throws if key is missing in active variant or default).
 - `designs/registry.js` — static map of all variants. To add a custom variant, add an import + entry here.
 - `designs/default/index.js` — default variant root. `tokens` re-exported from `designs/default/tokens/`. `components` map is empty as of Phase B; Phase C populates it.
 
@@ -191,23 +247,61 @@ The `DesignContext` defaults to `null` so calling `useDesign()` outside the prov
 For variant `"acme"`:
 
 1. Start with `designs/default/` (every key MUST exist here — default is the contract floor).
-2. Shallow-merge `designs/acme/`'s `components` over default's `components`. Tokens layer-merge by namespace (variant's `tokens.X` replaces default's `tokens.X` if the variant exports it, otherwise default's wins).
-3. The resolved registry is frozen at provider mount via `useRef`; variant switching requires app restart (matches how `APP_VARIANT` works today).
+2. Shallow-merge `designs/acme/`'s `components` and `sdk` maps over the
+   corresponding default maps. Tokens layer-merge by namespace (variant's
+   `tokens.X` replaces default's `tokens.X` if exported; otherwise default wins).
+   The `navigation` manifest merges per top-level key (`tabs`, `initialTab`,
+   `moreMenu`, `preLogin`, `chrome`): a key the variant declares replaces
+   default's value whole (arrays are never merged); an omitted key falls back.
+3. Validate every registered variant at startup. A variant may override only
+   component and SDK slot keys declared by `designs/default/`, and only the
+   five navigation manifest keys; an unknown key throws with a contract error
+   instead of becoming a tenant-only API.
+4. Fork builds remain fixed to their explicit `DESIGN_VARIANT`. In the
+   AlphaB2B master build, a registered runtime advisor design may replace the
+   env fallback after login/restore. The design changes atomically with the
+   active advisor config; unknown runtime variants fall back to `default`.
 
-The default variant is the canonical source. **Adding a primitive, composite, or screen always lands in `designs/default/index.js` first.** Variants opt in by overriding; they cannot add new keys that default doesn't have.
+The default variant is the canonical source. **Adding a primitive, composite,
+screen, or SDK slot always lands in `designs/default/index.js` first.** Variants
+opt in by overriding; they cannot add new keys that default doesn't have.
+
+`SdkProviderRoot` consumes the resolved `sdk` map and passes it to
+`<AqSdkProvider components={...}>`. This makes the design registry the single
+build-time selection point for both app-owned presentations and SDK-owned
+presentations. See `SDK_DESIGN_PASSTHROUGH.md § 9` for the slot status and
+props contracts.
+
+**Since 2026-10-01 the SDK consumes every slot** (except the reserved
+`brokerSelectionList`), so a non-null `sdk` entry changes what renders. Slots
+replace presentation only; the SDK keeps the logic. In `designs/default/sdk/`
+a `null` entry means "SDK built-in" — the default registry maps both headers,
+`rebalancePnlChoice` and `brokerSelectionList` to `null` so AlphaPro keeps
+the chrome it has always shown; entries that re-export an SDK widget are
+ignored by the SDK's `resolveSlot` guard. Pinned by
+`src/__tests__/sdkSlotPassthrough.render.test.js`, which renders through the
+real package (see `jest.config.js` for the single-React/React-Native mapping
+needed because the package is a symlink outside `node_modules`).
 
 ### Variant selection
 
-Three sources, in order of precedence (resolved by `pickSelection()` in `DesignProvider.js`):
+Sources, in order of precedence (resolved by `pickSelection()` in
+`DesignProvider.js`):
 
 1. `<DesignProvider variant="...">` prop — wins over env. Mostly useful for tests and Storybook.
 2. `DESIGN_VARIANT` env var — set this in `.env` to ship a tenant skin.
-3. `APP_VARIANT` env var — fallback only.
-4. `default`.
+3. Registered runtime advisor design — AlphaB2B master build only; derived
+   from the stored advisor config (`DESIGN_VARIANT`, or the approved mapping
+   from `APP_VARIANT`, currently `moneyman` → `moneyman_app`).
+4. `APP_VARIANT` env var — fallback only.
+5. `default`.
 
 A name with no matching entry in `designs/registry.js` falls back to `default`. The dev-only warning fires only when the source is `prop` or `DESIGN_VARIANT` (those are explicit design selectors). When the source is `APP_VARIANT` and there's no matching folder, fallback is silent — `APP_VARIANT` is primarily a business-config selector; not having a design folder for every business variant is the normal case.
 
-Backend per-tenant override (`appadvisors.designVariant`) is reserved for future work and not wired in v1. Tenants who want a custom skin ship a build with `DESIGN_VARIANT` set.
+Arbitrary backend component names are still not executable. Runtime selection
+can choose only a design statically imported in `designs/registry.js`; no code
+or component is downloaded. Standalone tenant builds continue to ship with
+`DESIGN_VARIANT` set.
 
 ### Where variant folders live — upstream-default + per-tenant fork repos
 
@@ -240,6 +334,45 @@ specific behavior must enter upstream as a new variant override mechanism
 first, then the fork uses it. The full contract — what stays here, what
 goes downstream, the sync workflow, the `SYNC.md` template, the step-by-step
 recipe to bootstrap a new whitelabel — is in `docs/WHITELABEL_RECIPE.md`.
+
+## Navigation manifest — app structure as data (2026-10-01)
+
+Which bottom tabs exist, their order, labels and icons, the first tab, the
+More-menu sections, the phone-first pre-login order and the tab-bar height are
+declared by the variant's **data-only** manifest, `designs/<variant>/navigation.js`
+(registered as the variant's `navigation` field). Full design and rationale:
+[`CONFIGURABLE_NAVIGATION_DESIGN.md`](./CONFIGURABLE_NAVIGATION_DESIGN.md).
+
+- **Catalog** — `src/navigation/screenCatalog.js` is the pure-data list of
+  placeable keys (`TAB_CATALOG`, `MORE_ITEM_CATALOG`, `PRE_LOGIN_CATALOG`).
+  Route names stay the legacy ones (`Home`, `Orders`, `Portfolio`, `Plans`,
+  `News`, `More`) so existing `navigate()` calls, deep links and push routing
+  are unaffected.
+- **Resolver** — `src/navigation/resolveNavigation.js` (pure) drops unknown or
+  duplicate keys with warnings, enforces 1–6 tabs, never returns an empty tab
+  bar, re-adds **required** entries (the More tab; Privacy Policy, Terms,
+  Delete Account, Log Out rows — the More tab is the only general entry to
+  in-app deletion, Apple 5.1.1(v)), and lets runtime flags only **hide**
+  flag-gated rows (`coursesEnabled`, `webinarsEnabled`, `changeManagerVisible`,
+  `appleRelayIdentity`).
+- **Consumers** — `useNavigationLayout(flags)` (`src/navigation/`) feeds
+  `MainTabNavigator` in `src/components/Navigation.js` (tabs, initial route,
+  tab-bar height, legacy toolbar), `AccountSettingsScreen` (More menu) and
+  `SplashScreen` (first phone-first pre-login route). Manifest warnings are
+  reported once per session as a `nav_manifest_warning` frontend anomaly.
+- **Locked** — the catalog has no keys for auth, KYC, MITC → payment, or broker
+  connect → sell-auth → review → place steps; a manifest can link to a flow's
+  entry screen but cannot reorder its steps.
+- **Enforced** — `npm run audit:design` rejects any import in a
+  `navigation.js` manifest and any non-literal default export (functions,
+  identifiers, spreads, computed keys).
+- **Transitional** — the legacy toolbar still also requires `DESIGN_VARIANT`
+  to be unset or in the `default`/`moneyman_app` allow-list, so a fork that
+  sets an unregistered `DESIGN_VARIANT` keeps today's hidden toolbar until it
+  declares `chrome.legacyToolbar` in its own manifest.
+- Fork variants (per § "Where variant folders live") add `navigation` to their
+  own `designs/<variant>/index.js`; the former hard-coded arfs News-for-Plans
+  swap now belongs in the arfs fork's manifest.
 
 ## Container / presentation split — the worked example
 
@@ -300,6 +433,43 @@ Effectively the entire app **except** the SDK-bound Phase 3 surfaces (see "Out o
 - `UIComponents/StockAdvicesUI/*`, `UIComponents/RebalanceAdvicesUI/*`
 - All standalone modals not in the SDK lane (`BasketTradeModal`, `DeleteAdviceModal`, `IgnoreAdviceModal`, `GttDetailsModal`, `GttSuccessModal`, `DdpiModal`, `TokenExpireBrokerModal`, `HoldingsMigrationModal`, `RebalanceModal`, `RebalanceAdviceContent`, `RebalancePreferenceModal`, `MPReviewTradeModal`, `MPInvestNowModal`, etc.)
 
+### What does NOT belong in a variant — third-party WebView surfaces
+
+**Rule (2026-08-01): a surface whose entire body is a third-party web page is
+not a design surface. The container renders it directly; it never travels
+through `viewModel` / `actions`.**
+
+The test is "could an advisor meaningfully restyle this?" For a WebView hosting
+someone else's UI the answer is no — the only thing we own is a header bar and
+a close button. A `designs/<variant>` override of such a surface can only ever
+be a stale copy of the default.
+
+The cost of getting this wrong is specific and severe: **every prop crossing the
+design boundary defaults to a no-op.** The presentation destructures with
+`onFoo = () => {}` / `foo = false` defaults, so a variant fork that overrides
+the screen and forgets a prop doesn't crash — it silently does nothing. On a
+payment or compliance path that is a data-loss-class bug that no test and no
+error report will surface.
+
+That is not hypothetical. `DigioModal` (the Digio e-sign WebView) lived in
+`designs/default/screens/MPInvestNowModal.js` and needed seven props
+(`digioModalOpen`, `authUrl`, `onDigioModalClose`, `onDigioVerifyDocument`,
+`onDigioVerificationComplete`, `onDigioSuccess`, `onDigioError`). Dropping any
+one of them reinstates the 2026-08-01 defect where a customer completes their
+MITC signature and is never carried to payment. It is now rendered by the
+container (`src/components/ModelPortfolioComponents/MPInvestNowModal.js`),
+alongside `<Presentation/>` in a fragment, and those seven keys are gone from
+the contract.
+
+**In scope by contrast:** `DigioSuccessModal` stays in the presentation. It is
+our own UI — brand tokens, accent colour, a progress rail — and an advisor
+restyling it is legitimate. Its `afterPayment` prop is a normal presentation
+prop.
+
+Applies today to `DigioModal`. Apply the same reasoning to any future
+WebView-wrapping surface (gateway checkout pages, KYC vendor flows, broker
+OAuth) before adding it to a `screens.*` key.
+
 ### Out of scope — SDK-bound Phase 3 surfaces
 
 The only surfaces that NEVER migrate to `designs/`:
@@ -353,7 +523,12 @@ Strictly sequential. Each phase ships, soaks, and is reviewed before the next st
 9. **Phase I — MP screens. ✅ Shipped 2026-05-03.** ModelPortfolioScreen (1115 LOC), MPPerformanceScreen (2220 LOC), MPCard, ModelPFCard, CustomTabbarMPPerformance, EmptyStateMP — all container/presentation split. MPInvestNowModal (5364 LOC) — container/presentation split with payment gateway code in container.
    - **NOT in `designs/`** (SDK-replaced): `MPReviewTradeModal` (2151 LOC), `RebalanceModal` (2650 LOC), `RebalanceAdviceContent` — these are replaced by SDK orchestrator widgets (`tradeReviewSheet`, `tradeResultModal`, `tradeExecutionProgress`, `sellAuthGate`). Customizable via `designs/<variant>/sdk/` instead. See `docs/SDK_DESIGN_PASSTHROUGH.md § 9`.
 
-**All phases (A–I) are now complete.** The design system covers 61+ surfaces. Any new surface follows the same pattern: container at `src/`, presentation at `designs/default/`, registered in `designs/default/index.js`.
+**All A–I registry phases are complete.** The design system covers 61+
+registered surfaces. This means the resolution path exists; it does not mean
+every registered presentation is isolated yet. The 2026-09-27 boundary audit
+tracks the remaining container/service imports. Any new surface follows the
+same pattern: container at `src/`, presentation at `designs/default/`,
+registered in `designs/default/index.js`, with no new baseline exception.
 
 Each phase is the smallest atomic unit that ships value and can be reverted cleanly. Don't bundle them.
 
@@ -372,6 +547,44 @@ Component-level overrides (e.g. "use `MyBrokerCard` for advisor X") are **not** 
 - **Snapshot tests per primitive** in `designs/default/`. A variant ships its own snapshots.
 - **Container-only tests** for screens in `src/` — mock the resolved presentation, assert the container builds the right viewModel.
 - **Visual regression** (Storybook or similar) lives at `designs/default/.storybook/`. Variants get their own. Out of scope for v1 — flag for follow-up.
+- **Registry contract test** (`src/__tests__/designVariantContract.test.js`) checks token/component/SDK fallback and rejects private component or SDK keys.
+- **Presentation-boundary CI audit** (`npm run audit:design`) rejects new imports from `designs/**` into network, storage, Firebase, navigation, contexts, services, or src-owned UI — by static `import`, `require()` **or dynamic `import()`** (non-literal `import(expr)` is rejected as unresolvable; added 2026-09-29, pinned by `src/__tests__/designBoundaryDynamicImport.test.js`). The exact historical debt is recorded in `scripts/design-boundary-baseline.json`; both new violations and stale baseline entries fail CI, so cleanup only moves the count down.
+- **Source-style CI ratchet** (`npm run audit:styles`) enforces zero production
+  `src/` hex/font literals. Token definitions, comments, tests, and
+  `designs/**` are excluded intentionally. `npm run validate:design-literals`
+  also compiles every source file and proves build-time markers disappear.
+
+### How to change a variant's design or UX
+
+The operational procedure (which change needs what, tokens incl. build-time
+`literals.json`, component overrides, visual baselines) is
+[`VARIANT_CREATION_GUIDE.md`](./VARIANT_CREATION_GUIDE.md) § "Which change
+needs what" and § 7. Flow changes (steps, actions, data) are `src/` container
+changes and need functional testing; design-folder changes need visual
+verification only.
+
+### Presentation boundary (completed 2026-09-28)
+
+The first executable audit found 62 forbidden import edges across 17 design
+files. After the Provisional/Transition extraction and the final container/slot
+pass, the audit discovers **0 edges across 0 files**. Design presentations no
+longer import network, storage, Firebase, navigation, contexts, services, or
+src-owned UI.
+
+The permanent contract is:
+
+- `src/` containers own state, effects, navigation, service calls, payment,
+  Digio, broker and SDK behavior;
+- `designs/**` receives display-ready `viewModel`, callbacks in `actions`, and
+  any app-owned visual/behavioral collaborator through `slots`;
+- the visible navigator chrome resolves `shell.AppHeader` and
+  `shell.MainTabBar`; route state and navigation events remain src-owned;
+  navigator STRUCTURE (which tabs, order, More menu) is the data-only
+  navigation manifest (§ Navigation manifest), resolved in `src/`;
+- new forbidden imports — static, `require()` or dynamic `import()` — fail
+  `npm run audit:design`; and
+- removing a registered component is safe only after proving it has no caller,
+  as done for the unreachable `AumPerformanceCard`.
 
 ## Navigator convention — render-stable Tab.Screen components
 
@@ -394,9 +607,13 @@ Calling these out so they don't get smuggled in:
 - No CSS-in-JS / styled-components migration. RN `StyleSheet` stays.
 - No new state-management library. Zustand + contexts stay.
 - No package extraction. `designs/` is part of this repo.
-- No runtime variant switching. Variant is fixed at provider mount.
+- No arbitrary/runtime-downloaded designs. The AlphaB2B master build may
+  switch only among statically registered variants when its authenticated
+  advisor config changes; fork builds remain fixed by `DESIGN_VARIANT`.
 - No per-component backend override. v1 = build-time only.
-- No new tooling, codegen, or build pipeline changes beyond what's needed to read `designs/<variant>/`.
+- No codegen, bundle splitting, or runtime component download. The static CI
+  boundary audit is allowed because it enforces this architecture; it does not
+  alter the runtime bundle.
 - No refactor of business logic, hooks, or services. Containers MAY be cleaned up incidentally during the split, but cleanup is not the goal — separation is.
 
 ## When to update this doc
@@ -442,7 +659,10 @@ headline return; risk wording identifies volatility as manager-selected.
 The subscribed detail (`AfterSubscriptionScreen`) follows the same customer
 mental model: current holdings, manager target mix, then strategy/performance.
 Its action bar is a safe-area-aware control region, not content that can be
-clipped by a device's gesture area.
+clipped by a device's gesture area. While its broker and subscription snapshots
+are loading, the value hero uses neutral placeholders and the Holdings tab uses
+an explicit progress state; a loading request must never be presented as ₹0 or
+as a confirmed empty portfolio.
 
 ### Customer terminology — Manager (2026-07-18)
 
@@ -451,3 +671,18 @@ All customer-visible labels, helper copy, alerts and empty states use
 “advisor”. This is a presentation rule only: API headers, routes, config keys,
 database fields and variable names such as `X-Advisor-Subdomain`, `advisor`,
 and `advisorName` remain unchanged for compatibility.
+
+### Remote-image failure contracts (2026-07-28)
+
+Remote asset health belongs to the container/action boundary, while fallback
+layout belongs to the presentation:
+
+- `screens.PaymentHistoryScreen` receives `advisorLogo` and
+  `advisorLogoFallback`; its presentation may advance through those supplied
+  sources plus a row's historical logo, but performs no config lookup.
+- `composites.MPCard` receives the already-resolved `imageUri` and
+  `fallbackImage`, and reports `actions.onImageError`. The container owns the
+  failed-source state and re-renders with `imageUri: null`.
+
+This keeps tenant configuration and error state outside `designs/` without
+allowing a broken remote URL to create a blank customer-facing surface.

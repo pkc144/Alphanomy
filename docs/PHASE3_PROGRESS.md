@@ -2,6 +2,29 @@
 
 > **Chronological record of every Phase 3 commit, broker verdict change, regression observed, and rollback decision.** Append-only. See `CLAUDE.md § Phase 3 SDK Broker Migration — BLOCKING DOCUMENTATION REQUIREMENT`.
 
+## 2026-09-29 — Angel One device-TOTP fallback no longer reaches the shared-SmartAPI sheet
+
+- Bug: `BrokerConnectModalDispatch` used `angelOnePerCustomer && !secureTotpHostFlow`,
+  so device-TOTP tenants got `AngleoneBookingTrueSheet` (platform-shared
+  SmartAPI key) as the gate's full-login fallback.
+- Fix: `angelOnePerCustomer` alone selects `Phase3SdkBrokerModal`; the
+  `'Angel One'` case and import were removed from `renderLegacyModal`.
+  `DeviceTotpReconnectGate` still wraps it for quick reconnect.
+- Verification: new `src/__tests__/brokerDispatchRouting.test.js` asserts the
+  full routing matrix (fails on the old dispatcher, passes now); full Jest
+  150/150 suites, 1,309 tests. Not yet exercised on a device (ships in 3.9.151).
+- Docs: PHASE3_ARCHITECTURE (Angel One section correction), PHASE3_BROKER_AUDIT
+  (Angel One row), BROKER_CONNECTION routing matrix.
+
+## 2026-09-29 — Routing matrix documented; stale fallback notes corrected (docs only)
+
+- Added the canonical per-broker routing table (SDK lane vs host lane vs
+  `DeviceTotpReconnectGate`) to `docs/BROKER_CONNECTION.md` § "Broker connect
+  routing matrix", derived from `BrokerConnectModalDispatch.js` as of today.
+- Corrected two stale statements: `SDK_LEGACY_FALLBACK` is `['IIFL']` (not
+  empty, not Angel One/Zerodha). Marked superseded in
+  `BROKER_CONNECTION.md` and `PHASE3_ARCHITECTURE.md`. No code change.
+
 ## Entry format
 
 ```
@@ -17,6 +40,32 @@
 ```
 
 ---
+
+## 2026-09-22 — SDK `8e67bad` — fix(sdk-webview): recover a terminated broker-login renderer
+
+**Broker(s) affected:** all SDK OAuth brokers; reported on Zerodha.
+
+**Files touched:** RN SDK `WebViewBrokerAuthFlow.tsx` and its Zerodha session
+contract test; AlphaB2B Phase 3 docs; shared SDK build output consumed by the
+APK.
+
+**Change summary:** The AlphaB2B configuration routes Zerodha through the SDK,
+not the legacy modal. After a user reported that the app closed from the login
+page, the SDK gained Android `onRenderProcessGone` and Apple
+`onContentProcessDidTerminate` handling. A dead WebView is replaced once with a
+new keyed instance at the same login URL; a repeat failure returns the host to
+its existing retry UI with `broker_webview_process_gone`.
+
+**Verdict change(s):** none. This is lifecycle hardening; the report has no
+stack trace, so the exact device-level cause is not asserted as confirmed.
+
+**Regression(s) observed:** none in SDK Jest/typecheck and app contract tests.
+
+**Rollback decision:** no; the change is isolated to native renderer-loss
+events and preserves the existing OAuth path otherwise.
+
+**Next step:** device-test Zerodha login, OTP keyboard, background/resume, and
+callback completion on the reporting handset using AlphaB2B 3.9.125.
 
 ## 2026-06-11 (2) — _pending commit_ — fix(sdk-webview): AliceBlue iOS blank — REAL root cause = firebase-messaging bootstrap abort; WKWebView API shims (serviceWorker + Notification)
 
@@ -1132,3 +1181,37 @@ Append-only — never delete or edit prior entries. Corrections go in a new entr
 
 Verification performed: focused JavaScript lint (no errors), `git diff --check`,
 and Android debug assembly. Live broker/Cashfree certification remains pending.
+
+---
+
+## 2026-09-27 — pending commit — re-enable IIFL customer-owned direct OAuth
+
+**Broker(s) affected:** IIFL Securities.
+
+**Files touched:** `src/components/iiflmodal.js`,
+`BrokerConnectModalDispatch.js`, `brokerGuideConfigs.js`,
+`EgressIpCallout.js`, broker display/support/order-book surfaces, focused tests,
+manual test plan, and Phase 3/broker architecture documentation.
+
+**Change summary:** IIFL is visible again and remains deliberately routed to
+the legacy modal because the SDK schema still models a different product. The
+fallback is no longer the old platform-partner/AsyncStorage-only flow: it now
+collects the customer's Individual Trader API App Key/App Secret, shows the
+exact redirect URL and assigned Route64 IPv6 to register, uses Node login URL
+and secret-preserving exchange endpoints, persists the normal MongoDB broker
+record, and reuses saved credentials for the required daily browser login.
+
+**Verdict change(s):** IIFL: unavailable + SDK-broken → enabled,
+legacy-correct + SDK-broken. SDK promotion remains blocked only by the schema
+and exchange-contract mismatch.
+
+**Regression(s) observed:** none in focused Jest suites; 130 tests passed
+before the final redirect-origin hardening. Release APK and ELF alignment are
+verified separately in the handoff for this entry.
+
+**Rollback decision:** no. `SDK_LEGACY_FALLBACK` is intentionally retained as
+the correct production route.
+
+**Next step:** real-account test: create/register the IIFL app, whitelist the
+displayed IPv6, connect, then verify a next-day reconnect using saved app
+credentials.

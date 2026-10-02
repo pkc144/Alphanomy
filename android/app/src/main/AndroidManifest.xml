@@ -31,6 +31,7 @@
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"
         android:allowBackup="false"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:theme="@style/AppTheme"
         android:supportsRtl="true">
 
@@ -120,6 +121,10 @@
                     app is NOT installed. Parsed in App.js → src/utils/smartLink.js.
                 -->
                 <data android:pathPrefix="/l" />
+                <!-- PhonePe API checkout returns here. Every white-label app
+                     presents its own runtime applicationId to the backend;
+                     assetlinks.json already maps approved package/signing pairs. -->
+                <data android:pathPrefix="/phonepe-return" />
             </intent-filter>
         </activity>
 

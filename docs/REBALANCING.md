@@ -1,10 +1,231 @@
 # Rebalancing Architecture
 
-## 2026-09-22 SDK sell authorization and error ownership
+## 2026-10-02 One broker probe per Accept Rebalance tap
 
-The shared SDK verifies broker sell authorization before placement, so a
-server-confirmed Groww/DDPI session proceeds without a redundant local gate.
-SDK failures use the terminal error handler and never resubmit through legacy.
+Before this change one Home-card **Accept Rebalance** tap ran, in series:
+probe (getUser + broker funds) → `rebalance/get-repair` → the same probe in
+`handleCheckBroker` → the same probe again in `handleAcceptRebalance`
+(`directReview`) → `rebalance/calculate`. Three identical broker funds
+round-trips, each with its own retry.
+
+Now:
+
+1. **Reuse.** `useRefreshBrokerStatus` accepts `{forceNetwork, reuseWithinMs}`
+   and returns the last network probe (`reused: true`) when it is younger
+   than `BROKER_PROBE_REUSE_MS` (30 s). Only a probe that proved a
+   **connected** broker with **live funds** is cached; an expired, failed or
+   disconnected probe always re-probes. `refreshEvent` (any connect /
+   reconnect / disconnect / execution) and `OrderPlacedReferesh` clear the
+   cache. Callers that must see the broker *now* (post-reconnect resume,
+   trade/basket placement) do not pass `reuseWithinMs` and are unchanged.
+2. **Overlap.** `RebalanceCard.handleRepairDiscovery` starts `get-repair`
+   together with the probe, but only when the card already shows the broker
+   `connected`. Its result is used only if the probe confirms the **same**
+   broker is still connected; an expired probe opens reconnect and the
+   overlapped result is discarded (no review opens from it); a broker switch
+   re-runs `get-repair` for the new broker. When the card already shows the
+   broker expired/disconnected, reconnect still precedes discovery.
+3. **Hand-forward.** `handleCheckBroker` passes its probe as
+   `onReviewRebalance({..., liveSession})`; `handleAcceptRebalance` uses it
+   instead of probing again. `/rebalance/calculate` re-reads funds and
+   holdings itself and its `sessionExpired` / `RECONNECT_BROKER` /
+   `accountRecovery.reconnect` answers still open the reconnect sheet.
+
+4. **Reuse the Home refresh's get-repair (added same day).** `TradeContext`
+   keeps the last **clean** get-repair answer (`lastRepairResultRef`: not
+   pending/unknown, account not blocked) with its time, email, broker and
+   models. `getRecentRepairResult({modelName, broker, maxAgeMs = 30000})`
+   returns it to the card when it covers that model + broker and is <30 s old;
+   the card then skips its own get-repair (it measured 4–10 s server-side).
+   `refreshEvent` / `OrderPlacedReferesh` bump `repairEpochRef` and clear it,
+   and an answer whose request started before such an event is never stored.
+   The reuse requires the probe to confirm the same broker is connected;
+   otherwise the card asks the server as before. An expired card never reuses.
+
+5. **One tap's broker reads are shared with its calculate (added same day).**
+   `handleRepairDiscovery` creates one `brokerReadSession` id per Accept tap
+   (`tapReadSessionRef`) and sends it with that tap's get-repair
+   (`TradeContext.getModelPortfolioRepairTrades(..., {brokerReadSession})`)
+   and its calculate (`onReviewRebalance` → `handleAcceptRebalance` payload).
+   The server keeps the holdings/positions it read during get-repair for that
+   id only, ≤15 s, and calculate reuses them; cash stays live. A tap that
+   reused the Home answer (step 4) makes no get-repair call, so calculate
+   reads live. ccxt `846e916e`, `rebalancing/utils/tap_broker_reads.py`.
+
+6. **Calculate does not wait for the probe (added same day).** When the card
+   already shows the broker connected and get-repair is in flight or reused,
+   `handleRepairDiscovery` acts on get-repair's answer without waiting for the
+   tap's probe. Only the two calculate paths (`requiresFreshRebalance`, and
+   the verified-no-repair path) run early: `handleCheckBroker` hands the
+   in-flight probe to `handleAcceptRebalance` as `pendingSession`, which sends
+   `/rebalance/calculate` (broker = `expectedBroker`, context credentials) and
+   then applies the same probe checks as before — refresh failure → alert,
+   expired/not connected/funds preflight → reconnect, a different broker →
+   `'broker_changed'` and the tap restarts step by step (`sequential`). On any
+   failure the calculation is discarded and nothing is shown. Every other
+   path (Repair review, holdings review, the "aligned" write, toasts) still
+   confirms the probe first (`confirmSession`).
+
+7. **Connection warm-up (added same day).** `useConnectionWarmup` (mounted in
+   `RebalanceAdvices` while the customer has model portfolios) sends a tiny
+   read-only `GET {ccxt}/health/live`: once when enabled, on returning to the
+   foreground, then every 5 minutes in the foreground (never in the
+   background, never twice within a minute). The first Accept tap after idle
+   otherwise paid ~0.6–0.9 s opening a new TLS connection through Cloudflare —
+   most Indian customers reach it via Singapore/Marseille, ~0.3 s per request
+   even when warm (that leg can only change via Cloudflare routing/plan).
+
+Net: one funds probe per tap (was three), and get-repair either reuses the
+Home answer or no longer waits for the probe; when get-repair does run, its
+holdings/positions/cash read serves the calculate too, and the calculate no
+longer waits for the probe. Pinned by `src/__tests__/brokerProbeReuse.test.js` and
+`src/__tests__/utils/actionReviewRouting.test.js`.
+
+## 2026-09-29 Unaffordable target shares are not alignment
+
+An empty Step 3 calculation carrying the backend-owned
+`allocation.code = TARGET_SHARES_UNAFFORDABLE` is a blocked allocation, not a
+successful alignment. `RebalanceModal` renders an amber **Target Allocation Is
+Not Yet Reachable** state, explains that no orders were placed, and keeps the
+existing target-share budget details visible. The zero-order acknowledgement
+path explicitly excludes this state, so it cannot write
+`subscriber-execution: executed` merely because both order arrays are empty.
+
+Only an authoritative empty calculation without a funding, skipped-target,
+sell-authorization, Publisher-continuation, or unaffordable-target blocker may
+render **Already Aligned** and run the acknowledgement write.
+
+## 2026-09-29 Compact order-first review
+
+`RebalanceModal` treats the calculated orders as the primary review content.
+Its `FlatList` owns the remaining vertical space and all optional funding
+explanations scroll in the list footer after the orders. The low-funds warning
+is collapsed by default and exposes its existing detail through **View
+details**. The action button remains fixed and reachable.
+
+The redundant **Funding used for this calculation** strip and duplicate
+additional-funds sentence were removed. This is presentation-only: the frozen
+plan, allocation warnings, funding consent, broker authorization, quantities
+and dispatch contract are unchanged.
+
+## 2026-09-29 Pending status requires an execution identity
+
+The recommendation card does not treat a stale
+`subscriberExecution.status = pending` value as sufficient broker-order
+evidence. On **Check Order Status**, it first reads
+`rebalance/user-portfolio/latest` and selects only:
+
+- the attached current Publisher attempt; or
+- a model-scoped `advice_executed` episode for the current recommendation.
+
+Holdings snapshots and other recommendation IDs are excluded. The app calls
+`add-user/status-check-queue` only when the selected attempt carries a
+`uniqueId`, `planId`, or `attemptId`. Without one, it runs authoritative
+`get-repair` recovery: a verified empty response reopens fresh Calculate;
+unknown or in-flight evidence continues to hold. Calculate remains read-only
+and never creates a pending broker attempt.
+
+## 2026-09-29 Zerodha sell-to-buy price and continuation recovery
+
+Before a dependent BUY is sent to `publisher/refit-buys`, mobile now refreshes
+Kite-safe quotes and attaches that same snapshot to each MARKET leg. The
+calculate response's server-owned `rebalancePrice` is persisted as the durable
+fallback, so a foreground/app-restart continuation never reconstructs eight
+zero-priced buys. Valid `applied`, `not_needed`, and
+`attempt_with_shortfall` refit outcomes use the returned `submit` quantities.
+
+A continuation is cleared only after the authorized Kite BUY window actually
+opens. A refused or empty refit remains retryable, cannot auto-mark an empty
+calculation as Already Aligned, and shows an explicit no-order-opened message.
+`RebalanceAdvices` is the sole owner of the result modal; the nested duplicate
+without the continuation callback was removed.
+
+## 2026-09-28 broker result and reservation recovery
+
+Broker result truth is normalized at the SDK boundary with quantity evidence;
+raw adapter status remains available for audit. Protected cross-model cash
+reservations expose the owning models and a review action instead of a retry
+loop. Upstox explicit circuit-bound rejections with no order id may be retried
+once at the broker-supplied legal edge; ambiguous or accepted attempts never
+retry.
+
+## 2026-09-28 Failed SELL before dependent BUYs
+
+A rejected/cancelled SELL is recovered as an explicit SELL-only immutable
+Repair. The customer sees `Review Failed SELL` and confirms the exact remainder;
+no order is retried automatically. Completed SELLs are immutable. The accepted
+BUY phase stays unavailable until broker truth makes the retry terminal, then
+the next verification refits and presents only the remaining BUYs.
+
+## 2026-09-18 Reduce-to-funded is anchored to the reviewed plan
+
+The funding-consent choice "Update total investment to Rs R" writes through
+`POST /rebalance/reduce-to-funded`, which pushes a `subscription_amount_raw` row
+(`changeMode: "reduce_to_funding"`) and supersedes any unconsumed frozen plan
+minted against the old intent. The amount is re-derived server-side: frozen-plan
+continuity, then an open/partially-funded authorization (`targetAmount −
+unfunded`), then the previous intent row (never raw live cash on a subsequent
+rebalance — a later "Full Amount" reset against cash-as-intent would sell the
+portfolio down to it), then live cash for a first rebalance.
+
+Every call site sends `plan_id` (`rebalanceContract.plan.id`). Without it the
+server re-reads the balance at tap time, so a settlement or deposit landing
+between calculate and the tap changes the amount written and the button's quoted
+figure no longer matches the account. A plan that fails the server's identity
+check falls back to the live read unchanged.
+
+## 2026-09-17 Canonical broker gate after connection
+
+The broker picker, reconnect prompt, and post-connect rebalance continuation
+share the canonical user record. A failed user refresh is not evidence that the
+account is DummyBroker/brokerless and therefore cannot open the picker. After a
+broker WebView or credentials flow succeeds, continuation waits for the shared
+connection dispatcher to reread and verify the persisted selected broker. This
+prevents a locally selected Zerodha flow from resuming while the database still
+names an older Groww or DummyBroker state.
+
+## 2026-09-17 Reconnect and CDSL modal ordering
+
+Rebalance preflight repeats its funds check when broker login rotates the token
+without changing the broker. During Zerodha sell authorization, the native
+DDPI information modal is hidden before the app-root CDSL browser is displayed;
+otherwise Android renders the native modal above the TPIN page and blocks it.
+
+## 2026-09-08 Direct action review
+
+Verified Repair, saved allocation and fresh allocation now open their required
+review without obligatory holdings confirmation. Reconnect precedes fresh
+verification; ownership blockers retain holdings resolution. See
+[routing and release evidence](MODELPF_DIRECT_ACTION_ROUTING_2026-09-08.md).
+
+## 2026-09-07 Publisher acknowledgement and foreground recovery
+
+The host-owned model-portfolio Publisher paths in RebalanceModal,
+MPReviewTradeModal and UserStrategySubscribeModal share
+`src/utils/publisherAcknowledgement.js`: Node intent and Python activation
+requests allow 15 seconds; activation requires status 0, recorded true,
+reconciliationEnrolled true, and no explicit allowExecution denial. Activation
+is not automatically retried on a timeout, and acknowledgement is not a fill.
+
+TradeContext subscribes once to app resume through
+`src/utils/portfolioResume.js`, using the current account/config callback.
+It refreshes both subscriber status and Repair, with in-flight deduplication,
+a 15-second resume throttle and listener cleanup. Normal silent polling still
+skips Repair. No client execution-record writes or automatic retry placement
+are introduced. Existing Publisher routing, plan identity and sell-auth remain
+unchanged; this is host-lane hardening, not an SDK migration.
+
+## SDK invariant update (2026-08-28)
+
+RN/Flutter convenience rebalances preserve the immutable backend plan and SELL phase before BUY. A lost response returns paused reconciliation with `safeToRetryPlacement=false`; AlphaB2B propagates it without legacy fallback.
+
+## Verified post-sell transition to BUY (2026-08-26)
+
+The native Zerodha queue opens dependent BUYs only after `publisher/refit-buys`
+returns usable buying power. The request carries frozen `plan_id` and `unique_id`.
+Confirmed-fill fallback cash is usable even with `cashReadOk:false`; abstain or
+unusable cash closes the BUY phase. Repair stays hidden during broker reconciliation
+and is automatically fetched again after the returned delay.
 
 > **Last updated**: 2026-05-06
 
@@ -123,6 +344,8 @@ export function defaultDecrypt(value) {
 
 **Maintenance-window contract (2026-04-17)**: `TRANSIENT_NON_AUTH_BROKER_ERROR_CODES` is the single source of truth for which broker error codes must bypass re-login. Add new codes here as they're discovered. Upstox's nightly 00:00–05:30 IST funds + place-order window is the current motivating case.
 
+**"Update Investment" alert → auto-open contract (2026-08-11)**: when `isSubscriptionAmountError` fires, `RebalanceAdvices.js` shows the "subscription amount is not set or may have been cleared" alert whose **Update** button navigates to `AfterSubscriptionScreen` with `openModifyInvestment: true`. The screen consumes that param and auto-opens the **Update Investment Amount** modal once `strategyDetails` + the authenticated `user_broker` have loaded; optional rebalance history does not block it (one-shot `useRef` guard — fires once per navigation, never re-opens on dismiss). The broker gate prevents slow profile loading—more visible on iOS—from querying with an empty broker or writing to the former `DummyBroker` fallback, which left the real broker amount unset and repeated the rebalance alert. The lookup reruns when the broker arrives, writes require the real broker, and model ID resolution tolerates incomplete rebalance history. The persistent action footer uses the native bottom safe area so it stays above iOS and Android system navigation. Button + modal header are labelled **"Update Investment Amount"** (renamed from "Modify Investment" for clarity).
+
 ### Wire-up points for `detectTransientOrderWindowError`
 
 Both all-orders-failed sites run the transient detector **before** rendering the internal failure modal so the customer sees a soft toast instead of the scary all-failed UI during a documented service window:
@@ -203,7 +426,42 @@ Files fixed (2026-04-07):
 
 ## DDPI authorize-for-sell — `await getUserDetails` before reopening rebalance modal (2026-04-20)
 
-The rebalance flow invokes `DdpiModal` / `AngleOneTpinModal` / `DhanTpinModal` / `FyersTpinModal` / `OtherBrokerModel` as a SELL-side precheck. If the user hasn't authorized for sell on their broker, the modal fires a `PUT /api/update-edis-status` and calls `reopenRebalanceModal()` to return the user to the rebalance review.
+### Empty manual-authorization retry is not alignment (2026-09-29)
+
+`OtherBrokerModel.handleAcceptRebalance` recalculates after a portal broker
+user confirms that the reviewed SELLs were authorized. Some Groww sessions can
+return `{buy: [], sell: []}` when the customer checks the confirmation box but
+the broker authorization was not actually completed. That response is
+ambiguous: no broker execution or reconciliation evidence says that the
+original SELLs filled.
+
+The recovery request therefore tags its response with UI-only
+`_sellAuthorizationRetry`, broker, model-name and model-id metadata. When that
+tagged response has no orders, `RebalanceModal` renders **Sell Authorization
+Still Pending**, explains that dependent BUYs remain unplaced, and excludes the
+response from the `isAlreadyAlignedCalculation` auto-acknowledgement path. A
+normal, portfolio-correlated zero-trade calculation without this recovery tag
+remains authoritative and continues to render **Already Aligned**. The pending
+state's **Retry Sell Authorization** action returns directly to the manual
+authorization sheet.
+
+The rebalance flow invokes `DdpiModal` / `AngleOneTpinModal` /
+`DhanTpinModal` as broker-specific SELL-side prechecks where reliable status is
+available. Fyers is broker-evidence-first: its SELL is submitted and
+`FyersTpinModal` opens only after `SELL_AUTH_REQUIRED` or
+`SELL_AUTH_REVOKED`. The modal fires `PUT /api/update-edis-status` and calls
+`reopenRebalanceModal()` after successful authorization.
+
+For Dhan, completion must refresh `/dhan/edis-status` before review reopens.
+The fresh result is lifted into the parent state, and the gate checks only the
+selected equity-delivery SELLs (symbol/ISIN plus sufficient approved quantity),
+not `every()` holding in the customer's account. This prevents both stale-state
+TPIN loops and unrelated unauthorized holdings blocking the current basket.
+
+The Fyers `submit-holdings` HTML is mounted through the app-root
+`PublisherWebViewOverlay`; the informational native Modal is hidden for that
+browser session. This is required on Android so the CDSL TPIN field stays
+visible, touchable and keyboard-focusable.
 
 Before the 2026-04-20 fix (commit `a6bbeae`, ports web `e73bd81` Issue 3), the internal `getUserDetails()` call after the PUT was **fire-and-forget** — the reopened rebalance modal read pre-PUT `userDetails.is_authorized_for_sell=false` and re-triggered DDPI immediately, making the authorize-for-sell tick appear to not stick.
 
@@ -315,6 +573,22 @@ The connect route (`aq_backend_github/Routes/Broker/Kotak.js`) calls ccxt's `/ko
 
 ## Kite Publisher polling fallback — WebView callback recovery (2026-05-12)
 
+### Durable execution session before WebView open (2026-08-29)
+
+The AlphaB2B, Markup, and Moneyman apps now fail closed before mounting the
+Kite WebView. Stock/basket execution awaits the shared Node
+`/execution-intent` acknowledgement with the exact top-level `attemptId` used
+for record-back. Model Portfolio and initial allocation await the Python
+`/rebalance/publisher/intent` response and require both the intent write and
+durable reconciliation enrollment. No order is sent when either acknowledgement
+is missing or reports a payload mismatch.
+
+Mobile can await this boundary directly because its in-app WebView submission
+does not depend on a transient browser popup gesture. Existing installed builds
+remain accepted by the backward-compatible endpoints; historical orders without
+a session continue through legacy reconciliation and are never inferred merely
+from the absence of a new session.
+
 Bespoke rebalance via Zerodha runs through Kite Publisher in a WebView. The expected flow is:
 
 1. User completes Kite's hosted form
@@ -415,6 +689,40 @@ This layer always runs regardless of whether the client callback or polling fire
 - Symbol conversion + market protection helpers: `src/utils/brokerPublisher.js`
 - WebView baseUrl rationale (why we can't use `REACT_APP_BROKER_CONNECT_REDIRECT_URL`): `getPublisherWebViewBaseUrl` JSDoc in `brokerPublisher.js`
 
+### Canonical Publisher item construction (2026-08-28)
+
+The two rebalance consumers (`RebalanceModal.js` and
+`MPReviewTradeModal.js`) no longer maintain private Zerodha product/order-type
+mappers. After each flow resolves its derivative symbol, exchange, lot-adjusted
+quantity, LTP and tag, it passes those values as overrides to
+`brokerPublisher.convertToBasketItem()`. The shared converter is the final
+payload authority and enforces `NRML` for `NFO`/`BFO` carry-forward orders.
+Sell-first/buy-next queueing, fill confirmation, funds refresh and batching are
+unchanged and remain owned by the rebalance screens.
+
+## Two-phase Zerodha publisher (sells-first) + confirmed-fill gate (updated 2026-08-12)
+
+**Port of web Fix C + the §16.ac terminal-batch gate** (`prod-alphaquark-github` `docs/MODEL_PORTFOLIO_ARCHITECTURE.md` §16.3/§16.7/§16.ac). Before this change the mobile Kite Publisher path built **one** basket with BUY and SELL legs mixed (`RebalanceModal.js` and `MPReviewTradeModal.js` → `generateHtmlForm` → a single POST to `kite.zerodha.com/connect/basket`). A rebalance that sells and buys in the SAME basket bounces every buy on "insufficient funds" because sell proceeds aren't usable as margin in the same instant (web fixed this 2026-06-24; mobile never got it).
+
+**Change (mirrors web `brokerPublisher.js` Fix C):**
+
+1. `createBatches(stockDetails, broker, separateSellsFromBuys=true)` now splits legs into `[sellBaskets..., buyBaskets...]` (a batch never mixes the two), instead of only slicing by `maxBasketSize`. Signature is backward-compatible — the third arg defaults to `false`, preserving the existing size-slice behaviour for callers that pass two args (advice baskets, where leg order is intentional).
+2. `RebalanceModal.js` + `MPReviewTradeModal.js` submit the **first** basket (sells) via the WebView. A publisher redirect or detected order merely starts verification; it does not unlock buys. The app polls the fresh broker order book until every expected SELL symbol and quantity is fully `COMPLETE`/`TRADED`/`FILLED`. Open, pending, partial, rejected, cancelled, missing, and timed-out sells keep the BUY step closed.
+3. After every sell is complete, the app refreshes Zerodha funds and compares live available cash with the cost of every remaining protected BUY limit. Enough cash opens the next BUY basket automatically. Missing prices, an expired broker session, or an unreadable funds response remain hard verification stops and are never described as T1.
+4. A verified cash shortfall after completed sells is treated as a possible settlement-timing condition, not as proof that the allocation is wrong. The customer sees available cash, required buying power, and three choices: **Check again**, **Stop and review**, or **Continue with buys**. Continuing sends the approved BUY baskets to Zerodha; Zerodha may accept the currently funded legs and reject the rest. Authoritative record-back preserves rejected/missing quantities for Repair after settlement. The app does not claim that every such shortfall is definitely T1.
+5. Only the **terminal** basket's success closes the WebView and runs record-back (`checkZerodhaStatus` → `/api/zerodha/publisher/record-orders` with the full leg list). `handlePublisherClose` wipes the queue so a cancelled run cannot replay.
+
+**Scope:** Zerodha Kite Publisher execution in the two MP rebalance consumers
+only (`RebalanceModal.js`, `MPReviewTradeModal.js`). Direct-API brokers continue
+through backend `process-trade`; they do not use this WebView/order-book dialog.
+The frozen plan emits sells before buys for those brokers, but a universal
+cross-broker wait-for-fill-and-refresh-margin contract is separate backend work.
+`ReviewZerodhaTradeModal.js` (advice basket) and `AddtoCartModal.js` (dead
+publisher path) are deliberately untouched—advice baskets keep leg order,
+matching web.
+
+**Files:** `src/utils/brokerPublisher.js` (`createBatches`), `src/components/AdviceScreenComponents/RebalanceModal.js`, `src/components/ModelPortfolioComponents/MPReviewTradeModal.js`.
+
 ## Known pitfalls — MPReviewTradeModal.js `placeOrder` error-handling (2026-05-06)
 
 `MPReviewTradeModal.js:placeOrder` is an `async` function called without `await` or `.catch()` from the Place Order button's `onPress`. Any unhandled exception inside `placeOrder` that occurs before `setLoading(true)`, or any exception that escapes the try-catch, becomes a silent promise rejection — `setLoading(false)` never fires, the spinner sticks forever, and no HTTP request reaches the server.
@@ -426,3 +734,24 @@ This was the root cause of the "Place Order stuck forever" regression confirmed 
 ### Future Kotak credential-shape changes
 
 Treat any change to `BrokerKeysSchema["Kotak"]`, `normalize_credentials_for_broker` Kotak branch, or the `KotakBroker` constructors in `rebalancing/brokers.py` / `rebalancing/order_status_updater/order_book_factory.py` as a **fan-out change** — same class as the env-var guardrail in `CLAUDE.md` § "Shared env vars across brokers — BLOCKING GUARDRAIL". Grep all four follow-up files above before merging; Python's `dict.get('<key>')` returns `None` silently so there's no compile-time signal that a downstream consumer fell off the migration.
+
+## Rebalance plan freeze — mobile parity port (2026-07-24)
+
+Server-side rebalance plan freeze (canonical design: `prod-alphaquark-github/docs/REBALANCE_PLAN_FREEZE_PLAN.md`) shipped on web in 2026-07 (`UpdateRebalanceModal.js` §4.4/§4.5, `UserStrategySubscribeModal.js` commit `a4cb3c23`). `/rebalance/calculate` additively returns `plan_id`/`plan_version`; forwarding them on `/rebalance/process-trade` makes ccxt execute the server-frozen, re-validated plan instead of trusting client-posted `trades`; a guard failure returns HTTP 409 `{status:3, code, recompute:true, message, results:[]}`. This app had **zero** freeze wiring before this port (verified: no `rebalanceFreezePlan`/`repairFreezePlan` flags, no `plan_id` forwarding, no 409 handling anywhere in `src/`).
+
+**Two new ConfigContext flags** (`src/context/ConfigContext.js`, same `parityFlagsPromise` + `newConfig` + AsyncStorage-persist pattern as `kycBlockingEnabled`/`useSharedAngelOneKey`): `rebalanceFreezePlan` and `repairFreezePlan`, both `=== true` gated (DEFAULT OFF — a missing/failed `/api/admin/frontend-config` fetch leaves both off, byte-identical legacy payloads). Exact key names confirmed against `aq_backend_github/Routes/Admin/loginRoutes.js` (`rebalanceFreezePlan: (platformSettings?.rebalance_freeze_plan === true) || (advisorConfig?.rebalance_freeze_plan === true)`, `repairFreezePlan` two-lever OPT-OUT shape) on `ssh tidi` 2026-07-24.
+
+**Every mobile surface that POSTs `/rebalance/process-trade` with legs sourced from a `/rebalance/calculate` response** now forwards `plan_id`/`plan_version` when the flag is on and the field is present (never otherwise — byte-identical to the pre-port payload):
+
+| Surface | File | Repair-aware? |
+|---|---|---|
+| Deep-link rebalance review→execute | `src/screens/Rebalance/RebalanceReviewScreen.js` (captures `plan_id`/`plan_version` from calculate) → `src/screens/Rebalance/ExecutionStatusScreen.js` (forwards, gated `rebalanceFreezePlan`) | No (this flow has no repair source) |
+| First-time subscribe (Model Portfolio initial investment) | `src/components/ModelPortfolioComponents/UserStrategySubscribeModal.js` — Fyers direct, main token-broker `placeOrder`, and the persisted `additionalPayload` feeding the Zerodha WebView-completion `process-trade` call | No — `matchingRepairTrade` in this file is unreachable dead code (`getAdditionalPayload` is defined but never called) |
+| Advice-list "Update Rebalance" (subsequent rebalance + repair retries) | `src/components/AdviceScreenComponents/RebalanceModal.js` | **Yes** — `matchingRepairTrade.planId`/`.planVersion` (camelCase; stamped by ccxt's `/rebalance/get-repair` Phase 3 P3.0 mint, gated `repairFreezePlan`) vs `calculatedPortfolioData.plan_id`/`.plan_version` (snake_case; gated `rebalanceFreezePlan`) — the existing `matchingRepairTrade` branch in `getAdditionalPayload()` already decided repair-vs-fresh, so the plan_id choice rides the same branch ("approve what you see": a fresh calculate's legs never carry a stale repair plan_id, and vice versa) |
+| Model-portfolio detail screen "Review Trade" (subsequent rebalance) | `src/components/ModelPortfolioComponents/MPReviewTradeModal.js` | No — no `modelPortfolioRepairTrades` prop in this modal |
+
+**Zerodha and Fyers "Publisher" flows are split by mechanism, not by broker name** — this app's Zerodha flow varies by call-site: `RebalanceModal.js`/`MPReviewTradeModal.js`'s Zerodha path is a genuine Kite Publisher (WebView basket → `api/zerodha/publisher/record-orders` reads the actual Kite order book back; no `process-trade` call, out of scope per the web design doc's Publisher exemption). `UserStrategySubscribeModal.js`'s Zerodha path, and every file's "Fyers" path, POST directly to `process-trade` (ccxt executes server-side via the stored broker token) — these DO carry `plan_id`/`plan_version` when the flag is on, same as any token broker. DummyBroker's "already aligned" (empty `trades`) auto-mark calls are left untouched (no money moves, nothing to freeze).
+
+**409 recompute handling** (`{recompute:true}` — PLAN_DRIFTED / expired / ALREADY_CONSUMED, see PLAN_FREEZE doc §4.4): every wired call site's catch/error branch detects this shape BEFORE the generic error-toast logic and routes back to a fresh calculate instead of retrying with the now-dead `plan_id` (which would 409 forever): `ExecutionStatusScreen` shows a "Recalculate" CTA (no plain Retry) that emits `rebalancePlanRecompute` on the shared `EventEmitter` and pops back to `RebalanceReviewScreen`, which listens for that event and re-runs `calculateRebalance`; `UserStrategySubscribeModal`/`MPReviewTradeModal` flip back to their pre-confirm review step (`setConfirmOrder(false)` / re-invoke the `calculateRebalance` prop) whose existing "Confirm"/"Continue" button re-mints a fresh plan; `RebalanceModal` closes the rebalance modal and re-fetches repair/strategy data so the next open starts clean.
+
+**Not wired (confirmed out of scope, no process-trade payload built from a calculate/repair response)**: `src/components/AdviceScreenComponents/DummyBrokerHoldingConfirmation.js` (DummyBroker, not money-moving — mirrors the web precedent), `src/utils/brokerPublisher.js` / `src/utils/tradeVariant.js` (pure helpers, build no payload), `src/services/ModelPortfolioService.js` (`processRebalanceTrade` is a generic pass-through — callers already own `plan_id` inclusion).

@@ -1,8 +1,8 @@
 # AlphaQuark Mobile App — Overall System Summary for Test Design
 
-> **Last updated**: 2026-05-11  
-> **Branch**: `feature/sdk-plus-config_forkv2` (Android production)  
-> **iOS branch**: `feature/ios2.6`  
+> **Last updated**: 2026-05-11
+> **Branch**: `release/deploy_5.1` (Android + iOS build branch since 2026-09-29; previously `feature/sdk-plus-config_forkv2`)
+> **iOS branch**: `feature/ios2.6`
 > **Purpose**: Give QA, engineering, and test-design owners one cross-cutting view of how the mobile app behaves across React Native, the Node.js backend, the Python (ccxt-india) backend, broker APIs, payment gateways, and async recovery flows. Use this as the primary anchor when designing test suites so coverage is system-level, not just screen-level.
 
 ---

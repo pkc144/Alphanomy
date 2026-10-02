@@ -40,7 +40,6 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import LinearGradient from 'react-native-linear-gradient';
 import { CandlestickChart, Briefcase } from 'lucide-react-native';
 
-import HoldingScoreModal from '../../../src/screens/PortfolioScreen/HoldingScoreModal';
 import formatCurrency from '../../../src/utils/formatCurrency';
 import {
     DEFAULT_COLORS as COLORS,
@@ -195,7 +194,9 @@ const PortfolioScreenAlphanomy = ({ portfolio }) => {
         modalVisible,
         scoreSymbol,
         setModalVisible,
+        slots = {},
     } = portfolio;
+    const {HoldingScoreModal} = slots;
 
     const investedValue = Number(effectiveHoldingsData?.totalinvvalue) || 0;
     const goConnectBroker = () => navigation?.navigate?.('Broker Setting');
@@ -434,7 +435,7 @@ const PortfolioScreenAlphanomy = ({ portfolio }) => {
                     </View>
                 </View>
 
-                {modalVisible ? (
+                {modalVisible && HoldingScoreModal ? (
                     <HoldingScoreModal
                         scoreSymbol={scoreSymbol}
                         setModalVisible={setModalVisible}

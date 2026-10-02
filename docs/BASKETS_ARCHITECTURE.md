@@ -1,8 +1,24 @@
 # Baskets Architecture
 
-> **Last updated:** 2026-05-12 (Zerodha Kite Publisher path on mobile documented; § 13 publisher row corrected; § 9 WebView-callback-missed failure mode added)  
+> **Last updated:** 2026-09-13 (server-owned EOD/reconnect recovery)
+>
 > **Branch:** feature/sdk-plus-config_forkv2  
 > **Covers:** Mobile app (Alphab2bapp), Web frontend (prod-alphaquark-github), Backend (aq_backend_github)
+
+## 13 September 2026 recovery boundary
+
+Basket and single/bespoke durable attempts are now checked by the backend's
+read-only reconciler at EOD and when the customer later reconnects a broker.
+Missing authentication keeps recovery queued. Neither the scheduler nor the app
+automatically retries an uncertain quantity; customer execution stays behind the
+existing review and guarded submit flow.
+
+Positively identified non-model recovery does not block model-portfolio
+Calculate/Repair on the same broker account. Unknown legacy scope remains
+fail-closed. Basket net exposure also normalizes broker-reported units and manual
+fills into lots before netting, preventing a unit/lot mismatch from displaying a
+phantom open futures position. This does not change the customer's advised lots,
+limit price or broker order.
 
 ---
 
@@ -473,6 +489,25 @@ Used when the connected broker is Zerodha. The Kite Publisher SDK is the **only*
 - `MPReviewTradeModal.js:838` — MP rebalance fork
 - `RebalanceModal.js:690` — bespoke rebalance fork (this one also implements client-side polling fallback — see § 9)
 
+**Kite basket quantity units — LOTS → SHARES (2026-08-13).** Kite expects
+SHARES in the basket form payload. Mobile basket legs carry `quantity` in
+LOTS plus a lot-size field (`Lots` on the leg, server-fetched `lotsize` via
+`/zerodha/fno/symbol-lotsize`). Every Kite form builder MUST multiply:
+`shares = quantity × lot-size`. Sites:
+
+- `StockAdvices.handleZerodhaRedirect` + `AddtoCartModal` (cart fork):
+  `kiteShares = quantity × (Lots || lots || 1)`.
+- `ReviewZerodhaTradeModal` (slide-to-confirm builder): `finalQuantity =
+  quantity × fetched lotsize`, falling back to `stock.Lots || stock.lots`
+  when the server fetch misses.
+- Before this fix `ReviewZerodhaTradeModal` set
+  `finalQuantity = parseInt(lotsize)` — every derivative leg placed
+  exactly ONE lot regardless of advised quantity. Additionally the
+  review-modals' "quantity for all legs" multiplier collapsed mixed-size
+  baskets (2-lot CE + 1-lot PE → (2,2), then (1,1) on the way back to 1) —
+  the multiplier now scales off per-leg base lots captured on first load.
+- The `readonly` gate (`> 100`) applies to SHARES, not lots.
+
 ```
 STEP 1 — Pre-flight validation (synchronous)
   validateStockExchanges(stockDetails)       — reject if any exchange missing
@@ -882,7 +917,55 @@ filterConflictingOrders(adv)  // Remove reconciled BUY/SELL pairs
 
 ---
 
+## 14.1 Lifecycle, entry gate and ordered Publisher convergence (2026-08-16)
+
+`TradeContext` retains the parent `basketLifecycle`, intent and `entryGate`
+metadata while flattening legs. `StockAdvices` groups those fields back onto
+the basket card. The container polls the server authorization every five
+seconds and re-checks on Accept, so quote changes automatically show **Advice
+out of range** and disable entry. A cancelled unopened basket cannot be
+accepted from a stale mobile screen. Confirmed entry exposure with a retryable
+non-closure sibling renders as **Entry Basket / Partial Entry**. The card
+shows executed progress and its Retry action sends only rejected, failed,
+partial, or still recommended legs; completed/cancelled legs never enter the
+order payload. An uncertain broker outcome remains **Reconciliation Pending**
+and blocks retry. Confirmed exposure without an unfinished entry is
+**Position Open**, or **Closure Pending** only when the advisor actually
+requested a close or cancel. Only a never-exposed withdrawal renders
+**Cancelled**.
+
+`src/services/BasketEntryGateService.js` is the only mobile client for
+`POST /orders/basket-entry/authorize`. `StockAdvices.executePlaceOrder` checks
+again before REST or Publisher handoff, and ccxt re-checks at supported
+execution boundaries. EXIT/closure legs pass purpose/closure evidence and
+bypass the entry-price gate.
+
+Zerodha remains Publisher-only. Both `StockAdvices` and
+`ReviewZerodhaTradeModal` sort a basket by numeric priority and refuse more
+than ten legs rather than splitting into a second WebView/navigation. This
+preserves advised submission order, not fill order: Kite owns final acceptance
+and execution, so a numeric priority cannot guarantee that a hedge fills
+before a margin-dependent leg.
+
+Admin global cancellation is distinct from customer Reject. The new backend
+operation blocks entry for all recipients, verifies pending-order
+cancellations against a fresh broker order book, and appends customer-specific
+reverse EXIT legs where exposure exists. The existing mobile Reject remains
+recipient-scoped.
+
 ## 15. Known Limitations
+
+### Zerodha Publisher cancellation and submission invariant (2026-08-15)
+
+Opening the Publisher is not proof of placement. Mobile must not write
+`leaving_datetime` or change a basket leg when the WebView opens. The durable
+AsyncStorage publisher-attempt record supports crash recovery; only the
+post-callback/order-book `record-orders` flow may transition Mongo. An explicit
+Kite cancel clears that attempt and immediately calls `getAllTrades()`, so the
+unchanged `recommend` basket is rendered again. All placement entry points use
+a synchronous ref latch around their async handler; React `loading` state is
+presentation only and is not a concurrency control.
+
 
 1. **No basket-specific order book:** After execution, the user can only see basket results in the success modal. There is no dedicated "basket order history" view that shows past basket executions. The broker order book shows individual legs, not grouped by basket.
 
@@ -890,7 +973,24 @@ filterConflictingOrders(adv)  // Remove reconciled BUY/SELL pairs
 
 3. **Closure basket enforcement:** The mobile app shows a "closure" badge but does not block the user from ignoring a closure basket. If the user ignores a closure basket on an F&O position, they may hold an expired/worthless option.
 
-4. **Partial re-execution:** If a basket partially executes (some legs SUCCESS, some FAILED), the re-execution path on mobile requires the user to re-open the basket and manually place only the failed legs. There is no "retry failed only" button — the entire basket is re-presented.
+4. **Partial re-execution:** A partially executed basket remains visible with executed-versus-total progress. Retry automatically builds the review and placement payload from unfinished legs only; terminal completed/cancelled legs are excluded. Ambiguous or still-placing broker outcomes remain blocked for reconciliation rather than being guessed safe to retry.
+5. **Pending-order cancellation:** A basket leg in `placed`, `open`, `pending`,
+   `transit`, trigger-pending, or Publisher-pending state is displayed with
+   its broker order ID and a **Cancel order** action. Mobile calls the shared
+   ccxt `POST /orders/mutate` boundary with basket, leg, and exact order
+   identity. Broker acknowledgement alone does not unlock retry: the leg stays
+   blocked until exact-ID read-back confirms terminal cancellation. Partial
+   fills retain the confirmed fill and only their remaining quantity becomes
+   retryable. A leg without an order ID remains blocked for reconciliation.
+   `TradeContext` explicitly admits those in-flight statuses into the active
+   recommendation collection; an execution attempt must never turn the whole
+   basket into the empty-recommendations state.
+
+The Node feed must resolve explicit basket cancellation directly from
+`trade.basket_advice`; a 2026-08-28 regression referenced a nonexistent
+`basketItems` local and failed the entire customer request. Production hotfix
+`19d19a2` restored the route. This was a response failure only—stored
+recommendations and broker execution evidence were unchanged.
 
 5. **to_trade_net[] staleness:** `to_trade_net[]` is sent by the advisor at basket creation and not recomputed when the user's existing holdings change. If the user has traded some legs independently, `to_trade_net[]` may not reflect their actual net position. The mobile app uses it as-is.
 
@@ -899,3 +999,11 @@ filterConflictingOrders(adv)  // Remove reconciled BUY/SELL pairs
 7. **MCX baskets:** `isValidSymbolExpiry` has custom handling for MCX commodity symbols. However, not all MCX expiry formats have been tested — commodity expiry convention differs from equity derivatives.
 
 8. **No basket P&L:** Unlike Model Portfolio, baskets do not have a P&L view. There is no endpoint or UI that shows cumulative basket performance across multiple executed baskets.
+
+9. **Canonical pending/cancel contract (2026-08-28):** Mobile now shares the
+   backend vocabulary for requested/ordered/AM/AMO/pending-confirmation,
+   partial-fill, manual-placement and reconciliation-pending aliases. Unknown
+   nonempty states fail visible. Cancel is enabled only with broker, basket,
+   trade and order identity; the broker stored on the leg overrides the current
+   broker selection. Older installed builds receive the backend visibility
+   projection but require an app/OTA update for this hardened control.

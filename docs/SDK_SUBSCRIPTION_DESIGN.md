@@ -1,5 +1,38 @@
 # SDK Subscription + Full-Rebalance Orchestration Design
 
+## Trade review presentation contract (2026-09-29)
+
+The review's trade list is the primary content and must retain usable height
+for long sell/buy baskets. Optional funding disclosures follow the rows inside
+the scrollable region, detailed low-funds copy starts collapsed, and the
+required action stays reachable. The future SDK-owned sheet must preserve this
+composition together with the frozen-plan and sell-before-buy contracts.
+
+## Host Retry/Repair contract (2026-09-05)
+
+The host must preserve SDK/server placement identity and route Retry only from
+broker-authoritative repair classification. OPEN orders remain pending,
+verified failed legs reuse the frozen Repair plan, and only an explicit
+requiresFreshRebalance result may create a new calculation. A verified terminal
+result updates the subscriber projection without submitting an empty real-broker
+order. Calculation state is tagged by model ID/name so it cannot cross portfolio
+boundaries.
+
+
+## Rebalance completion bridge (2026-08-26)
+
+Subscription execution is not repairable immediately after broker submission.
+
+The host model-portfolio repair entry is a direct review action: after broker
+session/funds preflight it opens the already-frozen repair order list. It does
+not ask for calculator preference or re-confirm persisted holdings. Fresh
+rebalance accept likewise uses the advisor-owned calculator mode rather than a
+customer “2% vs full” override. These are host navigation changes; SDK advice
+identity, frozen-plan fields, and placement ownership are unchanged.
+The host observes the reconciliation window, retries after the supplied delay and
+refreshes strategy status when the difference disappears. Only a material residual
+after that pass is offered as Repair.
+
 > **Status**: design draft (2026-05-03). Extends `SDK_ORCHESTRATION_CONTRACT.md`
 > with subscription management and calculate-rebalance integration.
 >
@@ -55,6 +88,21 @@ Internally:
 
 The existing `executeAdvice({kind: 'mpRebalance', trades})` stays for
 callers who want to pre-calculate (e.g. custom allocation logic).
+
+### Mixed Zerodha execution safety
+
+`executeRebalance` must pass the calculate response into the same guarded
+`executeAdvice` lane; it must not create its own Publisher shortcut. The SDK
+persists exact tagged intent before opening Kite, submits SELL baskets first,
+waits for full requested sell quantities, refreshes Zerodha buying power, then
+opens BUY baskets. A verified numeric shortfall may be explicitly continued so
+settlement-dependent buys can be attempted and repaired later. Unknown funds,
+pricing/auth failures, and partial sells pause with `safeToRetryPlacement:false`.
+The original calculated leg identities and quantities remain the recovery
+source; the host never recomputes or silently places a second basket.
+
+`modifyInvestment` also forwards `changeMode` plus incremental `changeAmount` so
+a top-up remains distinct from an absolute reset on both RN and Flutter clients.
 
 ---
 
@@ -232,3 +280,11 @@ or post-placement chains. They pay, subscribe, and execute.
    resolves the actual subscription amount from DB. This was initially
    documented incorrectly as "derived from broker funds" — corrected
    per user feedback.
+
+## 2026-08-18 reviewed-attempt identity invariant
+
+`executeRebalance` must submit the `plan_id`, `plan_version`, and `unique_id`
+belonging to the same calculation the customer reviewed. An outstanding repair
+row does not override a fresh calculate response. Repair identity is valid only
+when the review was built from repair data and therefore has no fresh
+calculation `uniqueId`.

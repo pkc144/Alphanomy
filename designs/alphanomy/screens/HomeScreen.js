@@ -39,7 +39,6 @@
  */
 
 import React from 'react';
-import { useNavigation } from '@react-navigation/native';
 import {
     View,
     Text,
@@ -61,12 +60,6 @@ import {
     DEFAULT_SHADOWS as SHADOWS,
 } from '../tokens';
 import AppHeader from './_AppHeader';
-
-// Functional components — same as src/screens/Home/HomeScreen.js uses,
-// giving full trade-execution, modal, download, and playback capabilities.
-import StockAdvices from '../../../src/components/AdviceScreenComponents/StockAdvices';
-import RebalanceAdvices from '../../../src/components/AdviceScreenComponents/RebalanceAdvices';
-import KnowledgeHub from '../../../src/components/HomeScreenComponents/KnowledgeHub';
 
 // All sections render strictly from the `home` prop bag supplied by the
 // container (`src/screens/Home/HomeScreen.js`). When a live data source is
@@ -109,7 +102,12 @@ const HomeScreenPresentation = ({ home }) => {
         taglines,
         setSeeAllBespoke,
         setSeeAllMP,
+        setSeeAllMPplan,
+        slots = {},
+        homeFooterSlots = {},
     } = home || {};
+    const {StockAdvices, RebalanceAdvices} = slots;
+    const {KnowledgeHubSlot} = homeFooterSlots;
 
     // Per-field merge with FALLBACK_HOME_TAGLINES so a partial backend
     // override doesn't blank the un-set fields.
@@ -137,11 +135,7 @@ const HomeScreenPresentation = ({ home }) => {
     // pass `{ openPlan, kind }` route params so a future MP-screen update can
     // auto-open the payment modal when arriving from Home (today the user
     // taps Subscribe again on the plan card; safe MVP).
-    const navigation = useNavigation();
-    const goToPlans = (params) => {
-        if (!navigation || typeof navigation.navigate !== 'function') return;
-        navigation.navigate('Plans', params || undefined);
-    };
+    const goToPlans = () => setSeeAllMPplan?.(true);
 
     // Portfolio summary — when the user has no broker / no holdings the
     // hook returns all zeros, which is the right state to show
@@ -234,7 +228,7 @@ const HomeScreenPresentation = ({ home }) => {
                             </TouchableOpacity>
                         </View>
                         <View style={{ marginLeft: -2 }}>
-                            <RebalanceAdvices userEmail={userEmail} type={'home'} />
+                            {RebalanceAdvices ? <RebalanceAdvices userEmail={userEmail} type={'home'} /> : null}
                         </View>
                     </View>
                 ) : null}
@@ -425,7 +419,7 @@ const HomeScreenPresentation = ({ home }) => {
                         </TouchableOpacity>
                     </View>
                     <View style={{ marginLeft: -2 }}>
-                        <StockAdvices userEmail={userEmail} type={'home'} />
+                        {StockAdvices ? <StockAdvices userEmail={userEmail} type={'home'} /> : null}
                     </View>
                 </View>
 
@@ -433,7 +427,7 @@ const HomeScreenPresentation = ({ home }) => {
                     full video playback, blog webview, PDF download/view,
                     tab switching, and View All navigation. */}
                 <View style={{ marginTop: SPACING.sm }}>
-                    <KnowledgeHub type="home" />
+                    {KnowledgeHubSlot || null}
                 </View>
 
 
@@ -863,4 +857,3 @@ const styles = StyleSheet.create({
 });
 
 export default HomeScreenPresentation;
-

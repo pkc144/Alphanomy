@@ -9,7 +9,7 @@ import { generateToken } from '../../utils/SecurityTokenManager';
 import Config from 'react-native-config';
 import MotilalConnectUI from '../../UIComponents/BrokerConnectionUI/MotilalConnectUI';
 import { useTrade } from '../../screens/TradeContext';
-import { getAdvisorSubdomain } from '../../utils/variantHelper';
+import {getAdvisorSubdomain, getTenantSubdomain} from '../../utils/variantHelper';
 import eventEmitter from '../EventEmitter';
 import useModalStore from '../../GlobalUIModals/modalStore';
 import {
@@ -17,6 +17,9 @@ import {
   sdkConnectBroker,
   sdkDualWriteSafely,
 } from '../../sdk/brokerSdkBridge';
+import {getAccountEmail} from '../../utils/accountEmail';
+
+import { designColor, designFont } from '../../design/literalTokens';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const commonHeight = screenHeight * 0.06;
@@ -28,19 +31,23 @@ const MotilalModal = ({
   setShowBrokerModal,
   fetchBrokerStatusModal,
   reauthConfig,
+  initialCredentials,
+  initialEgressReady = false,
 }) => {
   const { configData } = useTrade();
   const showAlert = useModalStore((state) => state.showAlert);
   const sdkBridge = useSdkBridge();
-  const [apiKey, setApiKey] = useState('');
-  const [clientCode, setClientCode] = useState('');
+  const [apiKey, setApiKey] = useState(() => initialCredentials?.apiKey || '');
+  const [clientCode, setClientCode] = useState(
+    () => initialCredentials?.clientCode || '',
+  );
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [ispasswordVisibleup, setIsPasswordVisibleup] = useState(false);
   const [showWebView, setShowWebView] = useState(false);
   const [authUrl, setAuthUrl] = useState('');
   const auth = getAuth();
   const user = auth.currentUser;
-  const userEmail = user?.email;
+  const userEmail = getAccountEmail();
   const sheet = useRef(null);
   const scrollViewRef = useRef(null);
 
@@ -60,7 +67,7 @@ const MotilalModal = ({
       .get(`${server.server.baseUrl}api/user/getUser/${userEmail}`, {
         headers: {
           'Content-Type': 'application/json',
-          'X-Advisor-Subdomain': configData?.config?.REACT_APP_HEADER_NAME || getAdvisorSubdomain(),
+          'X-Advisor-Subdomain': getTenantSubdomain(configData),
           'aq-encrypted-key': generateToken(
             Config.REACT_APP_AQ_KEYS,
             Config.REACT_APP_AQ_SECRET,
@@ -99,7 +106,7 @@ const MotilalModal = ({
   // web the callout renders an "ipv4_provisioning" hard-block until
   // the IPv4 pool is ready. Mobile gets the same behaviour via the
   // shared callout component (no special-case code needed here).
-  const [egressReady, setEgressReady] = useState(false);
+  const [egressReady, setEgressReady] = useState(Boolean(initialEgressReady));
   const [unmetAck, setUnmetAck] = useState(false);
 
   // Debounce gate for /motilal-oswal/login. Motilal binds the OTP +
@@ -154,7 +161,7 @@ const MotilalModal = ({
       .put(`${server.server.baseUrl}api/motilal-oswal/update-key`, data, {
         headers: {
           'Content-Type': 'application/json',
-          'X-Advisor-Subdomain': configData?.config?.REACT_APP_HEADER_NAME || getAdvisorSubdomain(),
+          'X-Advisor-Subdomain': getTenantSubdomain(configData),
           'aq-encrypted-key': generateToken(
             Config.REACT_APP_AQ_KEYS,
             Config.REACT_APP_AQ_SECRET,
@@ -211,7 +218,7 @@ const MotilalModal = ({
         url: `${server.server.baseUrl}api/user/connect-broker`,
         headers: {
           'Content-Type': 'application/json',
-          'X-Advisor-Subdomain': configData?.config?.REACT_APP_HEADER_NAME || getAdvisorSubdomain(),
+          'X-Advisor-Subdomain': getTenantSubdomain(configData),
           'aq-encrypted-key': generateToken(
             Config.REACT_APP_AQ_KEYS,
             Config.REACT_APP_AQ_SECRET,
@@ -242,7 +249,7 @@ const MotilalModal = ({
               data: JSON.stringify({ user_email: userEmail, user_broker: 'Motilal Oswal' }),
               headers: {
                 'Content-Type': 'application/json',
-                'X-Advisor-Subdomain': configData?.config?.REACT_APP_HEADER_NAME || getAdvisorSubdomain(),
+                'X-Advisor-Subdomain': getTenantSubdomain(configData),
                 'aq-encrypted-key': generateToken(Config.REACT_APP_AQ_KEYS, Config.REACT_APP_AQ_SECRET),
               },
             });
@@ -382,7 +389,7 @@ const styles = StyleSheet.create({
     margin: 0,
   },
   modalContent: {
-    backgroundColor: '#fff',
+    backgroundColor: designColor('fff'),
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 10,
@@ -397,7 +404,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: 'black',
     marginVertical: 3,
-    fontFamily: 'Poppins-Regular',
+    fontFamily: designFont('Poppins-Regular'),
   },
   link: {
     color: 'blue',
@@ -408,7 +415,7 @@ const styles = StyleSheet.create({
     color: 'black',
     marginRight: 10,
     marginLeft: 10,
-    fontFamily: 'Poppins-SemiBold',
+    fontFamily: designFont('Poppins-SemiBold'),
   },
   content: {
     padding: 10,
@@ -431,7 +438,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 20,
     marginHorizontal: 10,
-    fontFamily: 'Poppins-SemiBold',
+    fontFamily: designFont('Poppins-SemiBold'),
     color: 'black',
     marginVertical: 15,
   },
@@ -443,7 +450,7 @@ const styles = StyleSheet.create({
     marginBottom: 5,
   },
   inputContainer: {
-    borderColor: '#d5d4d4',
+    borderColor: designColor('d5d4d4'),
     alignSelf: 'center',
     borderWidth: 1,
     borderRadius: 10,

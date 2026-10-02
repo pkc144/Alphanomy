@@ -89,6 +89,15 @@ variant's `import` + map entry). The trade-off is real but small.
 - `designs/<variant>/tokens/assets.js` — re-exports `DEFAULT_ASSETS`
   pointing at the variant's own image files. Pattern documented in
   `DESIGN_SYSTEM_ARCHITECTURE.md § Variant assets`.
+- `whitelabel/content.js` — **content + feature-flag seam.** Tenant-specific
+  copy (regulatory notices, links, plan cards/summaries/colors, disclaimers)
+  and behavioural flags (`MONEYMAN_PLAN_ORDERING`, `MONEYMAN_PLAN_COLORS`,
+  `MONEYMAN_CARD_ACCENT_FROM_CARD_COLOR`, `MONEYMAN_HIDE_BACKGROUND_LOGO`,
+  `MONEYMAN_HOME_FEED_RESTRUCTURE`, …). Read by `src/` ONLY through the
+  upstream-managed re-exporter `src/utils/whitelabelContent.js`
+  (`export * from '../../whitelabel/content'`). Upstream ships a neutral
+  version (empty arrays / false flags) so `src/` behaves as before; every key
+  a fork fills must exist upstream with a neutral default.
 - A 2-line patch on upstream's `designs/registry.js`: an `import` and a
   map entry for the new variant. The patch is the variant's responsibility
   to maintain through upstream merges.
@@ -97,6 +106,21 @@ variant's `import` + map entry). The trade-off is real but small.
   `applicationId`, any tenant-specific REACT_APP_* values (broker keys
   that differ per tenant, white-label text, deep-link scheme).
 - `SYNC.md` — see § "SYNC.md template" below.
+
+### UI slots that variants can fill (no `src/` patch needed)
+
+Two app-root/Home slots are resolved from the active design variant, so a
+fork can add persistent UI without editing `src/`:
+
+- `composites.RootBanner` — rendered at App root above the navigation tree
+  (e.g. a persistent regulatory strip). `App.js` calls
+  `useComponent('composites.RootBanner')`. Default registers a no-op.
+- `composites.HomeFooter` — rendered at the bottom of the Home feed list.
+  The design-system `screens.HomeScreen` resolves it via
+  `useComponent('composites.HomeFooter')`. Default registers a no-op.
+
+Forks override these keys in their variant's `components` map (e.g.
+`designs/moneyman_app/composites/RootBanner.js` + `HomeFooter.js`).
 
 ### What forks must NOT have
 
@@ -146,7 +170,7 @@ brand identity at the OS level. So the fork is the build pipeline.
 
 ## Adding a new whitelabel — step by step
 
-**Prerequisites**: upstream is at a tagged state (e.g. `feature/sdk-plus-config_forkv2`); you have push access to a new GitHub repo for the fork; you have the tenant's brand assets (icons in all densities, logo PNGs, splash PNG, theme colors, optional tenant-specific broker API keys).
+**Prerequisites**: upstream is at a tagged state (e.g. `release/deploy_5.1`; stable anchor `release/untouched_5.0`); you have push access to a new GitHub repo for the fork; you have the tenant's brand assets (icons in all densities, logo PNGs, splash PNG, theme colors, optional tenant-specific broker API keys).
 
 1. **Fork & strip.**
    ```bash
@@ -236,7 +260,7 @@ development). Workflow:
 ```bash
 git fetch upstream
 git checkout main
-git merge upstream/feature/sdk-plus-config_forkv2  # or whatever the active upstream branch is
+git merge upstream/release/deploy_5.1  # active upstream build branch since 2026-09-29 (was feature/sdk-plus-config_forkv2)
 ```
 
 Expected conflicts:

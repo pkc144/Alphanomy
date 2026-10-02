@@ -7,11 +7,11 @@ you're new here.
 
 ## Upstream
 
-- **Repo**: `https://github.com/.../Alphab2bapp` (local clone at
+- **Repo**: `https://github.com/alpha112233/Alphab2bapp` (local clone at
   `/home/pk/Alphaquark_docs/AlphaQuark/codes/github/Alphab2bapp`)
-- **Tracked branch**: `feature/sdk-plus-config_forkv2`
-- **Last sync attempt**: 2026-06-10 — full `src/` + new-features content
-  port (not git merge), see § "Sync history" below.
+- **Tracked branch**: `release/deploy_5.1`
+- **Last synced commit**: `0e68359d` (`perf(rebalance): keep the ccxt
+  connection warm while model portfolios are on screen`) — 2026-10-02.
 
 ## ⚠️ This fork has unrelated git history with upstream
 
@@ -56,6 +56,8 @@ Per the recipe contract, an overlay should contain:
      the proper Firebase registration lands.
 6. `.env` with `DESIGN_VARIANT=alphanomy` (or equivalent).
 7. This `SYNC.md`.
+8. `whitelabel/content.js` — the Alphanomy platform-name seam with neutral
+   defaults for shared optional content flags.
 
 ## ✅ CLOSED 2026-06-10 — `useTokens()` is now variant-aware (asset slot)
 
@@ -165,6 +167,24 @@ from `WHITELABEL_RECIPE.md` works as designed. The 2-line conflict on
 merge.
 
 ## Sync history
+
+### 2026-10-02 — Full shared-layer reconciliation to `0e68359d`
+
+Replaced the accumulated selective-port drift with the committed AlphaB2B
+`release/deploy_5.1` shared layer: `src/`, `designs/default/`, root runtime
+entry points, tests, scripts, dependencies, and canonical architecture docs.
+This brings in the current broker reconnect/device-vault work, durable order
+and rebalance recovery, SDK slots, configurable navigation, PhonePe lifecycle,
+trade alerts, crash reporting, and design-boundary compiler/audits.
+
+Preserved the complete `designs/alphanomy/` presentation override, Alphanomy
+tokens/assets and app-variant config, Android/iOS application IDs, Firebase
+clients, icons, signing teams, independent Android/iOS versions, and CI/env
+seams. Shared runtime code follows upstream; the contract tests are made
+tenant-aware so they discover Alphanomy's native package and do not require
+AlphaB2B-only design variants, hosted visual workflows, or OTA release
+scripts. OTA plumbing has no baked-in Alphanomy deployment key and no OTA was
+published.
 
 ### 2026-06-10 — Full src/ + new-features sync from feature/sdk-plus-config_forkv2 (content port)
 

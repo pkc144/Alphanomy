@@ -1,3 +1,20 @@
+/**
+ * ============================================================================
+ * whitelabel/appVariants — TENANT CONFIG ROOT (upstream)
+ * ============================================================================
+ *
+ * 🔴 PER-FORK FILE. NOT BYTE-IDENTICAL ACROSS REPOS. 🔴
+ *
+ * The `APP_VARIANTS` map for tenants this repo ships. `src/utils/Config.js`
+ * is the upstream-managed re-exporter (byte-identical across forks); this
+ * file holds the actual values per repo.
+ *
+ * To add a new tenant, add an entry below. To create a fork (whitelabel
+ * overlay), copy this file into the fork's `whitelabel/appVariants.js`
+ * and edit. See `docs/WHITELABEL_RECIPE.md`.
+ * ============================================================================
+ */
+
 // SharedDefaultLogo is the fallback logo applied to every variant
 // that doesn't explicitly override `logo`. The file at
 // `src/assets/AppLogo/logo.png` is the ZamZam-branded logo (the
@@ -34,21 +51,25 @@ const sharedUIConfig = {
   selectedTabcolor: '#8555EF',
   basketcolor: '#600CC0',
   basketsymbolbg: '#6D0DD6',
-  googleWebClientId: '713385591555-uj9v6fdjnceg9dr5ts0gb0l5523uhqr2.apps.googleusercontent.com',
+  googleWebClientId: '892331696104-e26pu9iotqrjk1o6jq4ifd4e95fasil1.apps.googleusercontent.com',
+  googleIosClientId: '892331696104-3ga6a5c9ell75turpt6th0bbpc8ftvjl.apps.googleusercontent.com',
 };
 
 // Per-advisor config: subdomain + advisorRaCode
 // When copying the app for a new advisor, just add a new entry here.
 const APP_VARIANTS = {
   alphaquark: {
-    themeColor: '#0000ff',
+    // These values must be a production-safe first-paint fallback. The remote
+    // config normally replaces them, but a slow/offline launch must still look
+    // like AlphaQuark rather than rendering the near-white placeholder theme.
+    themeColor: '#0056B7',
     logo: AlphaQuarkLogo,
     toolbarlogo: AlphaQuarkLogo,
     homeScreenLayout: 'layout2',
-    mainColor: '#4CAAA0',
-    secondaryColor: '#F0F0F0',
-    gradient1: '#F0F0F0',
-    gradient2: '#F0F0F0',
+    mainColor: '#0056B7',
+    secondaryColor: '#413E3E',
+    gradient1: '#0056B7',
+    gradient2: '#002651',
     placeholderText: '#FFFFFF',
     CardborderWidth: 0,
     cardElevation: 3,
@@ -61,7 +82,13 @@ const APP_VARIANTS = {
     basketsymbolbg: '#8D2952',
     basket1: '#9D2115',
     basket2: '#6B1207',
-    googleWebClientId: '713385591555-uj9v6fdjnceg9dr5ts0gb0l5523uhqr2.apps.googleusercontent.com',
+    googleWebClientId: '892331696104-e26pu9iotqrjk1o6jq4ifd4e95fasil1.apps.googleusercontent.com',
+    // iOS-only Google Sign-In client ID. LoginScreen requires this on iOS —
+    // without it GIDSignIn raises an uncaught NSException on signIn() and
+    // SIGABRTs the app (same crash class as the markup App Store rejection,
+    // submission 6401f4b2, 2026-07-23). Value from ios/GoogleService-Info.plist's
+    // CLIENT_ID.
+    googleIosClientId: '892331696104-3ga6a5c9ell75turpt6th0bbpc8ftvjl.apps.googleusercontent.com',
     subdomain: 'prod',
     advisorRaCode: 'ALPHAQUARK',
     paymentModal: {
@@ -76,22 +103,13 @@ const APP_VARIANTS = {
       progressBarColor: '#0056B7',
     },
   },
-  // alphanomy — separate business tenant (Path B). Requires backend
-  // `appadvisors` doc with `subdomain: 'alphanomy'` populated with the
-  // tenant's logo/appName/advisorRaCode/etc. Until the backend record
-  // exists, this variant inherits sharedUIConfig values for theming
-  // BUT explicitly nulls out `logo`/`toolbarlogo` — consumers route image
-  // rendering through `<BrandLogo>` / `useTokens().assets.logoPng`, which
-  // resolves the variant's own brand mark from
-  // `designs/alphanomy/tokens/assets.js` (the finalized PNG) instead of
-  // leaking the SharedDefaultLogo (Zamzam-branded PNG) or the legacy
-  // AlphaQuark `logo.png`. See docs/DESIGN_SYSTEM_ARCHITECTURE.md § Variant assets.
-  alphanomy:     {...sharedUIConfig, subdomain: 'alphanomy',       advisorRaCode: 'ALPHANOMY', logo: null, toolbarlogo: null,
-    // iOS Google Sign-In needs the project's OWN iosClientId (NOT the web
-    // client ID) or GIDSignIn raises an NSException and crashes on signIn().
-    // Sourced from the alphanomy Firebase project's GoogleService-Info.plist
-    // CLIENT_ID. Consumed via config.googleIosClientId in Login/LogOutScreen;
-    // the backend appadvisors doc can override it (apiData.googleIosClientId).
+  alphanomy: {
+    ...sharedUIConfig,
+    subdomain: 'alphanomy',
+    advisorRaCode: 'ALPHANOMY',
+    logo: null,
+    toolbarlogo: null,
+    googleWebClientId: '713385591555-uj9v6fdjnceg9dr5ts0gb0l5523uhqr2.apps.googleusercontent.com',
     googleIosClientId: '713385591555-kffitn2ee2c7kr6j66bqaf8hr72fcp58.apps.googleusercontent.com',
     mainColor: '#1246F0',
     secondaryColor: '#FFFFFF',

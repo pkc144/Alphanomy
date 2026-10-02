@@ -34,7 +34,7 @@
 | 5 | Kotak Securities | Credentials + TOTP (NEO API: apiKey + mobile + mpin + ucc + totp) | SDK-with-gap | TOTP 30s debounce; TOTP-specific error parsing; mobile-number normalization |
 | 6 | Dhan | OAuth (CCXT partner consent) + manual fallback | SDK-with-gap | Error branch (HTTP vs network); reauth hydration; custom User-Agent; help content |
 | 7 | Fyers | OAuth (apiKey/secretKey field naming inversion) | SDK-broken | IP-whitelist gate missing in SDK; reauth hydration missing; "Order Placement permission" warning |
-| 8 | IIFL Securities | OAuth (hardcoded appkey, AsyncStorage-only persistence) | SDK-broken | No MongoDB persistence — incompatible with SDK persistence model |
+| 8 | IIFL Securities | Customer-owned App Key/App Secret → OAuth WebView → Node exchange + MongoDB persistence | SDK-broken / legacy-correct | SDK schema still models a different credentials/TOTP product; production deliberately uses the re-certified direct legacy modal |
 | 9 | AliceBlue | OAuth (empty-fields, hardcoded `prod.alphaquark.in` origin) | SDK-with-gap | Schema needs `flow=oauth, fields=[]`; hardcoded redirect URL override |
 | 10 | Motilal Oswal | OAuth (apiKey + clientCode, accessToken in callback) | SDK-with-gap | Schema mismatch; 30s session-affinity debounce; Restart-on-error callback; reauth pre-fill |
 | 11 | HDFC Securities | OAuth (apiKey + secretKey, `requestToken` callback) | SDK-clean (subject to verification) | IP_WHITELIST_BROKERS extension; backend `/exchange-token` requestToken acceptance |
@@ -861,6 +861,21 @@ The SDK expects Dhan to follow OAuth path with no credential fields. Form auto-s
 
 ## 7. Fyers
 
+### 2026-09-29 host biometric/TOTP boundary
+
+When the tenant enables device TOTP, dispatch stays in the host
+`DeviceTotpReconnectGate`; it does not enter `Phase3SdkBrokerModal`. A refreshed
+server document is classified into `requiresOAuth` versus reusable quick
+reconnect using slot status and server credential completeness. Fresh OAuth
+posts only `{uid, authCode}` to Node `/api/fyers/exchange-token`; Node resolves
+the stored App ID/Secret and calls ccxt. The existing SDK contract and its
+optional post-save dual-write are unchanged.
+
+Disconnect is confirmed by a second server read before the host clears local
+vaults. Fyers WebView navigation is never URL-logged, malformed query segments
+are ignored, and safe Crashlytics breadcrumbs record only phase/branch/status
+metadata.
+
 ### Legacy flow (production path)
 
 **Entry points:** `BrokerConnectionModal/FyersConnect.js:24-31` (component definition); `BrokerConnectModalDispatch` case `'Fyers'`. Modal rendered from Settings/Manage Connections or mid-trade TokenExpire modal.
@@ -890,18 +905,16 @@ The SDK expects Dhan to follow OAuth path with no credential fields. Form auto-s
 11. **WebView navigation handler** (FyersConnect.js:100-116, `handleWebViewNavigationStateChange`): detects `url.includes('auth_code=')`
 12. **Query param extraction** (lines 105-108): parses auth_code, extracts `authcode` (line 108)
 13. **Auth code saved** (line 111): `setFyersAuthCode(authcode)` + `setShowWebView(false)`
-14. **Token exchange trigger** (FyersConnect.js:158-162): `useEffect([fyersAuthCode, userDetails])` fires
-15. **Call connectFyers()** (lines 119-156): POST to `/fyers/gen-access-token` (line 130)
-16. **Exchange request payload** (lines 121-126):
+14. **Token exchange trigger**: the idempotent effect fires once for `authCode + userId`
+15. **Call connectFyers()**: POST to Node `/api/fyers/exchange-token`
+16. **Exchange request payload**:
     ```javascript
     {
-      user_email: userEmail,
-      clientId: secretKey,      // modal secretKey = DB clientCode
-      clientSecret: apiKey,      // modal apiKey = DB secretKey (OAuth secret)
+      uid: userId,
       authCode: fyersAuthCode
     }
     ```
-17. **ccxt-india processes**: Fyers API exchange `authCode + clientSecret` for `accessToken`
+17. **Node resolves server credentials, then ccxt-india processes**: App ID and Secret never return to the mobile exchange request
 18. **Response captured** (line 145): `const session_token = response.data.accessToken`
 19. **Access token saved** (line 147): `setFyersAccessToken(session_token)`
 20. **Broker DB save trigger** (FyersConnect.js:268-272): `useEffect([userId, fyersAccessToken])`
@@ -963,7 +976,7 @@ useEffect(() => {
 - `POST /rebalance/change_broker_model_pf` (line 209): portfolio rebalance
 
 **ccxt-india routes:**
-- `POST /fyers/gen-access-token` (line 130): exchanges auth_code + clientSecret for accessToken
+- `POST /api/fyers/exchange-token`: host sends uid + auth_code; Node resolves the stored App ID/Secret and forwards the exchange to ccxt `/fyers/gen-access-token`
 
 ### SDK flow (Phase 3)
 
@@ -1046,7 +1059,42 @@ Deep per-broker flow audit for AlphaQuark B2B mobile app's Phase 3 SDK migration
 
 ## 8. IIFL Securities
 
-### Legacy flow (production path)
+### Current production flow (re-certified 2026-09-27)
+
+IIFL is enabled and intentionally dispatched to `src/components/iiflmodal.js`
+through `SDK_LEGACY_FALLBACK`, regardless of the SDK master flag. This is a
+Phase 3 schema fallback, not the retired partner flow described in the
+historical audit below.
+
+- The customer creates an Individual Trader API app at
+  `https://developers.iiflcapital.com/`, registers the exact redirect URL shown
+  in the app, and whitelists the exact Route64 IPv6 shown in the egress card.
+- The stepper collects the customer's App Key and App Secret. Both are
+  AES-wrapped before `POST /api/iifl/update-key`; the Node backend persists the
+  encrypted direct credentials and returns a login URL.
+- The WebView accepts only the registered callback and parses current
+  `authcode`/`clientid`, camel-case aliases, plus retired `auth_token` for
+  compatibility. A single-flight ref prevents duplicate exchange calls.
+- `POST /api/iifl/exchange` performs the secret-bearing token exchange in Node.
+  App JavaScript does not receive the stored App Secret.
+- `PUT /api/user/connect-broker` persists the session under
+  `connected_brokers[IIFL Securities]`. AsyncStorage is only retained for
+  compatibility. The broker picker, status refresh, holdings/funds, order book,
+  and existing trade path therefore use the normal persisted broker record.
+- Reconnect and session-expiry entry points call `/api/iifl/reauth-url` when
+  saved direct credentials exist, then require the normal daily IIFL browser
+  login without asking the user to recreate the developer app.
+- Order-book and cancel requests use the mounted direct ccxt routes with the
+  persisted `accessToken` and `clientCode`.
+
+**Current verdict:** production-capable on the legacy lane; **SDK-broken** only
+in the migration sense. Promotion remains blocked until the SDK offers the
+same two-field direct-OAuth schema, IPv6 gate, Node login-url route, and
+secret-preserving exchange contract.
+
+### Historical pre-2026-09-27 flow (superseded; retained for audit trail)
+
+#### Legacy flow at the time of the original audit
 
 **Entry points:**
 - BrokerConnectModalDispatch dispatch (`src/components/BrokerConnectionModal/BrokerConnectModalDispatch.js:58-62`) — `SDK_ELIGIBLE_MODALS.has('IIFL')` returns true but IIFL is NOT in active SDK rollout due to architectural break.
@@ -1219,11 +1267,11 @@ Schema from SDK broker registry (brokerFormSchema.ts) — expected to be `flow=o
 
 **Recommended approach:** Option A (server-side MongoDB add) is lower-risk and aligns with SDK's design. Option B is more flexible long-term but requires SDK package changes.
 
-### Verdict
+### Historical verdict (superseded 2026-09-27)
 
 **SDK-broken.** 
 
-**Reasoning:** IIFL Securities' legacy flow persists session tokens exclusively to device-local AsyncStorage (line 123: `AsyncStorage.setItem('iiflAccessToken', accessToken)`). Every other broker writes `connected_brokers[]` documents in MongoDB on the backend, which the app queries on startup to populate the UI's broker list. The SDK widget's entire persistence contract assumes server-side MongoDB. Without either (a) IIFL's backend adding a MongoDB write path or (b) the SDK gaining a device-storage-only mode, the two flows are fundamentally incompatible. The token reaches the device in both cases, but the app's broker status refresh loop (`fetchBrokerStatusModal` → query `connected_brokers[]`) will see no IIFL entry from the SDK flow, causing the UI to show "Not Connected" even though the SDK persisted the token. Not a near-term migration candidate.
+**Historical reasoning:** At the time of the original audit, IIFL persisted session tokens only to device-local AsyncStorage. That persistence gap is closed by the 2026-09-27 Node `/api/user/connect-broker` path. The remaining SDK blocker is now the incompatible SDK schema and exchange contract documented in the current-state section above.
 
 ---
 

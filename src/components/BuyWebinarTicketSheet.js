@@ -32,12 +32,14 @@ import {
   CFSession,
   CFThemeBuilder,
 } from 'cashfree-pg-api-contract';
-import { getAuth } from '@react-native-firebase/auth';
 import liveKitService from '../FunctionCall/services/LiveKitService';
+import {getAccountEmail} from '../utils/accountEmail';
 import {
   getCashfreeEnvironment,
   friendlyPaymentError,
 } from '../utils/cashfreeEnv';
+
+import { designColor } from '../design/literalTokens';
 
 const EMAIL_RE = /^\S+@\S+\.\S+$/;
 
@@ -84,6 +86,11 @@ export default function BuyWebinarTicketSheet({ visible, onClose, lesson, onPurc
   const [name, setName] = useState('');
   const [mobile, setMobile] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  // Webinar coupon (web parity C6: BuyWebinarTicketModal coupon block).
+  const [couponCode, setCouponCode] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState(null); // {couponId, code, discount, finalAmount}
+  const [couponMsg, setCouponMsg] = useState('');
+  const [applyingCoupon, setApplyingCoupon] = useState(false);
   const abortRef = useRef(null);
   const handledRef = useRef(false);
 
@@ -92,7 +99,7 @@ export default function BuyWebinarTicketSheet({ visible, onClose, lesson, onPurc
   // signed-in users so they can't accidentally type a different address
   // and trip EMAIL_MISMATCH.
   const signedInEmail = (() => {
-    try { return getAuth().currentUser?.email || ''; } catch (_) { return ''; }
+    try { return getAccountEmail() || ''; } catch (_) { return ''; }
   })();
   const isSignedInEmail = !!signedInEmail;
 
@@ -102,6 +109,9 @@ export default function BuyWebinarTicketSheet({ visible, onClose, lesson, onPurc
       setErrorMsg('');
       handledRef.current = false;
       setEmail(signedInEmail);
+      setCouponCode('');
+      setAppliedCoupon(null);
+      setCouponMsg('');
     }
     // signedInEmail intentionally not in deps — capturing the value at
     // open time matches web's behaviour.
@@ -123,6 +133,55 @@ export default function BuyWebinarTicketSheet({ visible, onClose, lesson, onPurc
   if (!visible || !lesson) return null;
 
   const isFree = Number(lesson.ticketPrice || 0) <= 0;
+  const originalPrice = Number(lesson.ticketPrice || 0);
+  const payableAmount = appliedCoupon
+    ? Number(appliedCoupon.finalAmount)
+    : originalPrice;
+
+  async function handleApplyCoupon() {
+    const code = (couponCode || '').trim().toUpperCase();
+    if (!code) {
+      setCouponMsg('Enter a coupon code first.');
+      return;
+    }
+    setApplyingCoupon(true);
+    setCouponMsg('');
+    try {
+      const data = await liveKitService.validateWebinarCoupon(
+        code,
+        lesson.lessonId,
+        originalPrice,
+      );
+      const finalAmount = Number(data?.finalAmount ?? data?.payableAmount ?? 0);
+      const discount = Number(
+        data?.discount ??
+          data?.discountAmount ??
+          Math.max(0, originalPrice - finalAmount),
+      );
+      if (!Number.isFinite(finalAmount) || finalAmount < 0) {
+        setCouponMsg("We couldn't apply this coupon. Please retry.");
+        return;
+      }
+      setAppliedCoupon({
+        couponId: data?.couponId || data?._id || '',
+        code,
+        discount,
+        finalAmount,
+      });
+      setCouponMsg(`Coupon applied — you save ₹${discount}.`);
+    } catch (e) {
+      setAppliedCoupon(null);
+      setCouponMsg(e?.response?.data?.message || e?.message || 'Invalid coupon.');
+    } finally {
+      setApplyingCoupon(false);
+    }
+  }
+
+  function removeCoupon() {
+    setAppliedCoupon(null);
+    setCouponCode('');
+    setCouponMsg('');
+  }
 
   async function pollUntilTerminal(orderId) {
     abortRef.current?.abort();
@@ -154,6 +213,8 @@ export default function BuyWebinarTicketSheet({ visible, onClose, lesson, onPurc
         mobile: mobile.trim(),
         // Mobile has no canonical return URL; backend tolerates an empty string.
         returnUrl: '',
+        // Backend re-validates + recomputes finalAmount server-side.
+        couponCode: appliedCoupon?.code || undefined,
       });
 
       // Free path — server already wrote the enrollment + fired email
@@ -234,12 +295,12 @@ export default function BuyWebinarTicketSheet({ visible, onClose, lesson, onPurc
         .add(CFPaymentModes.PAY_LATER)
         .build();
       const theme = new CFThemeBuilder()
-        .setNavigationBarBackgroundColor('#d97706')
-        .setNavigationBarTextColor('#FFFFFF')
-        .setButtonBackgroundColor('#d97706')
-        .setButtonTextColor('#FFFFFF')
-        .setPrimaryTextColor('#111827')
-        .setSecondaryTextColor('#6b7280')
+        .setNavigationBarBackgroundColor(designColor('d97706'))
+        .setNavigationBarTextColor(designColor('ffffff'))
+        .setButtonBackgroundColor(designColor('d97706'))
+        .setButtonTextColor(designColor('ffffff'))
+        .setPrimaryTextColor(designColor('111827'))
+        .setSecondaryTextColor(designColor('6b7280'))
         .build();
       const dropPayment = new CFDropCheckoutPayment(session, paymentModes, theme);
       CFPaymentGatewayService.doPayment(dropPayment);
@@ -250,7 +311,7 @@ export default function BuyWebinarTicketSheet({ visible, onClose, lesson, onPurc
     }
   }
 
-  const ctaLabel = isFree ? 'Register' : `Pay ₹${lesson.ticketPrice}`;
+  const ctaLabel = isFree ? 'Register' : `Pay ₹${payableAmount}`;
   const titleLabel = isFree ? 'Register for free' : `Buy ticket — ₹${lesson.ticketPrice}`;
 
   return (
@@ -323,13 +384,66 @@ export default function BuyWebinarTicketSheet({ visible, onClose, lesson, onPurc
                 </>
               )}
 
+              {!isFree && (
+                <>
+                  <Text style={styles.label}>Coupon (optional)</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <TextInput
+                      value={couponCode}
+                      onChangeText={(t) => setCouponCode(t.toUpperCase())}
+                      editable={phase !== 'paying' && !appliedCoupon}
+                      autoCapitalize="characters"
+                      placeholder="Enter code"
+                      style={[styles.input, { flex: 1, marginBottom: 0 }]}
+                    />
+                    {appliedCoupon ? (
+                      <TouchableOpacity
+                        onPress={removeCoupon}
+                        style={{ paddingHorizontal: 12, paddingVertical: 10 }}>
+                        <Text style={{ color: designColor('dc2626'), fontWeight: '600' }}>Remove</Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <TouchableOpacity
+                        onPress={handleApplyCoupon}
+                        disabled={applyingCoupon || phase === 'paying'}
+                        style={{
+                          paddingHorizontal: 14,
+                          paddingVertical: 10,
+                          backgroundColor: designColor('d97706'),
+                          borderRadius: 8,
+                          opacity: applyingCoupon ? 0.6 : 1,
+                        }}>
+                        <Text style={{ color: designColor('fff'), fontWeight: '700' }}>
+                          {applyingCoupon ? '…' : 'Apply'}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  {!!couponMsg && (
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        marginTop: 4,
+                        color: appliedCoupon ? designColor('16a34a') : designColor('dc2626'),
+                      }}>
+                      {couponMsg}
+                    </Text>
+                  )}
+                  {appliedCoupon && (
+                    <Text style={{ fontSize: 12, marginTop: 2, color: designColor('374151') }}>
+                      Price: ₹{originalPrice} → <Text style={{ fontWeight: '700' }}>₹{payableAmount}</Text>
+                    </Text>
+                  )}
+                </>
+              )}
+
               {!!errorMsg && (
                 <View style={styles.errorBox}><Text style={styles.errorText}>{errorMsg}</Text></View>
               )}
 
               {phase === 'paying' ? (
                 <View style={styles.payingBox}>
-                  <ActivityIndicator color="#d97706" />
+                  <ActivityIndicator color={designColor('d97706')} />
                   <Text style={styles.payingText}>Waiting for confirmation… Don't close this window.</Text>
                 </View>
               ) : (
@@ -352,28 +466,28 @@ export default function BuyWebinarTicketSheet({ visible, onClose, lesson, onPurc
 
 const styles = StyleSheet.create({
   backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
-  sheet: { backgroundColor: '#ffffff', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 20, paddingBottom: 32 },
+  sheet: { backgroundColor: designColor('ffffff'), borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 20, paddingBottom: 32 },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  headerTitle: { fontSize: 16, fontWeight: '700', color: '#111827' },
-  closeX: { fontSize: 26, color: '#9ca3af', paddingHorizontal: 4 },
-  lessonTitle: { fontSize: 14, fontWeight: '600', color: '#111827', marginTop: 12 },
-  lessonMeta: { fontSize: 11, color: '#6b7280', marginTop: 4 },
-  doneBox: { marginTop: 16, backgroundColor: '#f0fdf4', borderColor: '#bbf7d0', borderWidth: 1, borderRadius: 8, padding: 14 },
-  doneText: { color: '#166534', fontSize: 13 },
+  headerTitle: { fontSize: 16, fontWeight: '700', color: designColor('111827') },
+  closeX: { fontSize: 26, color: designColor('9ca3af'), paddingHorizontal: 4 },
+  lessonTitle: { fontSize: 14, fontWeight: '600', color: designColor('111827'), marginTop: 12 },
+  lessonMeta: { fontSize: 11, color: designColor('6b7280'), marginTop: 4 },
+  doneBox: { marginTop: 16, backgroundColor: designColor('f0fdf4'), borderColor: designColor('bbf7d0'), borderWidth: 1, borderRadius: 8, padding: 14 },
+  doneText: { color: designColor('166534'), fontSize: 13 },
   doneClose: { marginTop: 10, alignSelf: 'flex-start' },
-  doneCloseText: { color: '#16a34a', fontWeight: '600' },
+  doneCloseText: { color: designColor('16a34a'), fontWeight: '600' },
   form: { marginTop: 14 },
-  label: { fontSize: 12, fontWeight: '600', color: '#374151', marginBottom: 4, marginTop: 8 },
-  input: { borderWidth: 1, borderColor: '#d1d5db', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, color: '#111827' },
-  inputLocked: { backgroundColor: '#f9fafb', color: '#6b7280' },
-  helperText: { fontSize: 11, color: '#6b7280', marginTop: 4 },
-  errorBox: { marginTop: 10, backgroundColor: '#fef2f2', borderColor: '#fecaca', borderWidth: 1, borderRadius: 6, padding: 10 },
-  errorText: { color: '#991b1b', fontSize: 12 },
+  label: { fontSize: 12, fontWeight: '600', color: designColor('374151'), marginBottom: 4, marginTop: 8 },
+  input: { borderWidth: 1, borderColor: designColor('d1d5db'), borderRadius: 6, paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, color: designColor('111827') },
+  inputLocked: { backgroundColor: designColor('f9fafb'), color: designColor('6b7280') },
+  helperText: { fontSize: 11, color: designColor('6b7280'), marginTop: 4 },
+  errorBox: { marginTop: 10, backgroundColor: designColor('fef2f2'), borderColor: designColor('fecaca'), borderWidth: 1, borderRadius: 6, padding: 10 },
+  errorText: { color: designColor('991b1b'), fontSize: 12 },
   payingBox: { alignItems: 'center', paddingVertical: 14 },
-  payingText: { color: '#6b7280', fontSize: 12, marginTop: 6 },
+  payingText: { color: designColor('6b7280'), fontSize: 12, marginTop: 6 },
   ctaRow: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 16 },
   cancelBtn: { paddingVertical: 10, paddingHorizontal: 14, marginRight: 6 },
-  cancelBtnText: { color: '#374151', fontWeight: '500' },
-  payBtn: { backgroundColor: '#d97706', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 6 },
-  payBtnText: { color: '#ffffff', fontWeight: '600' },
+  cancelBtnText: { color: designColor('374151'), fontWeight: '500' },
+  payBtn: { backgroundColor: designColor('d97706'), paddingVertical: 10, paddingHorizontal: 16, borderRadius: 6 },
+  payBtnText: { color: designColor('ffffff'), fontWeight: '600' },
 });

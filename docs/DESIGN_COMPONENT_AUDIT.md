@@ -96,11 +96,12 @@ Domain-shaped, prop-driven. Phase D landed the first composite end-to-end on 202
 | ~~IgnoreStockCard~~ | (deleted 2026-05-01) | — | — | DELETED — dead code | Was originally Phase D's planned candidate; migration discovered zero consumers (the only import was a dead line in `IgnoreTradesScreen.js`, which actually renders `<StockAdvices type="Ignore" />`). Both legacy file and dead import removed in the same commit. |
 | BrokerCard | `src/components/BrokerConnectCard.js` | composite | TBD | TBD — likely **dead code** | Spot-audit found 0 consumers. Verify and delete in a cleanup PR if confirmed orphan. |
 | StockCard | `src/UIComponents/StockAdvicesUI/StockCard.js` | composite | `useTrade`, `useConfig`, `useNavigation`, `useModalStore` | `needs-logic-extraction` | 1293 lines — too large for Phase D. Phase G (Advice screens). 2 consumers (`StockAdviceContent.js`, `AdviceCartScreen.js`). |
-| BasketCard | `src/UIComponents/StockAdvicesUI/BasketCard.js` | composite | `useTrade` + others | `needs-logic-extraction` | 762 lines. Phase G. 1 consumer (`StockAdviceContent.js`). |
+| BasketCard | `src/UIComponents/StockAdvicesUI/BasketCard.js` + `designs/default/composites/BasketCard.js` | composite | Container: `useTrade`, reconciliation + basket policy; presentation: props/tokens only | ✅ **Migrated (Phase G; policy contract widened 2026-08-16)** | Container owns lifecycle resolver output, five-second entry authorization refresh and execution handoff. Presentation consumes `isCancelled`, `isClosed`, `isClosurePending`, `entryBlocked`, `entryChecking`, and `entryGateMessage`; it never infers policy from raw flags. One consumer (`StockAdviceContent.js`). |
 | OrderRow / OrderItem | Defined inline in `src/screens/Home/OrderScreen.js` (~line 254) | composite | uses pure utils + parent props | `clean-extract` (after extraction from OrderScreen) | Already nearly pure — its only state is per-row `showReason` toggle. Will be extracted alongside OrderScreen migration in Phase E. |
 | HoldingRow | TBD (search PortfolioScreen sub-renders) | composite | `useLTPStore` (likely) | TBD — extract during PortfolioScreen Phase F/G | Lives inside `PortfolioScreen.js` today (not extracted). |
 | FloatingAcceptRebalanceButton | `src/components/FloatingAcceptRebalanceButton.js` | composite | rebalance-flow callbacks | `needs-logic-extraction` | Phase I (rebalance flow). Container owns the accept-rebalance dispatch; presentation is the floating button. |
-| ReviewTradeModal (composite mode) | `src/components/ReviewTradeModal.js` | composite | `useConfig`, axios surveillance API, AsyncStorage, EventEmitter | `needs-logic-extraction` | Imported from `StockAdvices.js` and `AddtoCartModal.js` (both non-MP). Container fetches surveillance state and emits events; presentation receives viewModel + actions. Phase G. |
+| ReviewTradeModal (composite mode) | `src/components/ReviewTradeModal.js` | composite | `useConfig`, axios surveillance + SELL-impact preview APIs, AsyncStorage, EventEmitter | `needs-logic-extraction` | Imported from `StockAdvices.js` and `AddtoCartModal.js` (both non-MP). Container owns surveillance, model-impact preview/choice state and events; presentation receives viewModel + actions. Phase G. |
+| SellModelImpactNotice | `src/components/AdviceScreenComponents/SellModelImpactNotice.js` | composite | pure props + `modelReductionPlan` | `clean-extract` after parent split | Warn-only radio card shared by direct and Zerodha review. Uses design literal tokens. Its future presentation receives notice/choice/model plus `onChoose`; preview/reservation and `modelAuthorization` stay in the parent container. |
 | Checkbox | `src/components/AdviceScreenComponents/Checkbox.js` | primitive-shaped composite | none | `clean-extract` | 34 lines — almost too small to be a composite. 1 consumer (`RebalanceCard.js`). Migrate opportunistically when RebalanceCard is touched again. |
 | RepairConfimationModal | `src/components/AdviceScreenComponents/RepairConfimationModal.js` | composite | none | `clean-extract` | 108 lines, pure modal. 1 consumer (`RebalanceAdvices.js`). Phase I. |
 
@@ -230,7 +231,8 @@ ViewModel sketches captured in the audit-task pass (2026-05-01). The `viewModel`
 
 | Screen | File | Verdict | Phase | viewModel highlights |
 |---|---|---|---|---|
-| **AccountSettingsScreen** | `src/screens/Home/AccountSettingsScreen.js` | `needs-logic-extraction` | F (after ChangeAdvisor) | Builds account/insight menu items from `useTrade` and configuration gates; route targets must use the navigator's registered names. **2026-07-18:** the customer-facing “Change Manager” item now navigates to registered route `Advisor Change`; its label remains manager-facing copy. |
+| **AccountSettingsScreen** | `src/screens/Home/AccountSettingsScreen.js` | `needs-logic-extraction` | F (after ChangeAdvisor) | Builds account/insight menu items from `useTrade` and configuration gates; route targets must use the navigator's registered names. **2026-07-18:** the customer-facing “Change Manager” item now navigates to registered route `Advisor Change`; its label remains manager-facing copy. **2026-10-01:** menu STRUCTURE (sections, order, rows) now comes from the variant navigation manifest (`designs/<variant>/navigation.js` `moreMenu`, resolved by `src/navigation/resolveNavigation.js`); the container keeps only flag computation and row handlers. Delete Account / Log Out / legal rows are catalog-required. |
+| **MainTabNavigator (tab structure)** | `src/components/Navigation.js` | `migrated (data manifest)` | 2026-10-01 | Tabs, order, labels, icons, first tab, tab-bar height come from the navigation manifest (`tabs` / `initialTab` / `chrome`), not JSX. Chrome still renders via `shell.AppHeader` / `shell.MainTabBar` (MainTabBar now honours `item.icon` + `viewModel.height`). See `CONFIGURABLE_NAVIGATION_DESIGN.md`. |
 | **ChangeAdvisor** | `src/screens/AccountSettingScreen/ChangeAdvisor.js` (~250+ lines) | `needs-logic-extraction` | F (after primary auth) | `{ form: { currentRAId, newRAId }, ui: { isLoading, isInitialLoading, statusMessage }, user: { email } }`. RA-ID input formatting (uppercase + remove spaces) can live in presentation; validation + `updateRACodeAndConfig` + `RNRestart` stay in container. Native Alert dialogs → callbacks if a variant wants custom dialogs. |
 
 ### Model Portfolio screens (in scope as of 2026-05-01 — Phase I)
@@ -264,7 +266,8 @@ The `src/screens/Drawer/` folder has ~15 screens not covered by the 2026-05-01 a
 | ProfileScreen | `src/screens/Drawer/ProfileScreen.js` | TBD | Likely tiny wrapper. |
 | NotificationScreen | `src/screens/Drawer/NotificationScreen.js` | TBD | |
 | PushNotificationScreen | `src/screens/Drawer/PushNotificationScreen.js` | TBD | |
-| ResearchReportScreen | `src/screens/Drawer/ResearchReportScreen.js` | TBD | |
+| PaymentHistoryScreen | `src/screens/Drawer/PaymentHistoryScreen.js` + `designs/default/screens/PaymentHistoryScreen.js` | **migrated** | Container owns config, invoice/RIA fetches, PDF I/O and navigation. **2026-07-28:** viewModel adds `advisorLogo` + `advisorLogoFallback`; presentation owns the three-source image-error fallback. |
+| ResearchReportScreen | `src/screens/Home/ResearchReportScreen.js` | TBD | Data fetch, merge/filter, and RNFS download remain screen-owned; 2026-07-28 asset-shape normalization is runtime logic, not a presentation migration. |
 | NewsSearch / NewsScreen / WishSearch | `src/screens/Drawer/NewsSearch.js` etc. | TBD | |
 | ManageConnectionsModal | `src/screens/Drawer/ManageConnectionsModal.js` | **`SDK-bound-skip`** | Phase 3 surface — drives reauth routing, owned by Phase 3 contract. |
 | DisconnectBrokerModal | `src/screens/Drawer/DisconnectBrokerModal.js` | **`SDK-bound-skip`** | Phase 3 surface. |
@@ -277,6 +280,12 @@ The `src/screens/Drawer/` folder has ~15 screens not covered by the 2026-05-01 a
 | PlacedOrderLoadingCard | `src/screens/Drawer/PlacedOrderLoadingCard.js` | TBD | Probably `clean-extract`. |
 
 ---
+
+### SDK widget slots (design passthrough, 2026-10-01)
+
+| Surface | Location | Verdict | Notes |
+|---|---|---|---|
+| SDK slots `sellAuthGate`, `brokerCredentialForm`, `brokerWebViewHeader`, `modifyInvestmentSheet`, `rebalancePnlChoice`, `kitePublisherHeader` | `designs/<variant>/sdk/` → `AqSdkProvider components` | `SDK-bound-skip` for logic; presentation overridable | Wired in SDK `7dc0fda`. Presentation-only contracts (`SDK_DESIGN_PASSTHROUGH.md § 9`). Default registry maps headers + P&L choice to `null` (SDK built-in). `brokerSelectionList` reserved (no SDK widget). |
 
 ## Section 4 — Modals (target: `designs/default/composites/` or `designs/default/screens/`)
 
@@ -314,9 +323,9 @@ Most modals are independent surfaces. Modal-shell consolidation is **deferred to
 | RebalanceModal | `src/components/AdviceScreenComponents/RebalanceModal.js` | `needs-logic-extraction` | Phase I. Largest modal in this set (~91 KB). Container owns rebalance decryption + trade orchestration. **High SDK-migration risk** — if MP moves to SDK, this is the most likely thrown-away surface. |
 | RebalanceAdviceContent | `src/components/AdviceScreenComponents/RebalanceAdviceContent.js` | `needs-logic-extraction` | Phase I. Container owns useTrade + DdpiModal coordination + RebalanceCard render orchestration. |
 | RebalancePreferenceModal | `src/UIComponents/RebalanceAdvicesUI/RebalancePreferenceModal.js` | `needs-logic-extraction` | Phase I. |
-| RebalanceCard | `src/UIComponents/RebalanceAdvicesUI/RebalanceCard.js` | `needs-logic-extraction` | Phase I. Calculate-rebalance UX — high SDK-migration risk if MP moves to SDK. |
+| RebalanceCard | `src/UIComponents/RebalanceAdvicesUI/RebalanceCard.js` | `needs-logic-extraction` | Phase I. Calculate-rebalance UX — high SDK-migration risk if MP moves to SDK. The 2026-09-28 SELL-retry badge now uses resolved color/typography tokens; the surrounding legacy presentation remains pending extraction. |
 | StepProgressBar (rebalance) | `src/UIComponents/RebalanceAdvicesUI/StepProgressBar.js` | `clean-extract` | Phase I. All 4 import sites are MP/rebalance flows but the component itself is a pure step UI. Migrates with the rest of the rebalance set. |
-| ReviewTradeModal | `src/components/ReviewTradeModal.js` | `needs-logic-extraction` | Imported from `StockAdvices.js` (non-MP) and `AddtoCartModal.js` (non-MP). Surveillance API + EventEmitter inside; container owns. Phase G. |
+| ReviewTradeModal | `src/components/ReviewTradeModal.js` | `needs-logic-extraction` | Imported from `StockAdvices.js` (non-MP) and `AddtoCartModal.js` (non-MP). Surveillance + SELL-impact preview APIs and EventEmitter stay container-owned. Phase G. |
 | TokenExpireBrokerModal | `src/components/TokenExpireBrokerModal.js` | `needs-logic-extraction` | |
 | iiflmodal / iiflproceedmodal | `src/components/iifl*.js` | `needs-logic-extraction` | IIFL on legacy lane (Phase 3 audit). Audit during Phase G to see if Phase 3 will eat them first. |
 | IIFLReviewTradeModal | `src/components/IIFLReviewTradeModal.js` | `needs-logic-extraction` | Same as above. |
@@ -390,7 +399,7 @@ Most modals are independent surfaces. Modal-shell consolidation is **deferred to
 | DisclaimerModal.js | `clean-extract` | I | — | Static text + accept button. |
 | KitePublisherModal.js | `needs-logic-extraction` | I | broker order execution flow | **Verify before migrating** — if this proxies a broker SDK call, may need to stay in `src/`. Audit during Phase I prep. |
 | MPCardBespoke.js | `needs-logic-extraction` | I | `useNavigation` | Container holds navigation, presentation is card layout. |
-| MPCard.js | `needs-logic-extraction` | I | `useTrade`, `useGstConfig`, `useConfig` | Large; viewModel will mirror the data fields the card consumes (plan info, GST display). |
+| MPCard.js | **migrated** | I | `useTrade`, `useGstConfig`, `useConfig` | Container supplies plan/pricing/config data to `designs/default/composites/MPCard.js`. **2026-07-28:** container owns remote-image failure state; presentation reports `actions.onImageError` and renders `fallbackImage`. |
 | MPInvestNowModal.js | **migrated** | I | `useTrade`, `useConfig`, `useGstConfig`, axios, Razorpay, Cashfree, PayU, RNIap, Digio | **Migrated 2026-05-02.** Largest MP modal (5364 LOC). Container at `src/components/ModelPortfolioComponents/MPInvestNowModal.js` owns ALL payment gateway SDKs (Razorpay, Cashfree, PayU, Apple IAP, Google Play), ALL payment callbacks/state, ALL API calls, Digio e-signature, coupon validation, subscription creation, investment amount math. Presentation at `designs/default/screens/MPInvestNowModal.js` renders the 3-step wizard (Personal Info / Investment+KYC / Plan Selection), plan cards, coupon input, GST breakdown, consent checkbox, disclaimer modal, Digio modal shell, PayU WebView shell, Telegram collection modal, Digio success modal. Payment SDKs NEVER touched by presentation. Registered as `screens.MPInvestNowModal`. |
 | MPReviewTradeModal.js | `needs-logic-extraction` | I | `useConfig`, axios | Trade-review for MP; container handles trade payload, presentation renders the review table. |
 | PaymentSuccessModal.js | `clean-extract` | I | — | Static success UI. |
@@ -445,7 +454,7 @@ Adding a new tab/screen to `Navigation.js` does NOT require a design-audit row �
 |---|---|---|---|
 | `BrokerConnectionUI/` | 12 broker-specific UIs (AliceBlue, AngelOne, Dhan, Fyers, HDFC, ICICI, Kotak, Motilal, Upstox, Zerodha + DhanOAuth) + `HelpUI/` | **`SDK-bound-skip`** | Back the legacy broker modals (Phase 3 SDK is replacing). Will be deleted as Phase 3 reaches 100%. |
 | `RebalanceAdvicesUI/` | RebalanceCard, RebalancePreferenceModal, StepProgressBar | mixed (Phase I) | RebalanceCard + RebalancePreferenceModal → `needs-logic-extraction`; StepProgressBar → `clean-extract`. All migrate in Phase I. High SDK-migration risk for the first two if MP moves to SDK. |
-| `StockAdvicesUI/` | StockCard (`AdviceRow`), BasketCard | `needs-logic-extraction` | In scope. Likely first composites to migrate (Phase D). |
+| `StockAdvicesUI/` | StockCard (`AdviceRow`), BasketCard | mixed: StockCard `needs-logic-extraction`; BasketCard migrated | BasketCard container/presentation split is live and its basket-policy viewModel was widened on 2026-08-16. StockCard remains queued. |
 
 ---
 
@@ -511,5 +520,64 @@ Numbers will be re-counted at the end of every audit-task PR.
 | `designs/default/composites/PortfolioSummaryCard.js` | migrated | Expired-plan state is a compact renewable notice and subordinate row metadata; table, supporting copy, and values use one Poppins scale aligned with PortfolioScreen. |
 | Customer-facing plan, portfolio, knowledge and broker callouts | presentation maintenance | Visible “advisor” terminology is manager-facing; transport/config identifiers are intentionally unchanged. |
 | `designs/default/composites/MPCard.js` + Model Portfolio list | migrated | Plan cards require top list clearance below the tab bar, contained discount/status pills, readable metric values, and balanced action buttons; retain current plan/payment behaviour. |
-| `src/screens/Home/AfterSubscriptionScreen.js` | needs-logic-extraction | Subscribed MP detail now explains current holdings versus target allocation, removes the misleading expiry label, and protects persistent Exit/Modify actions with safe-area-aware sizing. |
+| `src/screens/Home/AfterSubscriptionScreen.js` | needs-logic-extraction | Subscribed MP detail explains current holdings versus target allocation, protects persistent Exit/Modify actions with safe-area-aware sizing, and shows neutral value placeholders plus a broker-confirmation loader until holdings requests settle instead of flashing ₹0 / “No Holdings Yet.” |
 | `designs/default/screens/MPPerformanceScreen.js` + `src/screens/Drawer/MPPerformanceScreen.js` | migrated | Overview owns the scrollable model summary; historical performance is disclosure-led (not headline CAGR), volatility is described as manager-selected, and consent routes directly to the chart. |
+
+## 2026-09-27 executable boundary-audit addendum
+
+`scripts/audit-design-boundaries.js` now turns the presentation-only rule into
+a CI gate. Its initial baseline contains **62 forbidden import edges in 17
+files**. The count is intentionally import-edge based: removing one service or
+context dependency removes one explicit exception even when a large surface
+needs several extraction passes.
+
+| Surface group | Forbidden edges | Verdict / next extraction |
+|---|---:|---|
+| `PortfolioHealthSheet` | 8 | `needs-logic-extraction` — move consent persistence, holdings reads and health API into a `src/` container. |
+| `PortfolioSummaryCard` | 6 | `needs-logic-extraction` — move auth/navigation/config/service/context reads into its Portfolio container. |
+| `ProvisionalBanner` | 6 | `needs-logic-extraction` — container owns mandate request and tenant headers. |
+| `AumPerformanceCard` | 4 | `needs-logic-extraction` — container owns identity/config and RIA billing service. |
+| `NbaBanner` | 3 | `needs-logic-extraction` — container supplies ranked actions and navigation callbacks. |
+| `LiveRoom` | 1 | `needs-logic-extraction` — container owns join-URL service call; presentation owns countdown/WebView layout. |
+| Other composite imports | 5 | Existing `BasketTradeModal`, `PortfolioTransitionCard`, and `StockCard` src-owned child/config dependencies. |
+| Screen presentations | 29 | Existing Home/Bespoke/MP/Portfolio/Knowledge Hub child-container imports. Split incrementally without widening the baseline. |
+
+No baseline row changes a surface to `clean-extract`; it records the exact debt
+that prevents “test logic once, review screenshots per variant” today.
+
+## 2026-09-28 boundary-extraction addendum
+
+The ratchet is now **55 forbidden import edges in 15 files**.
+
+| Surface | Previous edges | Current edges | Verdict / container contract |
+|---|---:|---:|---|
+| `ProvisionalBanner` | 6 | 0 | `migrated` — `src/screens/Home/HomeScreen.js` owns identity, tenant headers, the mandate request, dismissal state and deadline formatting. The design receives `{viewModel: {visible, deadline}, actions: {dismiss}}`. |
+| `PortfolioTransitionCard` | 1 | 0 | `migrated` — the src-owned caller must supply `enabled`; the design owns only the RA-attributed transition rendering. The component remains deliberately unmounted. |
+| Remaining boundary debt | 55 | 55 | `needs-logic-extraction` across 15 files; every exception remains exact and ratcheted. |
+
+`ConfigContext.Provider` also memoizes its public value on `[config, loading]`,
+so the complete token bundle is no longer rebuilt merely because the provider
+component re-rendered for unrelated work.
+
+## 2026-09-28 boundary-completion addendum
+
+The audit now discovers **0 forbidden import edges in 0 design files**.
+
+| Surface group | Previous edges | Current edges | Result |
+|---|---:|---:|---|
+| Direct-side-effect composites | 22 | 0 | NBA, Portfolio Health and Portfolio Summary use src containers; Live Room receives its join action; the unreachable AUM card was removed. |
+| App-owned composite collaborators | 4 | 0 | Stock and basket collaborators are injected as slots by their src wrappers. |
+| Screen presentation collaborators | 29 | 0 | Home, Bespoke, MP invest, Portfolio, Knowledge Hub and phone-logo components are supplied by their containers. |
+| **Total** | **55** | **0** | No design presentation imports network, storage, Firebase, navigation, context, services, or src-owned UI. |
+
+Payment, Digio, broker/SDK execution and navigation remain deliberately
+src-owned. Variants can replace the registered presentation while consuming
+the same `viewModel`, `actions`, and `slots` contract.
+
+## 2026-09-29 dynamic-import audit addendum
+
+The boundary audit now also resolves dynamic `import()` (string or
+no-substitution template literal) and rejects non-literal `import(expr)`. On
+prod web the same gap hid five edges behind a zero baseline; this app had
+**none** — re-running the widened audit over `designs/**` still reports
+**0 edges across 0 files**. No verdict changes.

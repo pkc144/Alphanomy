@@ -49,26 +49,57 @@ the platform orchestrates.
 
 ---
 
+### Which change needs what
+
+| You want to… | Where | Retest? |
+|---|---|---|
+| Change brand colours / fonts / spacing / logos | `designs/<variant>/tokens/` (builders + `literals.json`, §3 Layer 1) | visual only |
+| Restyle or re-layout a screen, composite, primitive, header or tab bar | copy the file from `designs/default/` into `designs/<variant>/` and register the same key (§3 Layers 2–3) | visual only |
+| Restyle trade/broker/sell-auth SDK widgets | `designs/<variant>/sdk/` (§3 Layer 4) | visual only |
+| Change which tabs exist, their order/labels/icons, the first tab, the More menu, or skip the onboarding carousel | `designs/<variant>/navigation.js` data manifest (§3 Layer 5) | navigate every tab + More row once |
+| Add a step, change what a button does, show new data | the `src/` container (and its tests), then expose it via `viewModel`/`actions` | **full functional test** |
+| Change payment, auth or broker-connection behaviour | `src/` / SDK — never `designs/` | full functional test |
+
+### The boundary rule (enforced)
+
+A design file renders `viewModel` (data), calls `actions` (callbacks) and
+places `slots` (app-owned components such as payment modals). It never
+imports app logic. `npm run audit:design` (`scripts/audit-design-boundaries.js`,
+CI `lint-imports`) rejects, anywhere under `designs/`: axios, AsyncStorage,
+Firebase, React Navigation, `fetch`, contexts, services and `src/` screens or
+components — **whether imported statically, with `require()`, or with a
+dynamic `import()`** (a non-literal `import(expr)` is rejected outright). The
+baseline is 0 and must stay 0: if a design needs app behaviour, the container
+passes it in. Never widen the audit allowlist to make a design compile.
+
+The style ratchet (`npm run audit:styles`) keeps `src/` at 0 hardcoded colours
+and 0 font families; new visual values go into tokens.
+
+---
+
 ## 2. Quick Start (30 minutes to first screen)
 
 ```bash
 # 1. Create your variant folder
 mkdir -p designs/yourcompany/{tokens,screens}
 
-# 2. Copy and customize tokens
-cp designs/default/tokens/index.js designs/yourcompany/tokens/index.js
-# Edit: change colors, fonts, spacing to your brand
+# 2. Create token builders in designs/yourcompany/tokens/index.js.
+# Each exported build* function may override one family; omitted builders
+# fall through to default. See §3 for the required export shape.
 
 # 3. Create your registry
 cat > designs/yourcompany/index.js << 'EOF'
-import tokens from './tokens';
+import * as tokens from './tokens';
+import sdk from './sdk';
 
 export default {
+  name: 'yourcompany',
   tokens,
   components: {
     // Override specific screens here. Everything else
     // falls through to designs/default/.
   },
+  sdk,
 };
 EOF
 
@@ -91,33 +122,52 @@ npx react-native start
 
 ### Layer 1: Tokens (instant brand change)
 
-Edit `designs/yourcompany/tokens/index.js`:
+`tokens/index.js` is a builder namespace, not a static default export. It may
+export any subset of `buildColors`, `buildSpacing`, `buildTypography`,
+`buildRadii`, `buildShadows`, and `buildAssets`; omitted builders fall back to
+`designs/default`. Builders receive the advisor config, so nested backend token
+overrides can remain the final layer.
+
+Minimal spacing-only variant:
 
 ```js
-export default {
-  colors: {
-    brand: { primary: '#FF6B00', gradientStart: '#FF6B00', gradientEnd: '#FF8533' },
-    text: { primary: '#1A1A2E', secondary: '#6B7280', muted: '#9CA3AF' },
-    surface: { card: '#FFFFFF', background: '#F3F4F6', modal: '#FFFFFF' },
-    pnl: { profit: '#00D68F', profitBg: '#E6FFF5', loss: '#FF3D71', lossBg: '#FFE6EC' },
-    status: { success: '#00D68F', warning: '#FFB020', error: '#FF3D71' },
-  },
-  typography: {
-    heading: { fontFamily: 'YourFont-Bold', fontSize: 24, fontWeight: '700' },
-    title: { fontFamily: 'YourFont-SemiBold', fontSize: 18, fontWeight: '600' },
-    body: { fontFamily: 'YourFont-Regular', fontSize: 14 },
-    caption: { fontFamily: 'YourFont-Regular', fontSize: 12 },
-  },
-  spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 },
-  radii: { sm: 4, md: 8, lg: 12, pill: 999 },
-  shadows: {
-    card: { shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 8, elevation: 3 },
-  },
+import {DEFAULT_SPACING} from '../../../src/theme/spacing';
+
+const VARIANT_SPACING = {
+  ...DEFAULT_SPACING,
+  md: 16,
+  lg: 24,
+  xl: 32,
 };
+
+export const buildSpacing = config => ({
+  ...VARIANT_SPACING,
+  ...(config?.spacingTokens || {}),
+});
 ```
 
-Effect: every `useTokens()` call across every screen + primitive picks
-up your values. Zero code changes.
+Follow the same pattern for the other families, deep-merging role objects for
+typography/shadows and semantic groups for colors. Static RN images are
+returned by `buildAssets()` and must use bundle-time `require()` calls.
+
+Effect: every `useTokens()` consumer picks up the active variant's builder for
+all six families. This used to work only for colors/assets; the complete
+builder contract has been live since 2026-09-27.
+
+**Build-time literal colours and fonts.** Legacy customer screens call
+`designColor('<hex>')` / `designFont('<family>')` (`src/design/literalTokens.js`).
+`scripts/babel-plugin-design-literals.js` replaces each call at build time with
+the value from `designs/<variant>/tokens/literals.json`, merged over
+`designs/default/tokens/literals.json`:
+
+```json
+{ "colors": { "0056b7": "#0B6E4F" }, "fonts": { "Satoshi-Medium": "Inter-Medium" } }
+```
+
+The plugin reads `DESIGN_VARIANT` (then `APP_VARIANT`) from the shell **or
+`.env`**, and `metro.config.js` puts the variant + literal maps into Metro's
+`cacheVersion`, so a normal Metro restart picks up changes.
+`node scripts/validate-design-literal-compile.js` checks every call compiles.
 
 ### Layer 2: Primitives (change base components)
 
@@ -179,10 +229,16 @@ export default { tradeReviewSheet: TradeReviewSheet, sellAuthGate: SellAuthGate 
 The `SdkProviderRoot` reads `designs/<variant>/sdk/` automatically
 via `useDesign().sdk` and passes it to `<AqSdkProvider components={...}>`.
 
-10 overridable slots: tradeReviewSheet, tradeExecutionProgress,
+10 registered slots: tradeReviewSheet, tradeExecutionProgress,
 tradeResultModal, sellAuthGate, brokerCredentialForm,
 brokerWebViewHeader, brokerSelectionList, modifyInvestmentSheet,
 rebalancePnlChoice, kitePublisherHeader.
+
+The installed RN SDK currently consumes the first three trade-overlay slots.
+The remaining seven are registered and passed through the provider but are
+integration-pending in their owning SDK widgets. See
+`SDK_DESIGN_PASSTHROUGH.md § 9` before promising a tenant that one of those
+seven will render.
 
 See `docs/SDK_DESIGN_PASSTHROUGH.md § 9` for the full props contract
 per slot.
@@ -204,7 +260,49 @@ You can also pass overrides directly if you prefer:
 
 ---
 
+### Layer 5: Navigation manifest (change app structure)
+
+Declare structure as **data** in `designs/<variant>/navigation.js` and register
+it as `navigation` in your variant's `index.js`. Override only the keys you
+need; omitted keys fall back to `designs/default/navigation.js`, and arrays
+replace default's whole.
+
+```js
+// designs/yourcompany/navigation.js — no imports, no functions (audit-enforced)
+export default {
+  tabs: [
+    {key: 'advice', label: 'Home', icon: 'home'},
+    {key: 'portfolio', label: 'Holdings'},
+    {key: 'news'},
+    {key: 'watchlist'},
+    {key: 'more'},
+  ],
+  initialTab: 'advice',
+  preLogin: ['phoneLogin'],            // skip the onboarding carousel
+  chrome: {tabBarHeight: 64},
+};
+```
+
+- Keys come from `src/navigation/screenCatalog.js`. Tabs: `advice`, `orders`,
+  `portfolio`, `plans`, `news`, `watchlist`, `more`. A screen that isn't in the
+  catalog needs a `src/` change first.
+- 1–6 tabs. `more` is required and re-added if you drop it (it is the only
+  route to Log Out, legal pages and in-app account deletion). Privacy Policy,
+  Terms, Delete Account and Log Out rows are likewise re-added to the More menu.
+- You cannot express or reorder auth, KYC, MITC/payment or broker/trade steps.
+- Unknown keys are dropped and reported as a `nav_manifest_warning` anomaly —
+  check the device log after changing a manifest.
+- Full contract: `docs/CONFIGURABLE_NAVIGATION_DESIGN.md`.
+
 ## 4. Migrated Surfaces (what's swappable today)
+
+> **Source of truth:** the keys registered in `designs/default/index.js`
+> (2026-09-29: 54 `screens.*`, 23 `composites.*`, 10 `primitives.*`, 2
+> `shell.*` — `shell.AppHeader`, `shell.MainTabBar`). 50 of the 56 navigator
+> screens resolve through the registry; the other six (broker auth/credential/
+> selection, SDK self-tests, splash) are SDK-owned or non-customer by design.
+> The per-surface tables below are historical detail; `DESIGN_COMPONENT_AUDIT.md`
+> holds the current verdicts.
 
 ### Screens (22 surfaces)
 
@@ -262,7 +360,13 @@ You can also pass overrides directly if you prefer:
 
 Text, Button, Card, Input, Spinner, Icon, Pill, Divider, Toast, ModalShell
 
-### SDK Widgets (10 overridable slots via `designs/sdk/`)
+### SDK Widgets (10 registered slots; 9 active, `brokerSelectionList` reserved — 2026-10-01)
+
+Every active slot replaces **presentation only** (state + action callbacks;
+the SDK keeps validation, encryption, sell-auth checks and API calls).
+Contracts: `SDK_DESIGN_PASSTHROUGH.md § 9`. In your variant, a `null` entry
+means the SDK built-in; `designs/default/sdk/` ships reference header /
+P&L-choice files you can copy — they are not registered by default.
 
 tradeReviewSheet, tradeExecutionProgress, tradeResultModal,
 sellAuthGate, brokerCredentialForm, brokerWebViewHeader,
@@ -294,8 +398,11 @@ To customize these, put your components in `designs/<variant>/sdk/`
 because payment gateways stay app-owned. The plan selection / pricing /
 wizard UI is customizable; payment callbacks are container-only.
 
-**All phases (A–I) are complete.** Every app screen and modal is in
-the design system. New surfaces follow the same pattern.
+**The A–I registry migration is complete, but presentation isolation is not.**
+The default registry covers the migrated app surfaces; the executable boundary
+audit still tracks 62 src/business-logic import edges across 17 design files.
+New surfaces follow the container/presentation pattern and may not widen that
+baseline.
 
 ---
 
@@ -318,6 +425,10 @@ the design system. New surfaces follow the same pattern.
 # Run with your variant
 DESIGN_VARIANT=yourcompany npx react-native start
 
+# When DESIGN_VARIANT is stored in .env, a normal Metro restart is sufficient
+# after changing the variant or tokens/literals.json. The transform cache key
+# includes both; --reset-cache is not required.
+
 # Verify token resolution
 # In any component: const tokens = useTokens();
 # console.log(tokens.colors.brand.primary); // should be YOUR color
@@ -329,7 +440,36 @@ DESIGN_VARIANT=yourcompany npx react-native start
 # Verify SDK theming
 # Connect a broker — SDK modal should use YOUR theme colors
 # Place a test trade — review sheet should be YOUR component (if overridden)
+
+# Contract / architecture gates (must pass for every variant branch)
+npm test -- --runInBand --no-watchman src/__tests__/designVariantContract.test.js
+npm run audit:design
 ```
+
+**Visual regression (Maestro).** `npm run test:design:maestro`
+(`scripts/run-maestro-design-variants.sh` + `scripts/compare-maestro-screenshots.js`)
+captures Home, News, Portfolio, Subscriptions and Model Portfolio on an
+emulator and compares each with `.maestro/design-variants/baselines/<variant>/`
+(≤1.5% changed pixels; diffs under `artifacts/design-variants/diffs/`). A
+missing baseline fails. After an intentional design change, capture and review
+candidates, then commit them:
+
+```bash
+UPDATE_VISUAL_BASELINES=1 DESIGN_VARIANT=<variant> npm run test:design:maestro
+```
+
+In CI, dispatch the **Android Build** workflow with `capture_design_baselines:
+true` (it builds the debug fixture APK and runs the comparison on a
+KVM-accelerated `pixel_6` / API 35 emulator). Baselines must be captured in
+that same emulator profile. Every new variant needs its own baseline folder.
+Details: `.maestro/README.md` § Design visual baselines.
+
+The goal is to test shared business logic once and limit each variant to
+contract checks plus visual review. The design-boundary baseline is zero; any
+new network, storage, navigation, context or app-logic dependency in
+`designs/**` fails CI. A design that changes the flow (steps, required actions,
+payment/auth behavior) is always a product logic change and still requires
+functional testing.
 
 ---
 

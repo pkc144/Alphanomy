@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-10-02 — full AlphaB2B shared-layer sync (`0e68359d`)
+
+- Reconciled the complete shared app, design-default, tests, scripts, and
+  canonical architecture documentation from AlphaB2B `release/deploy_5.1`.
+- Added the current broker recovery/device-vault work, durable order and
+  rebalance safety, SDK slots, configurable navigation, PhonePe lifecycle,
+  trade alerts, crash reporting, and design-boundary enforcement.
+- Preserved the full Alphanomy design variant, branding/native identity,
+  Firebase clients, signing teams and independent release versions. OTA
+  remains unconfigured and no OTA release was made.
+
 ## 2026-08-29 — fleet release: Fyers OAuth and rebalance retry safety
 
 - Fyers OAuth connect/reconnect retains a defined WebView style contract, so
@@ -15,8 +26,6 @@
   filled quantity, average price, order ID and execution time via
   `POST /api/recommendation/customer/manual-placement`. Ported from upstream
   Alphab2bapp.
-
-# Changelog
 
 ## [unreleased] - 2026-07-27 — fix(digio): use backend-authoritative tenant policy
 
