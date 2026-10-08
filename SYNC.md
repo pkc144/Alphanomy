@@ -297,3 +297,7 @@ NOT done in this pass (deferred):
 - Upstream's `useTokens()` variant-awareness fix.
 - Porting upstream's other ~47 commits between this fork's seed snapshot
   and current upstream HEAD.
+
+### 2026-10-08 targeted port
+
+Ported Alphab2bapp `87a06db7` (rebalance card pending-badge wording): `RebalanceCard.js`, `utils/accountRecoveryUx.js`, `rebalanceCardGate.test.js`, new `pendingVerificationBadge.test.js`. No OTA.
