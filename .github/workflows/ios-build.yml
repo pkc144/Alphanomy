@@ -163,18 +163,41 @@ jobs:
           security import $CERTIFICATE_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
           security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
           security list-keychain -d user -s $KEYCHAIN_PATH
+          CERT_SHA1=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | awk 'NR == 1 { print toupper($2) }')
+          test -n "$CERT_SHA1"
+          echo "DISTRIBUTION_CERTIFICATE_SHA1=$CERT_SHA1" >> "$GITHUB_ENV"
 
       - name: Install Provisioning Profile
         env:
           PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          ASC_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
         run: |
+          set -euo pipefail
           PP_PATH=$RUNNER_TEMP/build_pp.mobileprovision
           echo -n "$PROVISIONING_PROFILE_BASE64" | base64 --decode -o $PP_PATH
           PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin <<< $(/usr/bin/security cms -D -i $PP_PATH))
           echo "Profile UUID: $PROFILE_UUID"
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles/${PROFILE_UUID}.mobileprovision
-          echo "PROVISIONING_PROFILE_UUID=$PROFILE_UUID" >> $GITHUB_ENV
+          echo "APP_PROVISIONING_PROFILE_UUID=$PROFILE_UUID" >> $GITHUB_ENV
+
+          # The TradeLiveActivity widget extension is a separate executable with
+          # its own App ID + App Store profile; create/fetch it via the ASC API
+          # (same as AlphaB2B). Without it the archive fails: profile app ID
+          # "com.aq.alphanomy" does not match "com.aq.alphanomy.TradeLiveActivity".
+          ASC_KEY_PATH="$RUNNER_TEMP/asc_profile_key.p8"
+          printf '%s' "$ASC_API_KEY" > "$ASC_KEY_PATH"
+          chmod 600 "$ASC_KEY_PATH"
+          export ASC_KEY_PATH ASC_CAPABILITIES=PUSH_NOTIFICATIONS
+          EXT_PROFILE_PATH="$RUNNER_TEMP/trade_live_activity.mobileprovision"
+          ruby scripts/ensure_asc_profile.rb \
+            "${APP_BUNDLE_ID}.TradeLiveActivity" \
+            "$EXT_PROFILE_PATH" \
+            EXTENSION | tee -a "$GITHUB_ENV"
+          EXT_PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin <<< $(/usr/bin/security cms -D -i "$EXT_PROFILE_PATH"))
+          cp "$EXT_PROFILE_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/${EXT_PROFILE_UUID}.mobileprovision
 
       - name: Build Archive
         env:
@@ -189,7 +212,8 @@ jobs:
             archive \
             CODE_SIGN_STYLE=Manual \
             DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
-            PROVISIONING_PROFILE="$PROVISIONING_PROFILE_UUID" \
+            APP_PROVISIONING_PROFILE_UUID="$APP_PROVISIONING_PROFILE_UUID" \
+            EXTENSION_PROVISIONING_PROFILE_UUID="$EXTENSION_PROVISIONING_PROFILE_UUID" \
             CODE_SIGN_IDENTITY="iPhone Distribution" \
             CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
             MARKETING_VERSION="$MARKETING_VERSION"
@@ -206,7 +230,9 @@ jobs:
               <key>provisioningProfiles</key>
               <dict>
                   <key>${APP_BUNDLE_ID}</key>
-                  <string>$PROVISIONING_PROFILE_UUID</string>
+                  <string>$APP_PROVISIONING_PROFILE_UUID</string>
+                  <key>${APP_BUNDLE_ID}.TradeLiveActivity</key>
+                  <string>$EXTENSION_PROVISIONING_PROFILE_UUID</string>
               </dict>
               <key>signingStyle</key>
               <string>manual</string>
