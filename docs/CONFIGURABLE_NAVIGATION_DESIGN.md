@@ -185,6 +185,9 @@ Rules:
   (`DESIGN_SYSTEM_ARCHITECTURE.md` § "Where variant folders live"), non-default
   variants live in fork repos, and the arfs fork already owns
   `designs/arfs/index.js`. Its manifest ships with the arfs fork in P4 (§11).
+- `chrome.coursesNativeHeader` (default `true`, 2026-10-14): native stack
+  header on `MyCourses` / `CourseDetail`. A design whose course screens draw
+  their own top bar sets `false` (Kyzen), otherwise the screen shows two headers.
 - `chrome.legacyToolbar` replaces the `HEADER_VARIANTS` set, with a
   transitional gate: the toolbar also still requires `DESIGN_VARIANT` to be
   unset or `default`/`moneyman_app`, so a fork whose `DESIGN_VARIANT` isn't
@@ -194,7 +197,15 @@ Rules:
 ### 4.3 Resolver — `src/navigation/resolveNavigation.js` (new, pure function)
 
 `resolveNavigation(manifest, catalog, flags)` returns
-`{ tabs, initialRouteName, moreSections, preLogin, chrome, warnings }`.
+`{ tabs, initialRouteName, moreSections, preLoginRoute, preLoginPolicy, authNavigation, chrome, warnings }`.
+
+**`preLoginPolicy`** (`backend` default | `always`): `always` shows the
+manifest's pre-login sequence on every unauthenticated launch without asking
+the backend `phoneFirstLoginEnabled` flag. **`authNavigation`** (`legacy`
+default | `stack-safe`, added in release/deploy_5.2): `stack-safe` makes Reset
+Password's back go back (`legacy`: always `navigate('Login')`). Log Out resets
+the stack to Login in every app regardless of this key. Invalid values fall back to the default with a
+`invalid_pre_login_policy:` / `invalid_auth_navigation:` warning.
 
 1. Map each manifest key to its catalog entry. **Drop unknown keys** and record
    a warning, which is emitted once per session as a `frontend_anomaly`

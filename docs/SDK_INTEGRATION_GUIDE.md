@@ -1,5 +1,26 @@
 # AlphaQuark Mobile SDK — Developer Integration Guide
 
+## Angel One publisher setup (2026-10-05)
+
+Angel One personal publisher login uses encrypted `apiKey` plus plain
+`clientCode`, with no API Secret. `/update-credentials` stages that registration
+without creating/promoting a slot. `/login-url` selects the personal lane by
+API Key presence; `/exchange-token` saves the final publisher `auth_token`
+directly through the canonical `/api/user/connect-broker` before primary
+promotion. The canonical handler uses the staged personal registration under
+the tenant mode and mirrors both credential surfaces, preserving today's
+sell-auth via the existing helper. There is no publisher `generate-session` hop.
+Empty-body legacy shared-key clients retain their compatibility path.
+
+RN and Flutter intercept Angel One returns independently of the tenant landing
+URL, on exact HTTPS callbacks at `ccxtprod.alphaquark.in/angelone/callback`,
+`alphaquark.in/api/deploy/broker/callback`, and
+`prod.alphaquark.in/stock-recommendation`. A non-empty query/fragment
+`auth_token` is required; unrelated paths, lookalike hosts, userinfo and
+nonstandard ports are rejected. The matcher applies to personal and shared
+modes. Tokens and exchange bodies are not printed in SDK callback logs.
+
+
 ## Reading order results (2026-09-28)
 
 Render `row.status` from the SDK vocabulary and use `brokerOrderStatus` only
@@ -525,7 +546,7 @@ Set in `.env` (RN) or `.env.test`/`.env.prod` (Flutter). Per-tenant rollout via 
 | Broker | Connect | DDPI Check | In-App EDIS | Notes |
 |---|---|---|---|---|
 | Zerodha | ✅ OAuth | ✅ `ddpi_status` | ✅ `auth-sell` WebView | Kite Publisher basket for MP |
-| Angel One | ✅ OAuth/creds | ✅ `ddpi_enabled` | ✅ `verify-dis` CDSL form | Shared-mode SmartAPI |
+| Angel One | ✅ OAuth/creds | ✅ `ddpi_enabled` | ✅ `verify-dis` CDSL form | Personal SmartAPI API Key + Client Code; no API Secret |
 | Dhan | ✅ Creds | ✅ `ddpi` from profile | ✅ `generate-tpin` WebView | Per-holding EDIS |
 | Upstox | ✅ OAuth | ✅ `ddpi`+`poa` from profile | ❌ (portal only) | DDPI required for API sells |
 | Fyers | ✅ OAuth/creds | ❌ | ✅ `tpin` + `submit-holdings` | Online DDPI free |

@@ -547,6 +547,30 @@ Zerodha, Angel One, Upstox, ICICI Direct, Kotak, Dhan, Fyers, IIFL Securities, A
 ## Build & Run
 
 > **🔴 BUILD BRANCH: `feature/sdk-plus-config_forkv2`** — this is the SINGLE
+> **🔴 BRANCHES (from 2026-09-29):**
+> - **`release/deploy_5.2` (2026-10-12) — fork-sync branch, NOT yet the
+>   AlphaPro build branch.** Cut from 5.1 @ `d445334a`; adds the Kyzen fork's
+>   generic `src/` work as named design tokens
+>   (`designs/default/tokens/hostTokens.json`, defaults = 5.1 values) and
+>   manifest options so AlphaPro looks unchanged; Log Out now always resets the stack
+>   (CHANGELOG 2026-10-12). White-label forks sync from 5.2. Keep building
+>   AlphaPro from 5.1 until 5.2 passes an AlphaPro device QA, then promote it
+>   (merge 5.2 → 5.1 or switch the build branch) and update this note.
+> - **`release/deploy_5.1` — the working + BUILD branch.** All new RN app
+>   changes land here and BOTH the iOS and Android release artifacts (APK/AAB/IPA)
+>   are built from it. It is the source white-label forks sync from. Started at
+>   `aa492f1` (Android 3.9.149).
+> - **`release/untouched_5.0` — frozen STABLE anchor.** Holds everything up to
+>   `aa492f1` (3.9.149). Do NOT commit to it directly; only merge a version into
+>   it deliberately, after that version is proven stable in production.
+> - `feature/sdk-plus-config_forkv2` — **retired** as the build branch (last
+>   build: 3.9.149 at `aa492f1`, identical to both release branches at the
+>   switch). Do not build from it or add new work to it.
+>
+> Same convention as `prod-alphaquark-github` / `aq_backend_github` /
+> `ccxt-india` (`release/deploy_5.1` + `release/untouched_5.0`).
+>
+> *Previous rule (kept for history):* **BUILD BRANCH: `feature/sdk-plus-config_forkv2`** — this was the SINGLE
 > branch BOTH the iOS and Android release artifacts (AAB/IPA) are built from
 > (confirmed 2026-06-25). Apply all RN app changes here; it is the source the
 > other forks/branches sync from. `feature/V2.5_brokerScreen` and

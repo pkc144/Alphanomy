@@ -1,5 +1,35 @@
 # SDK Orchestration Audit — Per-Flow Code Walks
 
+## 2026-10-05 — Angel One connection audit correction
+
+Tidi `3.0.45+148` now follows the owner-approved September 29 personal-key
+rollout. Both selection and Manage Brokers always route Angel One through the
+SDK, with API Key / Client Code form, static-IP callout and copyable registered
+callback `https://ccxtprod.alphaquark.in/angelone/callback`. It no longer uses
+the dotenv shared-key default or autojumps with a saved legacy platform key.
+Post-connect persistence verification and model-portfolio housekeeping remain
+unchanged. No customer-data migration, trade routing or sell-auth policy change.
+
+Angel One personal publisher login uses encrypted `apiKey` plus plain
+`clientCode`, with no API Secret. `/update-credentials` stages that registration
+without creating/promoting a slot. `/login-url` selects the personal lane by
+API Key presence; `/exchange-token` saves the final publisher `auth_token`
+directly through the canonical `/api/user/connect-broker` before primary
+promotion. The canonical handler uses the staged personal registration under
+the tenant mode and mirrors both credential surfaces, preserving today's
+sell-auth via the existing helper. There is no publisher `generate-session` hop.
+Empty-body legacy shared-key clients retain their compatibility path.
+
+Validation: 19 Tidi form/persistence tests, 2 callback tests on each SDK
+platform, 13 backend personal-key/staging/persistence tests, RN typecheck and
+signed release APK build pass. The release certificate matches the prior APK.
+Real-account login and funds/holdings/controlled-order certification remain
+pending. This evidence does not upgrade the broker's certification verdict.
+
+This corrects §5.tidi/§6.tidi: Angel One is OAuth with a personal-key
+prelude; it is not a no-form partner broker. No orchestrator ownership moves.
+
+
 ## 2026-09-29 Rebalance review layout audit
 
 The host-owned `RebalanceModal` now reserves its flexible area for the trade

@@ -1,19 +1,16 @@
 # Design System — Per-Surface Component Audit
 
-> **Per-surface inventory + verdict matrix for the design-system migration.** Companion to `DESIGN_SYSTEM_ARCHITECTURE.md` (the design source of truth) and `DESIGN_MIGRATION_PROGRESS.md` (the chronological work log). Mirrors `PHASE3_BROKER_AUDIT.md` in spirit.
->
-> **The migration order is derived from this table, not the other way around.** A row only moves to "in-flight" or "done" after its verdict is locked here. Don't migrate without a row.
->
-> **Scope: this audit covers upstream `designs/default/` only.** As of Phase 3 of the whitelabel-sync work (2026-05-09), variant folders for non-default tenants live in per-tenant fork repos (Alphanomy, Zamzam, RGX, etc.), not upstream — so their per-surface verdict tables live in the fork repo's own audit doc, if any. Upstream's job is to ensure the **container-side viewModel + actions contract** is rich enough that any variant override can render the screen it needs. If a fork's variant override needs data the upstream container doesn't currently expose, that's an upstream change first (typically a row's verdict moves from `clean-extract` → `needs-logic-extraction` to widen the viewModel), then the fork's override consumes it. See `WHITELABEL_RECIPE.md`.
+## 2026-10-12 — release/deploy_5.2 named host tokens
 
-> **Cross-tracked composites (Courses/Webinars).** `composites.LiveRoom` and
-> `composites.GumletPlayer` (`designs/default/composites/`) were added by the
-> courses/webinars port and are audited primarily in
-> `COURSES_WEBINARS_MOBILE_PORTING.md` (§4.2 / §4.5), not in the table below.
-> 2026-06-19: `composites.LiveRoom` active-room presentation hardened to a
-> full-screen RN `Modal` (parity with the web full-viewport webinar fix) — see
-> `DESIGN_MIGRATION_PROGRESS.md` 2026-06-19 + `CHANGELOG.md`. `GumletPlayer`
-> is already fluid (`width:100%, aspectRatio 16/9`) — no change.
+| Surface | Token group | Verdict | Boundary evidence |
+|---|---|---|---|
+| `Phase3SdkBrokerModal` chrome | `brokerSheet.*` (+ `brokerSheet.guideAccent`, null default = runtime accent chain) | unchanged (SDK-bound chrome only) | Equals 5.1 at defaults; SDK form untouched. |
+| `EgressIpCallout` | `brokerSheet.egress.*` (incl. `bodyAmberNote` clone of `bodyAmber`) | unchanged | Equals 5.1 at defaults. |
+| `RebalanceModal` | `rebalance.*` | unchanged | Equals 5.1 at defaults; all 5.1 rebalance fixes retained. |
+| `WatchlistScreen` rows | `watchlist.*` | unchanged | Equals 5.1 at defaults. |
+| `BrokerAlertModal`, `ProfileModal`, `Educational{Blogs,PDF,Videos}`, `DisconnectBrokerModal`, `ManageConnectionsModal`, `DynamicText/*`, `PortfolioScreen(.styles)` | `brokerAlert.*`, `profile.*`, `education.*`, `disconnectBroker.*`, `manageConnections.*`, `holdingText.*`, `positionText.*`, `portfolio.*` | unchanged | Equal to 5.1 at defaults. |
+| Default `ResearchReportScreen`, `DeleteAccountScreen` presentations | `researchReport.*`, `deleteAccount.*` | unchanged | Equal to 5.1 at defaults. |
+| Root toast | `toast.*` (library default values) | unchanged | Config merges over library defaults; only success/error/info used. |
 
 ## How to read this doc
 
@@ -242,7 +239,7 @@ ViewModel sketches captured in the audit-task pass (2026-05-01). The `viewModel`
 | Surface | File | Verdict (provisional) | Phase | Notes |
 |---|---|---|---|---|
 | ModelPortfolioScreen | `src/screens/Drawer/ModelPortfolioScreen.js` | `needs-logic-extraction` | I | Calls `ModelPortfolioService` + likely `useTrade`. ViewModel sketch needed before migration. |
-| MPPerformanceScreen | `src/screens/Drawer/MPPerformanceScreen.js` | `needs-logic-extraction` | I | Performance data + chart fetching in container. |
+| MPPerformanceScreen | `src/screens/Drawer/MPPerformanceScreen.js` | `migrated` | I | Container owns entitlement, payment, report fetching and navigation. Presentation receives strategy summary, methodology, target allocation, research reports and callback-only actions. |
 | CustomTabbarMPPerformance | `src/screens/Drawer/CustomTabbarMPPerformance.js` | `needs-logic-extraction` | I | Tab navigation + per-tab data dispatch. |
 | EmptyStateMP | `src/screens/Drawer/EmptyStateMP.js` | `clean-extract` | I | Static empty-state UI; only consumes config theme. |
 | ModelPFCard | `src/screens/PortfolioScreen/ModelPFCard.js` | `needs-logic-extraction` | I | MP card on Portfolio screen; calls `ModelPortfolioService`. **2026-07-11:** container now also reads `useTokens().colors.mpCardColorCycle` + row `index` → passes a resolved `cardColor` into `viewModel.cardColor`. Default variant leaves the cycle `null` (no change); `moneyman_app` cycles green/blue/purple by row. Presentation applies `cardColor` as left-border accent + model-name tint. |
@@ -515,6 +512,7 @@ Numbers will be re-counted at the end of every audit-task PR.
 | `designs/default/screens/PortfolioScreen.js` | needs-logic-extraction | Presentation placement correction only: Trade P&L now scrolls with Model Portfolio content, avoiding a frozen-on-screen CTA. |
 | `designs/default/screens/MPInvestNowModal.js` | migrated | Header close control is absolutely positioned with title-safe padding so it stays fully visible on narrow Android screens. Container payment/Digio code unchanged by this presentation edit. |
 | `src/components/BrokerConnectionModal/Phase3SdkBrokerModal.js` | SDK-bound-skip | Host chrome updated for guide/IP/form hierarchy and tenant theme; SDK credentials widget remains authoritative. |
+| `src/components/BrokerConnectionModal/BrokerConnectStepperSheet.js` | SDK-bound-skip | Host-owned conditional device-TOTP/OTP/static-IP sheet resolves surfaces, text and actions from tenant tokens. `deviceTotpEnabled` plus device/server enrollment state remain src/backend-owned. |
 | `src/UIComponents/BrokerConnectionUI/HDFCConnectUI.js`, `ICICIConnectUI.js` | SDK-bound-skip | Legacy OAuth WebView header alignment only; retain as rollback/legacy surfaces. |
 | `src/screens/Home/NewsScreen/LinkOpeningWeb.js` | needs-logic-extraction | Blog-reader header uses a flexing title plus a fixed, padded close target so long article titles cannot push the close control beyond the right edge. |
 | `designs/default/composites/PortfolioSummaryCard.js` | migrated | Expired-plan state is a compact renewable notice and subordinate row metadata; table, supporting copy, and values use one Poppins scale aligned with PortfolioScreen. |
@@ -581,3 +579,17 @@ no-substitution template literal) and rejects non-literal `import(expr)`. On
 prod web the same gap hid five edges behind a zero baseline; this app had
 **none** — re-running the widened audit over `designs/**` still reports
 **0 edges across 0 files**. No verdict changes.
+
+## 2026-10-03 registry and coverage audit addendum
+
+- `composites.PortfolioSummaryCard` is explicitly registered in the default
+  contract floor; its existing container request can no longer fail at runtime.
+- The boundary audit enumerates every literal `useComponent('…')` request and
+  fails CI when the default registry does not provide the requested key.
+- A variant may declare `coverage.json` with required component overrides and
+  SDK slots. Those entries are audited so fleet sync cannot silently remove an
+  approved tenant presentation.
+- `MPPerformanceScreen` remains a src-owned behavior container. Its completed
+  presentation contract includes methodology, target allocation, research
+  reports, report-open navigation and notifications navigation; no payment,
+  entitlement, networking or execution ownership moved into `designs/`.

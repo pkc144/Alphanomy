@@ -18,6 +18,2328 @@
 - Backend: ccxt-india `0481615b`, `a0ba0660` (deployed; design
   `docs/EGRESS_OVH_PRIMARY_DESIGN.md`). Web: prod-alphaquark-github `3fb1d63b8`.
 - No OTA; ships with the next binary.
+
+## 2026-10-14 — Reconnect changes nothing until the login succeeds
+
+- Manage Connections → Reconnect no longer switches the primary broker or
+  marks the broker expired before the login; the broker-selection login no
+  longer switches primary up-front. A successful login sets primary on the
+  server; Groww silent refresh / DefinEdge already-connected switch after
+  success. Fixes a live Fyers session shown "Session Expired" and an expired
+  broker left as primary after a backed-out login (Kyzen QA). Docs:
+  `BROKER_CONNECTION.md`.
+
+## 2026-10-14 — Rebalance card: a model-level holdings block opens the review, not "pending"
+
+- Tapping Refresh Order Status / Retry handled a blocked `accountRecovery` only
+  when the get-repair response carried it account-level. Kyzen's tester had it
+  only on `models[0].accountRecovery` (Upstox YESBANK 6, cause
+  `broker_attribution_ambiguous`, next action `review_holdings`) while the
+  account-level object was `ready`, so the tap fell through to "Broker order
+  status is pending / No new orders were prepared". The handler now uses the
+  same model-level fallback as the pending badge: it opens the holdings review
+  when holdings can settle the block, otherwise names the real reason. Test:
+  `rebalanceCardGate.test.js`.
+
+## 2026-10-14 — `chrome.coursesNativeHeader` manifest option
+
+- `MyCourses` / `CourseDetail` stack headers follow
+  `navLayout.chrome.coursesNativeHeader` (default `true` — unchanged). Kyzen's
+  course screens have their own top bar and showed a second, white native
+  header ("← Courses") above it; Kyzen sets `false`. Navigation tests updated.
+
+## 2026-10-14 — Rebalance card state gradients are named tokens
+
+- `RebalanceCard`: partial / pending-verification / repair gradients and the
+  "Partially Executed" badge text read `rebalanceCard.{partial,pending,repair}.*`
+  and `rebalanceCard.partial.badgeText` (defaults = the previous `#2a2a2a →
+  #de8846 / #d4a843`). New `rebalanceCard.default.gradient{Start,End}` (default
+  `null` = the advisor's runtime gradient1/2). AlphaPro unchanged; Kyzen QA asked
+  for its bronze CTA colours instead of orange.
+
+## 2026-10-14 — Exit-portfolio table shows 2-decimal percentages
+
+- `TerminateStrategyModal` showed Returns/Weights as raw floats
+  ("2.1342819030680326%"). `formatPercent` rounds to two decimals; missing,
+  zero and non-numeric values keep "-". Test:
+  `terminateStrategyFormatPercent.test.js`.
+
+## 2026-10-14 — PerformanceChart `showTitle` prop
+
+- Optional `showTitle` (default `true`): a design whose card already has a
+  title can drop the chart's own "Performance" heading. Kyzen passes `false`
+  under its "Performance vs index" card title.
+
+## 2026-10-14 — Angel One cautionary warning sheets are named tokens
+
+- Both `AngelOneCautionaryWarning` components (the connect-flow sheet and the
+  broker-selection one) read `angelWarningSheet.*` / `angelWarning.*` (32
+  names). Defaults equal the previous literals; both files compile identically
+  on the default design. Kyzen QA found the sheet white with a navy button.
+
+## 2026-10-14 — Learning hub: explicit courses action
+
+- `KnowledgeHub` container adds `viewModel.coursesEnabled`
+  (`config.coursesEnabled === true`) and `actions.onOpenCourses` (navigates to
+  `MyCourses`). Kyzen's "Courses" tab had been wired to `handleViewAllPress`,
+  which is the active tab's "view all", so it opened Watch/Read/Guides. Additive;
+  the default design does not use either field.
+
+## 2026-10-14 — Kyzen QA design pass: named tokens for five shared surfaces
+
+- `TerminateStrategyModal`, `RecommendationSuccessModal` (Trade Details),
+  `PerformanceChart`, the rest of `EgressIpCallout` and the `ProfileModal`
+  progress ring read named host tokens (`terminateModal.*`, `recoSuccess.*`,
+  `perfChart.*`, `egressCallout.*`, `profile.progress.*`; 190 new names).
+  Defaults equal the previous literals and each file compiles identically on
+  the default design, so AlphaPro is unchanged; Kyzen sets its dark/gold values.
+- `useColors()` resolves through the active design's `buildColors` (same rule
+  as `useTokens()`), so a design-owned palette is no longer replaced by the
+  backend `mainColor` (Kyzen's static-IP card was cyan `#20c9df`).
+- `HomeScreen`: additive `home.seeAllMPBody` for a variant's "View all"
+  Portfolio Recommendations screen.
+- Upstreamed from the Kyzen fork (were fork-only `src/` edits a sync would
+  have reverted): Angel One form placeholders + field patterns that reject a
+  TOTP key in API Key and an API key in Client Code, with matching guide copy
+  (`Phase3SdkBrokerModal`, `brokerGuideConfigs`); Google sign-in resolves the
+  backend user GET-first and creates only on 404 (`utils/authBackend.js`,
+  `LoginScreen`), tolerating a 409 create race.
+- Tests: host-token contract, device-TOTP contract, `authBackend`; design and
+  style audits pass. `validate:design-literals` fails the same way on the
+  untouched base (marker import in `hostTokens.contract.test.js`) — pre-existing.
+
+## 2026-10-13 — Fyers reconnect: App ID, not the Fyers user ID
+
+- `getStoredBrokerCreds('Fyers')` handles both stored layouts and returns
+  `appId` / `fyersUserId`; the SDK reconnect extras send the App ID in
+  `apiKey`. Previously the user ID went out as the App ID and the backend
+  rejected the first attempt of every Fyers reconnect (Kyzen tester,
+  `testaccount`, 07:36–07:42 UTC). Docs: `BROKER_CONNECTION.md`.
+
+## 2026-10-13 — Rebalance card buttons are named host tokens
+
+- `RebalanceCard`: Accept / "Checking broker…" (primary) and "Detail on
+  portfolio" (secondary) read
+  `rebalanceCard.{primaryButton,secondaryButton}.{backgroundColor,textColor}`.
+  Defaults equal the previous values (`rgba(255, 255, 255, 1)`, runtime
+  gradient2 via a null `primaryButton.textColor`, `rgba(232, 232, 232, 0.58)`,
+  `#fff`), so AlphaPro is unchanged; Kyzen sets its gold / dark values.
+  `src/__tests__` 1535 pass; audits pass.
+
+## 2026-10-13 — Bespoke detail Invest now no longer crashes on an unloaded plan
+
+- `calculatePlanPaymentAmount` treated only `undefined` as "no plan"; a
+  `null` plan (detail fetch failed or in flight) threw `Cannot read property
+  'onetimeOptions' of null` and closed the app on Invest now.
+- `BespokePerformanceModals` gives the modals `planDetails || specificPlan`
+  (the catalogue plan is the same Plan document); the only change from the
+  previous render is the case that crashed.
+- The bespoke detail fetch sends `X-Advisor-Subdomain` with the
+  `Config.REACT_APP_HEADER_NAME` fallback (CLAUDE.md header rule).
+- Tests: `planPaymentAmountNullPlan.test.js`, modal contract. 1528 pass.
+
+## 2026-10-13 — advisor tag fallback (Kyzen Accept rebalance stuck)
+
+- Root cause of Kyzen's "Accept rebalance does not move on" (home card stuck
+  on "Checking broker..."): `/rebalance/calculate` answered 400
+  `{"keyError":"advisor is missing"}` (45 bytes; the `model_id` message is
+  46). `RebalanceAdvices` sends
+  `advisor: configData.config.REACT_APP_ADVISOR_SPECIFIC_TAG`, and Kyzen's env
+  never set that tag, so ~30 ccxt call sites sent no advisor.
+- `getConfigData()` now falls back to the tenant name
+  (`REACT_APP_HEADER_NAME`) when neither the stored config nor the env carries
+  the tag. AlphaPro sets the tag, so it is unchanged. Kyzen also sets the tag
+  in `.env.kyzen`. Test: `advisorTagFallback.test.js`.
+
+## 2026-10-13 — MP detail Accept rebalance: no silent 400
+
+- `MPPerformanceScreen.calculateRebalance`: `model_id` now falls back from
+  `latestRebalance.model_Id` to the strategy's latest
+  `model.rebalanceHistory[].model_Id`; with neither, the customer is told the
+  rebalance is not ready instead of a request being sent. `userFund` defaults
+  to `'0'` (the server re-reads funds). Either field undefined was dropped by
+  JSON and `/rebalance/calculate` answered 400 `"<key> is missing"`, which the
+  screen's `.catch` swallowed so the button appeared to do nothing. Errors
+  now show an alert with the server message. Test:
+  `mpDetailCalculatePayload.test.js`. (Hardening; the Kyzen 07:07 UTC report
+  was a different cause — see "advisor tag fallback" below.)
+
+## 2026-10-13 — Bespoke plan detail: shared modal block for variants
+
+- `designs/default/screens/BespokePerformanceScreen.js` exports
+  `resolveBespokeProps`, `BespokePerformanceModals` and `bespokePlanSections`
+  (DESIGN_SYSTEM_ARCHITECTURE Phase E.6). AlphaPro's render is identical
+  (old-vs-new render comparison with every modal open and in the subscribed
+  state). Kyzen uses it for its own bespoke detail page.
+- Test: `bespokePerformanceModalsContract.test.js`. `src/__tests__` 1521 pass;
+  audits pass.
+
+## 2026-10-13 — IP-acknowledgment flash colours are named host tokens
+
+- `EgressIpCallout`: the unticked-acknowledgment flash (background pulse,
+  border, "⚠ Please tick this box" text) reads
+  `brokerSheet.egress.ackFlash.{fromColor,toColor,borderColor,warningText.color}`
+  instead of fixed light literals. Defaults equal the previous values
+  (`#fef3c7`, `#fee2e2`, `#ef4444`, `#b91c1c`), so AlphaPro is unchanged; a
+  dark variant (Kyzen) sets dark values — its light acknowledgment text was
+  unreadable on the light flash. `src/__tests__` 1525 pass; audits pass.
+
+## 2026-10-13 — Broker connect: tapping the locked form goes to the IP checkbox
+
+- `Phase3SdkBrokerModal`: the credential form no longer uses
+  `pointerEvents="none"` while the IP-whitelist acknowledgment is unticked;
+  a transparent tap-catcher over it calls `nudgeEgressAck()`, so tapping a
+  field or Continue/Connect scrolls to the "I have whitelisted this IP" row
+  and flashes it with "⚠ Please tick this box…". The amber banner does the
+  same, and both now scroll to the row itself (`ackAnchorRef` +
+  `measureLayout`, top-of-sheet fallback) instead of the top of the sheet.
+- `EgressIpCallout`: optional `ackAnchorRef` prop on both acknowledgment rows.
+- Docs: `BROKER_CONNECTION.md`. Tests: `egressAckNudge.test.js`;
+  `src/__tests__` 1518/1518, audits pass.
+
+## 2026-10-13 — compare two-part iOS versions in the native upgrade gate
+
+Ported Markup `9d2c7dbf6`. The root AppAdvisor upgrade checker now compares
+native versions as numeric dot sequences (`src/utils/appVersion.js`) instead of
+requiring strict semantic versions. AlphaPro iOS reports a two-part marketing
+version (`2.7`), which `semver.valid` rejected, so the iOS latest-version prompt
+and the non-dismissible `minAppVersionIos` floor never fired. Android
+three-part values keep their ordering; invalid values still fail open. Unit
+cases in `src/__tests__/utils/appVersion.test.js` cover AlphaPro's `2.x` and
+`3.9.x` trains. SupportAQ already holds iOS latest=min=`2.7` and Android
+latest=min=`3.9.187` (set 2026-10-13), so iOS users below 2.7 are blocked once
+this ships.
+
+## 2026-10-13 — Plans deep links survive a cold open
+
+- `ModelPortfolioScreen`: the `kind`/`bespokeCategory`/`subscribe`/`viewMore`
+  params are kept until the target tab exists. The Bespoke tab is added only
+  after the bespoke catalogue loads, so a navigate from Home to a not-yet-
+  mounted Plans screen previously cleared the params and landed on Model
+  Portfolio (seen with Kyzen's category Explore). `src/__tests__` 1509 pass.
+
+## 2026-10-13 — Bespoke plan categories and category images (variant data)
+
+- Plans may carry an advisor-defined `bespoke_category` (backend
+  `aq_backend_github` 7767504f) and categories may carry an uploaded image
+  (`GET /api/admin/plan-categories`, 2b5e6f64/33ad3413). Design: web repo
+  `docs/BESPOKE_PLAN_CATEGORIES.md`.
+- `src/utils/planCategories.js` (pure grouping/filter/image-key helpers),
+  `src/hooks/usePlanCategoryImages.js` (display-only image map).
+- `shapeBespokePlan` adds `category`; `useHomePlanSummary` returns
+  `bespokePlans` + `bespokeCategoryGroups`.
+- Home `home` bag: `bespokeCategoryGroups` (each group carries its resolved
+  `image`), `modelPortfolioCategoryImage`, `openBespokeCategory(name|null)`,
+  `openModelPortfolioCatalog()`. Images are resolved in the container so
+  designs never import `src/utils/planCategories`.
+- Plans (`ModelPortfolioScreen`): `route.params.bespokeCategory` filter
+  (`undefined` all / `null` uncategorised / name), viewModel
+  `bespokeCategoryGroups` (with `image`), `bespokeCategoryFilter`, action
+  `onBespokeCategoryChange`.
+- The default design ignores all of these, so AlphaPro is unchanged.
+  `src/__tests__` 1508/1508; audits pass.
+
+## 2026-10-13 — Home feed execution sections expose presentation-neutral data
+
+- `src/screens/Home/HomeScreen.js`: the active-rebalance and
+  bespoke-recommendation feed items now also carry
+  `section: {kind, title, subtitle, onViewAll, body, hasItems?}`. The default
+  design keeps rendering `component`, so AlphaPro's Home is unchanged; a
+  variant (Kyzen) renders its own section header and mounts `section.body`.
+- Docs: `DESIGN_SYSTEM_ARCHITECTURE.md` Phase E.4.
+- Verified: `src/__tests__` 1500/1500 before and after; root `__tests__`
+  only `App.test.tsx` fails (pre-existing); design, style and import audits
+  pass.
+
+## 2026-10-13 — release/deploy_5.2: null design tokens compile to `undefined`; on-device 5.1 vs 5.2 comparison
+
+- **Fix:** `scripts/babel-plugin-design-literals.js` emitted the string
+  `"null"` for the 12 host tokens whose default is `null` (unset), e.g.
+  `brokerSheet.guideAccent`, so the broker connect sheet's step badge lost its
+  accent and the "SECURE DETAILS" eyebrow turned black on AlphaPro. Null now
+  compiles to `undefined` (RN ignores it; `undefined || fallback` keeps the
+  runtime accent chain); the runtime fallback returns `undefined` too.
+  Compiler + contract tests pin it. Found by the device comparison below.
+- **On-device verification (Android 36 emulator, release builds of 5.1 head
+  `db5ec514` vs 5.2):** test account switched to RA `ALPHAQUARK`; 16 screens
+  captured by an identical scripted tour (Home, Orders, Portfolio, Plans,
+  More, Watchlists, Knowledge Hub, Research Report, Broker Account, Manage
+  Connections, broker picker, Upstox connect sheet + static-IP callout,
+  disconnect confirm, profile, DummyBroker connect sheet). After the fix
+  13 are pixel-identical; the rest differ only by a 1 px scroll offset or
+  sub-pixel edge. Log Out now resets to Login and back leaves the app
+  (approved change). Login page identical to production 3.9.185.
+- Not exercised on device: the rebalance review (this account's DummyBroker
+  connect returns `BROKER_PERSISTENCE_NOT_VERIFIED` on 5.1 and 5.2 alike);
+  covered by the source-level equality proof.
+
+## 2026-10-12 — release/deploy_5.2: named host tokens replace the host skin; Log Out resets the stack for all apps
+
+- Replaced the 5.2 host-skin mechanism (`themedColor`, `designs/literalRemaps.js`,
+  `isHostSkinActive()` gates, inline skin objects) with **named design
+  tokens**: `designToken('<surface>.<role>')` compiled by
+  `scripts/babel-plugin-design-literals.js` from
+  `designs/default/tokens/hostTokens.json` (296 names, defaults = the values the
+  screens hard-coded on 5.1; `null` = unset) and an optional
+  `designs/<variant>/tokens/hostTokens.json`. Unknown names fail the build;
+  token files are in the Metro cache key. No variant check remains in `src/`.
+- Converted: `Phase3SdkBrokerModal`, `EgressIpCallout`, `RebalanceModal`,
+  `WatchlistScreen`, `BrokerAlertModal`, `ProfileModal`,
+  `Educational{Blogs,PDF,Videos}`, `DisconnectBrokerModal`,
+  `ManageConnectionsModal`, `DynamicText/*`, `PortfolioScreen(.styles)`,
+  `themedToastConfig` (library-default values; config now always passed),
+  and the default design's `ResearchReportScreen` / `DeleteAccountScreen`
+  (Kyzen had converted them in the fork). Default manifest states
+  `preLoginPolicy: 'backend'` explicitly (same behaviour).
+  Angel One sheet `appearance` overrides removed (no caller); its colours are
+  5.1's.
+- **Behaviour change (approved):** Log Out now always resets the navigation
+  stack to Login in every app (was `navigation.replace('Login')`, which left
+  signed-in screens under Login). `authNavigation` now only governs Reset
+  Password's back button.
+- Tests: `hostTokens.contract.test.js` (replaces `hostSkinGate`), Babel
+  compiler tests for `designToken` (default, override, unknown name, invalid
+  override), fixtures under `designs/__fixtures__/host_token_*`.
+- Verification: every converted file equals 5.1 with tokens at default values
+  (normalised diff); full Jest 1571 pass / 1 fail (`App.test.tsx`,
+  pre-existing); design/style/import audits pass; ESLint 31 → 30 errors on
+  touched files (none new); AlphaPro production bundle builds with all
+  `designToken` calls inlined.
+
+## 2026-10-12 — release/deploy_5.2: Kyzen fork changes upstreamed behind opt-in gates (AlphaPro unchanged)
+
+New build branch `release/deploy_5.2`, cut from `release/deploy_5.1` @ `d445334a`.
+It upstreams the generic `src/` work made in the Kyzen fork
+(`kyzenresearch_app`) so white-label forks can sync without losing it. Every
+change is presentation-only or gated so default/AlphaPro behaves exactly as
+on 5.1.
+
+- **Opt-in host skin** — new plain-data `designs/literalRemaps.js` (empty
+  upstream; fork-owned like `designs/registry.js`). `src/design/themedColor.js`
+  returns the literal unless the active `DESIGN_VARIANT` has a remap and
+  exports `isHostSkinActive()`. Gated on it: token skins in
+  `EgressIpCallout.js`, `Phase3SdkBrokerModal.js`, `RebalanceModal.js`,
+  `WatchlistScreen.js`; `src/components/themedToastConfig.js` (undefined
+  upstream → `<Toast config={undefined}>` = library default).
+- **themedColor conversions** (colour-identical upstream, proven by
+  normalised diff): `BrokerAlertModal`, `ProfileModal`,
+  `Educational{Blogs,PDF,Videos}`, `DisconnectBrokerModal`,
+  `ManageConnectionsModal`, `DynamicText/*`, `PortfolioScreen(.styles)`.
+  `scripts/babel-plugin-design-literals.js` now applies a variant's
+  `literals.json` override to `themedColor('<literal>')` exactly as to
+  `designColor`, so a conversion never drops a fork override.
+- **Angel One sheet** (`BrokerConnectionModal/AngelOneCautionaryWarning.js`):
+  optional controlled mode (`visible`/`onAck`/`onCancel`) and `appearance`
+  overrides applied only when supplied; `BrokerSelectionModal` passes an inert
+  `appearance`.
+- **Navigation manifest** — `preLoginPolicy` (`backend` default | `always`)
+  and new `authNavigation` (`legacy` default | `stack-safe`) used by
+  `LogOutScreen` (stack reset) and `ResetPassword` (go back). Catalog adds
+  `resetPassword` and `notificationPreferences` rows.
+- **Auth** — Google sign-in moved into `src/utils/googleAuth.js` (behaviour
+  identical); `googleSignInError.js` adds a clearer DEVELOPER_ERROR message.
+  Google **sign-up** is exposed as `actions.onGoogleSignup` (default Signup
+  presentation does not render it). `ConfigContext` honours a build-owned
+  `authClientIdsBuildOwned` flag (unset upstream).
+- **Additive container fields** (ignored by default presentations): Home
+  (`modelPlans`, `broker`, `cartCount`, `watchlistPreview`, catalog/cart/
+  notification callbacks), Account (row `key`, Log Out `confirm`,
+  notification preferences), Portfolio (`onReviewRebalance`, `onOpenPlans`),
+  Notifications (next-step actions), Courses/MySubscriptions/SignUpRADetails
+  back/notification actions, `alphanomyPlanShape` (`isSubscribed`,
+  `timeCyclePlan`), `useHomePlanSummary` (`modelPlans`).
+  Home's plan summary now resolves advisor tag / header with the same
+  fallbacks as the Plans tab (`ModelPortfolioScreen`); the default Home
+  presentation does not render plan summaries, so AlphaPro's screen is
+  unchanged (at most one earlier, unused plan-summary request while config
+  loads).
+- Tests: new `hostSkinGate.contract.test.js` pins the gates; Angel One
+  picker/warning contracts; navigation tests for `preLoginPolicy` /
+  `authNavigation`; `brokerTradeFlow` Kotak expectation corrected (was
+  failing on 5.1).
+- **Verification:** full Jest — 5.1 baseline 1543 pass / 5 fail; 5.2
+  1574 pass / 1 fail, no new failures (remaining: `App.test.tsx`,
+  pre-existing). Also fixed two stale tests failing on 5.1: Kotak payload
+  (`brokerTradeFlow`) and `actionReviewRouting` (harness lacked the
+  `confirmNewPortfolioIfNeeded` stub added by 39fe03e2).
+  `hostSkinGate.contract.test.js` runtime assertions apply only when
+  `designs/literalRemaps.js` is empty (forks register a variant on purpose). Design, style and dangling-import
+  audits pass; ESLint errors on touched files 31 → 30 (none new); AlphaPro
+  production Android JS bundle builds. Normalised diffs prove the gated
+  files equal 5.1 when the skin is off.
+
+## 2026-10-12 — Single-stock trades no longer show "No Orders Placed" after a fill
+
+Since `9f3319f2` (2026-09-14) app single-stock trades go through Node
+`/api/process-trades/order-place`, which returns the broker rows as `response`;
+`StockAdvices` / `IgnoreTradesScreen` still read `results`, got `[]`, and the
+result modal said "No Orders Placed… please go back and try again" for orders
+the broker had filled (Markup DefinEdge ACE-EQ, 2026-10-12) — inviting duplicate
+orders. The integration test mocked `{results}`, which the real server never
+sent, so it stayed green.
+
+- `src/utils/orderPlaceRows.js` (new) — `orderPlaceRows` (results → response →
+  []) and `withOrderPlaceResults`.
+- `StockAdvices.js`, `IgnoreTradesScreen.js` — `placementResults = orderPlaceRows(response.data)`.
+- `services/OrderService.js` `placeOrders` — returns `withOrderPlaceResults(response.data)`.
+- `src/__tests__/orderPlaceRows.test.js` (new).
+
+Server side already fixed for every installed app: aq_backend `2fcca2eb`
+(deployed 2026-10-12) also returns the rows as `results`.
+
+## 2026-10-10 — WhatsApp advice buttons open AlphaPro natively (no new template)
+
+prod's WhatsApp advice template keeps its approved UTILITY button base
+`https://app.alphaquark.in/api/redirect/{{1}}`; AlphaPro now claims its own
+tenant's links on that host, so the tap opens the app (execute links → the
+matching card; generic → recommendations). **Native change: requires an
+APK/AAB + IPA build — an OTA cannot add App Link / Universal Link claims.**
+
+- `android/app/src/main/AndroidManifest.xml` — new `autoVerify` intent filter:
+  host `app.alphaquark.in`, `pathPrefix /api/redirect/prod~`,
+  `path /api/redirect/prod.alphaquark.in`.
+- `ios/AlphaQuark/AlphaQuark.entitlements` — `applinks:app.alphaquark.in`.
+- `src/utils/redirectLink.js` (new, pure) — `parseRedirectLink`.
+- `src/utils/smartLink.js` — `handleRedirectLink` (execute → functional deep
+  link; generic → Home; foreign tenant ignored).
+- `src/__tests__/redirectLink.test.js` (new).
+
+Server: aq_backend `83b730a1` (deployed) — AASA lists each app's
+`/api/redirect/<tenant>~*` + `/api/redirect/<domain>`. Docs: `APP_ARCHITECTURE.md`,
+`SMART_LINKS.md`.
+
+## 2026-10-10 — Email change and account deletion use the verified sign-in
+
+Backend hardening (aq_backend `d7028fc9`): the email-change routes now act only
+for the signed-in owner of the account, and account deletion only on the
+verified sign-in email (client-written `firebase_id` / `apple_uid` no longer
+identify anyone). App side:
+
+- `src/screens/Home/UpdateEmailScreen.js` — both OTP calls send
+  `Authorization: Bearer <Firebase ID token>` (`authedHeaders`). Until this
+  ships, the old app's email change gets a readable 403/401.
+- `src/screens/Home/DeleteAccountScreen.js` — on
+  `EMAIL_VERIFICATION_REQUIRED` (Apple "Hide My Email"), offers **Confirm email**
+  → `EmailScreenAppleLogin` (existing one-time code), then the customer retries.
+
+Record: prod-alphaquark-github `docs/server_issues/2026-10-10-account-identity-hardening.md`.
+
+## 2026-10-10 — Hidden-email Apple users confirm their email to open a link
+
+Execute links failed for Apple "Hide My Email" customers: their sign-in token
+has no email (`no_identity`) or a relay email (`identity_mismatch`), while the
+link is bound to the email on their account. Home now keeps the link, asks them
+to confirm their email with the existing one-time code (`EmailScreenAppleLogin`
+→ `/api/auth/apple/verify-email-otp`, which writes the email onto the Firebase
+user) and retries once. A mismatch with a real email is never prompted.
+
+- `src/utils/deepLinkExecuteTarget.js` — `needsEmailVerificationForLink`.
+- `src/screens/Home/HomeScreen.js` — verify-and-retry branch (`emailVerifyAttempted`
+  guard; "Not now" drops the link); imports `Alert`.
+- `src/utils/smartLink.js` — `no_identity` message points at Account Settings.
+- `src/__tests__/deepLinkExecuteTarget.test.js` — 4 new tests.
+
+No backend change (a uid-binding approach, aq_backend `8e96cc02`, was reverted
+in `048e259d`: client-written ids are not identity evidence). Docs:
+`APP_ARCHITECTURE.md` § "Execute deep links".
+
+## 2026-10-10 — WhatsApp/Telegram execute links open the matching card
+
+Execute deep links (`app-links.alphaquark.in/l/<tenant>?dl=x&t=<token>`) used to
+resolve and then land on the notification list (`PushNotificationScreen`
+ignored the params — TODO). They now open Home and start the matching card's
+own Accept/Trade flow, so the customer reaches the normal review.
+
+- `src/utils/deepLinkExecuteTarget.js` (new) — pending target, re-announce
+  schedule, once-only claim, unclaimed → cleared + toast.
+- `src/utils/smartLink.js` — `resolveFunctionalDeepLink` exported, returns the
+  server error code; `deepLinkResolveErrorMessage`; lands on Home and emits
+  `PENDING_DEEPLINK_EVENT`.
+- `src/screens/Home/HomeScreen.js` — `consumePendingDeepLink` (focus + event,
+  resolves tokens stashed before sign-in, error toasts, module-wide guard);
+  no longer navigates to `PushNotificationScreen`; second link per session works.
+- `src/UIComponents/RebalanceAdvicesUI/RebalanceCard.js` — claims
+  rebalance surfaces by model once repair data has loaded; shared
+  `runAcceptRebalanceButton()` with the `openRebalanceFlow` event.
+- `src/components/AdviceScreenComponents/StockAdvices.js` — `trade_execute`:
+  one row → `handleSingleSelectStock`, several → cart.
+- `src/UIComponents/StockAdvicesUI/BasketCard.js` — `basket_execute`:
+  `handleTradeNowBasket` only when the Trade button is enabled.
+- `src/__tests__/deepLinkExecuteTarget.test.js` (new).
+
+No order is placed by the link itself. Backend: ccxt now emits app-link execute
+URLs for WhatsApp + Telegram when the advisor's applink flag is on (see
+`APP_ARCHITECTURE.md` § "Execute deep links"). Docs: `APP_ARCHITECTURE.md`,
+`SMART_LINKS.md`.
+
+## 2026-10-10 — One-tap execute: expired Accept goes straight to biometric
+
+An Accept/Execute tap on a rebalance, trade or basket card whose broker
+session had expired already skipped the "Reconnect broker" prompt for
+customers with a saved quick-reconnect vault (`6a37cbe9`), but the broker
+sheet then waited for a second tap on **Reconnect with biometric unlock**.
+The sheet now raises the biometric prompt itself, so the flow is
+**Accept → biometric → order resumes**.
+
+- `src/components/BrokerSelectionModal.js` — expired-execution path opens the
+  sheet with `{autoUnlock: true}`; **Upstox** added to
+  `DEVICE_TOTP_AUTO_RECONNECT`.
+- `src/GlobalUIModals/ModalManager.js` — forwards `modalPayload.autoUnlock`.
+- `src/components/BrokerConnectionModal/DeviceTotpReconnectGate.js` —
+  `autoUnlock` prop; once per opening, only after the server confirms the
+  saved vault is usable, runs the existing `unlockAndReconnect`.
+- `src/components/BrokerConnectionModal/upstoxModal.js` — `autoUnlock` prop
+  (once per opening, shared guard with the smart-reauth path); success event
+  renamed to `'Upstox broker connection (device TOTP reconnect)'` so a pending
+  **rebalance** also resumes (RebalanceCard did not match the old source).
+- `src/__tests__/deviceTotpReconnect.contract.test.js` — pins the above.
+
+Failures/cancels leave the sheet open with its normal options; never retried
+automatically. No backend change. Docs: `BROKER_CONNECTION.md` § Device-TOTP
+gate lifecycle ("One-tap execute"), `PHASE3_PROGRESS.md`.
+
+## 2026-10-08 — Android 3.9.185 (185)
+
+APK-only release of `release/deploy_5.1` (`9d80b736` "Mark as placed" fill,
+`87a06db7` pending-badge wording). Revopush audit and validation in
+`docs/OTA_RELEASE.md`. No OTA.
+
+## 2026-10-08 — Rebalance card names what its pending badge is waiting on
+
+The card rendered every pending state as "Awaiting Broker Confirmation",
+including a server `ownership_conflict` ("Portfolio ownership needs review…
+contact support"). On moneyman testaccount, after switching Zerodha → Dhan, a
+6-day-old Dhan YESBANK conflict showed that label and was read as Zerodha's
+status carrying over. `RebalanceCard` now labels the badge via
+`accountRecoveryUx.pendingVerificationBadgeLabel` / `pendingVerificationRecovery`
+(falls back to the same-name get-repair row because reconciling rows can lack
+`modelId`). Gate logic unchanged. Backend root cause fixed separately in
+ccxt-india `bb1ae6f3` (Dhan DH-906 recognised as a gateway refusal). Tests:
+`src/__tests__/utils/pendingVerificationBadge.test.js`. Not yet released (no
+OTA).
+
+## 2026-10-07 — Every SDK placement screen honours a "not sent" refusal
+
+The SDK reports a refusal that dispatched nothing (MARKET_CLOSED, expired
+session, drifted plan) as `{notSent: true, rows: []}`. Only `RebalanceModal`
+and `ModelPortfolioService` read it; `MPReviewTradeModal` (main + Fyers),
+`UserStrategySubscribeModal` (Fyers, main, Zerodha) and
+`ExecutionStatusScreen` treated it as an empty placement, and
+`MPReviewTradeModal`'s Fyers branch padded it into pending legs.
+`utils/sdkNotSent.throwIfSdkNotSent` re-raises it as the server's 409 so each
+screen's existing refusal handling runs. Both `handleFrozenPlanRecompute`
+helpers now stop on a not-sent refusal with an "Orders not placed" Alert before
+a SELL-only basket can open the TPIN screen, and the last "Portfolio
+refreshed" toast is an Alert. Android 3.9.184 (184). No OTA.
+
+## 2026-10-07 — Fyers: a market-closed refusal is shown as "not placed"
+
+A Fyers Repair sent at 15:30:56 IST was refused `409 MARKET_CLOSED` before
+anything reached Fyers. The SDK returned `{notSent: true, rows: []}`, but the
+Fyers branch of `RebalanceModal` padded the empty rows into five
+"Submission is not yet verified" (`PENDING_CONFIRMATION`, AMO) legs, so it
+looked placed. The Fyers branch now stops on `notSent` with an "Orders not
+placed" Alert carrying the server's reason; its legacy catch handles
+`MARKET_CLOSED`/`NOT_SENT` the same way and uses `planRefusalMessage` for
+frozen-plan 409s (the "Portfolio refreshed" toast is gone everywhere). The
+main path's not-sent toast is now an Alert too. Android 3.9.183 (183). No OTA.
+
+## 2026-10-07 — "Already Aligned" only behind a real zero-trade calculation
+
+Right after a Repair placement the Repair rows clear while the broker confirms
+the orders; the empty list then rendered "Your Portfolio is Already Aligned!"
+even with an order still open (moneyman / Groww, YESBANK open). The aligned
+screen now requires `isAlreadyAlignedCalculation`; a reconciling Repair shows
+"Orders sent, checking with the broker", anything else a neutral "Nothing to
+place right now". Android 3.9.182 (182) test APK, which also carries the
+Order Status past-attempt label (`13998583`). No OTA.
+
+## 2026-10-07 — Order Status no longer presents an old failed attempt as live
+
+The Order Status screen can show an attempt from an earlier day while the
+server reconciles it. When every order in it failed and that day is over, the
+summary now reads "Last attempt on <date> · nothing was bought", explains that
+nothing is being placed, and the button says "Place these orders again"
+(`utils/pastAttemptSummary.js`, `PendingOrdersModal`). Found on moneyman
+testaccount, whose 2 Oct Fyers/Groww static-IP rejections looked like new
+orders on 7 Oct; the server side (ccxt `57720631`, `aaa1da77`) now treats such
+gateway refusals as zero ownership so Repair is offered. No OTA.
+
+## 2026-10-07 — Repair re-sent a consumed plan; refusals were silent
+
+Found on moneyman / ICICI Direct (testaccount). The 12:50 IST rebalance was
+sent and ICICI rejected every leg (API-key static-IP mismatch), so the plan was
+consumed and its legs became Repair rows. Opening the portfolio again showed
+those Repair rows, but Place Order re-sent the old calculation's plan and ccxt
+refused it twice with `409 PLAN_ALREADY_CONSUMED`. The modal closed behind a
+6-second "Portfolio refreshed" toast, so the order looked as if it had vanished.
+
+- **Identity follows the rows on screen.** `RebalanceModal` drops any held
+  calculation while Repair rows are shown (`calculationMatchesPortfolio &&
+  !repairStatus`), and `resolveRebalancePlanCorrelation` takes the Repair
+  plan whenever `repairRowsShown` is true. The calculation's funding panels,
+  T1 warnings and plan id no longer leak into Repair.
+- **Frozen-plan refusals are explained.** A `409 {recompute:true}` now shows an
+  Alert from `utils/planRefusalMessage.js`: a consumed plan says the orders were
+  already sent and points to "Repair Portfolio"; expired/stale plans say
+  nothing was placed and ask for a fresh review. Same copy in
+  `MPReviewTradeModal` and `ExecutionStatusScreen`.
+- **Funding panel after "attempt anyway".** When the customer already chose
+  `attempt_broker`, the panel shows the server's "Broker may reject these
+  orders" warning (`fundingPanelCopy`) instead of "add funds, then calculate
+  again", and `LowFundsRebalanceWarning` no longer claims the orders were
+  "fitted to available funds".
+- Android 3.9.181 (181) test APK. No OTA published.
+
+## 2026-10-05 — Customer recommendation terminology
+
+- Replaced affirmative customer-visible “Advice/advice” labels in the stock
+  entry price, P&L and account-deletion retention copy with
+  “Recommendation/recommendation.”
+- Preserved registered legal names, protective “not investment advice”
+  disclosures and internal routes, permissions and data keys.
+- Source-only release: no OTA was published.
+
+## 2026-10-05 — Cross-repo Angel One connect correction
+
+Source commits: SDK `856499d`; backend `54609585`; Tidi `aca4b98`; canonical docs `cbb622af`.
+
+Angel One personal publisher login uses encrypted `apiKey` plus plain
+`clientCode`, with no API Secret. `/update-credentials` stages that registration
+without creating/promoting a slot. `/login-url` selects the personal lane by
+API Key presence; `/exchange-token` saves the final publisher `auth_token`
+directly through the canonical `/api/user/connect-broker` before primary
+promotion. The canonical handler uses the staged personal registration under
+the tenant mode and mirrors both credential surfaces, preserving today's
+sell-auth via the existing helper. There is no publisher `generate-session` hop.
+Empty-body legacy shared-key clients retain their compatibility path.
+
+RN and Flutter intercept Angel One returns independently of the tenant landing
+URL, on exact HTTPS callbacks at `ccxtprod.alphaquark.in/angelone/callback`,
+`alphaquark.in/api/deploy/broker/callback`, and
+`prod.alphaquark.in/stock-recommendation`. A non-empty query/fragment
+`auth_token` is required; unrelated paths, lookalike hosts, userinfo and
+nonstandard ports are rejected. The matcher applies to personal and shared
+modes. Tokens and exchange bodies are not printed in SDK callback logs.
+
+Tidi `3.0.45+148` now follows the owner-approved September 29 personal-key
+rollout. Both selection and Manage Brokers always route Angel One through the
+SDK, with API Key / Client Code form, static-IP callout and copyable registered
+callback `https://ccxtprod.alphaquark.in/angelone/callback`. It no longer uses
+the dotenv shared-key default or autojumps with a saved legacy platform key.
+Post-connect persistence verification and model-portfolio housekeeping remain
+unchanged. No customer-data migration, trade routing or sell-auth policy change.
+
+Validation: 19 Tidi form/persistence tests, 2 callback tests on each SDK
+platform, 13 backend personal-key/staging/persistence tests, RN typecheck and
+signed release APK build pass. The release certificate matches the prior APK.
+Real-account login and funds/holdings/controlled-order certification remain
+pending. This evidence does not upgrade the broker's certification verdict.
+
+Files: backend `Routes/sdk/v1/connections.js`; SDK `webview_auth_flow.dart`,
+`WebViewBrokerAuthFlow.tsx`, callback helpers/tests; Tidi selection/Manage/Phase3,
+`broker_config.dart`, `EgressIpCallout.dart`, release version and form test.
+Canonical Phase3, sell-auth, integration and orchestration docs updated together.
+
+
+## 2026-10-03 — Tenant-owned SDK broker OAuth callback
+
+- SDK broker OAuth now resolves the callback from the active runtime tenant,
+  then the runtime/build configuration, and uses that same value for setup
+  guidance and WebView token exchange.
+- Removed the platform production callback fallback that could break Upstox
+  and Fyers authorization-code exchange in branded apps.
+- Missing tenant callback configuration now fails closed before opening the
+  broker login instead of starting an OAuth round trip that cannot complete.
+- Broker routing, credential persistence, order placement and reconciliation
+  ownership remain unchanged.
+
+## 2026-10-03 — Design-registry contract-floor enforcement
+
+- Registered the existing `composites.PortfolioSummaryCard` in the default
+  design registry. Its container previously requested an absent key, which
+  could crash the Portfolio route before the presentation rendered.
+- `audit:design` now scans every static `useComponent('…')` request in `src/`
+  and `designs/` and fails when the default registry does not contain it.
+- The audit also understands optional per-variant `coverage.json` manifests
+  and verifies required app components and SDK slots during CI.
+- The model-portfolio detail container now exposes methodology, target
+  allocation and research-report data/actions to design variants. Default
+  behavior is unchanged; tenants no longer need to duplicate payment,
+  entitlement or report-fetching logic to render their own detail states.
+- Files: `designs/default/index.js`, `scripts/audit-design-boundaries.js`,
+  `src/screens/Drawer/MPPerformanceScreen.js`,
+  `docs/DESIGN_SYSTEM_ARCHITECTURE.md`,
+  `docs/DESIGN_COMPONENT_AUDIT.md`, `docs/DESIGN_MIGRATION_PROGRESS.md`,
+  `docs/MODEL_PORTFOLIO_ARCHITECTURE.md`, and `docs/CHANGELOG.md`.
+
+## 2026-10-03 — Tenant-themed broker and device-TOTP host states
+
+- Widened the shared model-plan presentation contract with all recurring
+  pricing periods, discount/original-price metadata, bespoke validity and
+  retention, canonical subscribed state and entitlement readiness. Tenant
+  designs can reproduce the complete catalog without reading raw data or
+  inferring access.
+- Model-portfolio entitlement loading now starts from the signed-in email and
+  canonical runtime/build tenant fallback instead of waiting indefinitely for
+  the legacy stored advisor-config record after a reload.
+- Broker setup guidance and the shared credential/OTP/static-IP sheet now use
+  active tenant tokens instead of fixed light surfaces.
+- `deviceTotpEnabled` remains the only feature gate: off mounts no biometric
+  or TOTP controls; on renders enrollment, saved/locked, unlock, normal-login
+  fallback and forget states without a frontend release.
+- Added broker-hosted login guidance for Zerodha, Dhan, AliceBlue and Axis
+  Securities without changing SDK schemas, routing or persistence.
+- Added focused source contracts and updated Phase 3/design/broker docs.
+
+## 2026-10-02 — Google sign-in cancellation is non-fatal
+
+- Closing or backing out of Google's native account sheet no longer emits a
+  React Native `console.error` LogBox or failed-login telemetry.
+- Added a shared cancellation classifier for provider code
+  `SIGN_IN_CANCELLED`, Android status `12501`, and cancellation messages;
+  genuine authentication failures remain visible.
+- Added focused unit coverage and documented the cancellation contract in
+  `APP_ARCHITECTURE.md` §6.5.
+
+## 2026-10-02 — Android 3.9.178: broker sessions remint on runtime tenant changes
+
+- Fixed a shared SDK-session race affecting Zerodha, AliceBlue, and every
+  other SDK broker when AlphaB2B users selected MoneyMan: the UI and REST
+  verifier switched to `moneyman`, but an already-minted `prod` SDK JWT was
+  retained because the signed-in email did not change.
+- `src/sdk/SdkProviderRoot.js` now treats `(tenant, userRef)` as the session
+  identity, binds each client mint to one tenant, and remounts the provider
+  when the runtime advisor changes.
+- Updated `src/__tests__/utils/runtimeAdvisor.test.js`,
+  `docs/BROKER_CONNECTION.md`, and `docs/SDK_INTEGRATION_GUIDE.md`.
+- Signed QA APK: `artifacts/AlphaB2B-3.9.178-moneyman-broker-tenant-session-fix-release.apk`.
+  No OTA was published or changed.
+
+## 2026-10-01 — Android 3.9.170: AlphaB2B runtime advisor isolation + MoneyMan design
+
+- AlphaB2B now publishes the selected advisor config as one runtime authority
+  for REST headers, SDK minting, ConfigContext and the design registry.
+- `MONEYMAN` sessions resolve every no-argument tenant header to `moneyman`;
+  broker connects can no longer persist in `prod` while the Broker Screen reads
+  MoneyMan.
+- The statically bundled `moneyman_app` design is registered in AlphaB2B and
+  activates after advisor restore/login. Standalone builds with an explicit
+  `DESIGN_VARIANT` remain fixed.
+- MoneyMan-specific plan ordering, card summaries/colors, Home feed/footer,
+  Insights and More links also follow the runtime advisor; they no longer
+  depend on installing the standalone MoneyMan binary.
+- Regression coverage pins runtime header precedence, config restore/clear,
+  SDK mint selection, and runtime design selection.
+
+## 2026-10-01 — 3.9.167: Fyers "Retry Order" loop fix
+
+- After "I've authorized → Retry Order", the server answered the SDK's sell-auth
+  pre-check from a stale 5-minute cache, so the TPIN sheet reopened. Fixed in
+  backend `067141e` (cache cleared on save, `fresh=1`) and SDK `9e0d4e5`
+  (fresh read; an unreadable status no longer blocks: retry once, then place).
+  See `docs/SELL_AUTH_ARCHITECTURE.md` §7e.
+
+## 2026-10-01 — sell-auth retry feedback, visible order errors, Fyers quick reconnect, SDK URL fix (unreleased)
+
+- **Fyers "Place Order" did nothing:** the RN SDK threw before its sell-auth
+  network call (React Native's URL lacks `searchParams.set`), and the
+  resulting "Order Failed" toast rendered underneath the native order Modal.
+  SDK fixed (see SDK CHANGELOG); `RebalanceModal` now hosts its own `<Toast />`;
+  an SDK `sell_auth_declined` for Fyers opens the TPIN flow.
+- **"I've authorized — recalculate"** keeps the sheet open with progress,
+  reports success ("No orders placed yet…") and failures (with retry), and
+  marks the reopened review; sheet layout no longer clips on narrow phones.
+- Sell-auth modals (OtherBroker, Angel One, Dhan, Fyers TPIN) host their own
+  `<Toast />` so their errors are visible.
+- **Saved quick reconnect:** biometric unlock is the primary button; setup
+  guide hidden in that state (all `DeviceTotpReconnectGate` brokers).
+- Files: `src/components/DdpiModal.js`, `src/components/AdviceScreenComponents/RebalanceModal.js`,
+  `src/components/BrokerConnectionModal/DeviceTotpReconnectGate.js`,
+  tests `sellAuthRetryFeedback.contract.test.js` (new),
+  `deviceTotpReconnect.contract.test.js`. Docs: `SELL_AUTH_ARCHITECTURE.md` § 7e,
+  `BROKER_CONNECTION.md`.
+
+## 2026-10-01 — SDK design-passthrough slots live; AlphaPro keeps SDK built-ins
+
+- SDK `7dc0fda` makes every declared slot a live presentation-only override
+  (credential form, sell-auth gate, investment sheet + P&L choice, both
+  WebView headers; `brokerSelectionList` reserved). The SDK also gained
+  `getRecommendations()` / `useRecommendations()` (v1 recommendation shape).
+- `designs/default/sdk/index.js`: `brokerWebViewHeader`, `kitePublisherHeader`,
+  `rebalancePnlChoice`, `brokerSelectionList` → `null` (SDK built-in), so
+  AlphaPro's broker-login and Kite headers look exactly as before; the
+  standalone files remain as templates for custom variants.
+- `jest.config.js`: maps `@babel/runtime`, `react`, `react-native`,
+  `react-native-webview` to this app's copies so tests can render the
+  symlinked SDK package with one React.
+- New `src/__tests__/sdkSlotPassthrough.render.test.js` (11 tests).
+- Docs: `SDK_DESIGN_PASSTHROUGH.md` (status, § 7, § 9 catalog),
+  `SELL_AUTH_ARCHITECTURE.md` § 8a, design trio, `VARIANT_CREATION_GUIDE.md`.
+
+## 2026-10-01 — Android 3.9.163 APK: stale-bundle safety update is exact-target only
+
+- `src/utils/executionBundleSafety.js` `handleStaleExecutionBundle` (fires when
+  the Node execution-intent boundary answers `EXECUTION_BUNDLE_STALE`) called
+  a bare CodePush sync, which accepted open-ended releases such as Production
+  v93 (`>=3.9.129`) and could replace a newer binary's embedded bundle with
+  older code — a violation of the CLAUDE.md OTA blocker rule 2. It now uses
+  `installExactTargetOta` (`src/utils/otaPolicy.js`), the same guard as the
+  launch-time check in `index.js`.
+- The toast now reflects the result: "Safety update downloaded" only when an
+  exact-target package was installed for the next restart; otherwise "App
+  update required". Both still say no order was sent.
+- Tests: `src/__tests__/utils/executionSafetyGuards.test.js` (exact target
+  installs, `>=3.9.129` never downloads, failed check still informs) and a new
+  repo-wide rule in `src/__tests__/otaInstallPolicy.test.js`: no source file
+  may call `codePush.sync(`.
+
+## 2026-10-01 — Android 3.9.162 APK: configurable navigation (tabs / More menu / pre-login as a data manifest)
+
+- New `navigation` variant field: `designs/<variant>/navigation.js` declares
+  tabs (which, order, label, icon), first tab, More-menu sections, phone-first
+  pre-login order and tab-bar height as data, so a tenant redesign no longer
+  forks `Navigation.js`. Resolved by the pure `src/navigation/resolveNavigation.js`
+  against the src-owned catalog `src/navigation/screenCatalog.js`; consumed via
+  `src/navigation/useNavigationLayout.js`.
+- **No customer-visible change**: `designs/default/navigation.js` reproduces the
+  previous tabs (Home, Orders, Portfolio, Plans, More), first tab and every More
+  row/route exactly (`src/__tests__/navigation/defaultNavigationSnapshot.test.js`).
+- Safety: route names unchanged; the More tab and the Privacy / Terms / Delete
+  Account / Log Out rows are required (re-added if a manifest drops them);
+  money/compliance flow steps have no catalog keys.
+- Files: `src/components/Navigation.js` (tabs from the manifest; cart-sheet uses
+  manifest tab-bar height; hard-coded arfs News swap removed — belongs in the
+  arfs fork's manifest), `src/screens/Home/AccountSettingsScreen.js` (menu from
+  manifest), `src/components/SplashScreen.js` (pre-login route),
+  `designs/default/shell/MainTabBar.js` (icon name + height), `src/design/resolveDesign.js`
+  (merge + key validation), `designs/default/index.js`, `src/utils/Logging.js`
+  (generic `logFrontendAnomaly`), `scripts/audit-design-boundaries.js`
+  (manifests must be data only), tests under `src/__tests__/navigation/`.
+- Docs: `CONFIGURABLE_NAVIGATION_DESIGN.md`, `DESIGN_SYSTEM_ARCHITECTURE.md`
+  § Navigation manifest, `DESIGN_COMPONENT_AUDIT.md`, `DESIGN_MIGRATION_PROGRESS.md`,
+  `VARIANT_CREATION_GUIDE.md` § Layer 5.
+
+## 2026-09-30 — Android 3.9.161 Kotak/Groww quick reconnect offered first
+
+- Kotak and Groww show the quick-reconnect switch before the credential fields,
+  so the customer chooses it before typing a one-time 6-digit TOTP.
+
+## 2026-09-30 — Android 3.9.160 quick reconnect visible on AliceBlue, Kotak, Groww
+
+- These screens now read `deviceTotpEnabled` from the live `useConfig()` as
+  well as TradeContext's cached `configData`. The cached copy can lack the
+  flag, so AliceBlue skipped its quick-reconnect choice and opened the broker
+  login directly. Contract test pins the live read for all three.
+
+## 2026-09-30 — Android 3.9.159 live TOTP key check
+
+- `src/utils/totpKeyCheck.js: describeSeedCheck` renders under the TOTP
+  setup-key field (new `hint` field support in `BrokerConnectStepperSheet`):
+  the code the pasted key produces now plus seconds left, so a wrong key is
+  visible before the broker counts a failed attempt. `DeviceTotpReconnectGate`
+  re-renders every second only while a key is typed and not yet saved.
+  Informational only. Ships with the wrong-PIN titles from `a423a720`.
+
+## 2026-09-30 — wrong-PIN quick-reconnect failures are titled plainly (unreleased)
+
+- New `isWrongPinError` (`src/utils/deviceTotpEnrollment.js`) recognises a
+  broker PIN rejection (`*_ASSISTED_PIN_FAILED` or "invalid/incorrect/wrong
+  (M)PIN" wording). It only chooses the alert title: "<Broker> PIN not
+  accepted" on quick reconnect, "<Broker> connected; PIN not accepted for quick
+  reconnect" after enrollment (DeviceTotpReconnectGate + Upstox modal). Nothing
+  is blocked, retried or cleared; PIN errors were already never auto-retried.
+- Node (aq_backend `1e73821`, live) now explains that repeated wrong PINs can
+  lock the FYERS login and how to forget and re-save quick reconnect. Found on
+  2026-09-30: an old saved Fyers PIN was rejected 7 times on one account.
+
+## 2026-09-30 — Android 3.9.158 preserves mixed-case TOTP setup-key input
+
+- TOTP setup-key fields no longer uppercase or strip the customer's visible
+  text while typing/pasting. This applies to the shared Angel One, Motilal
+  Oswal, Zerodha and Fyers gate and the host Upstox, Dhan Direct, Kotak,
+  DefinEdge, Arihant and AliceBlue enrollment forms; the generic broker
+  credential screen follows the same keyboard contract.
+- Base32 remains case-insensitive. Canonical uppercase/separator cleanup still
+  occurs internally only when generating a TOTP or saving the protected device
+  vault, so existing saved records and broker codes remain compatible.
+- Upstox now explains that its developer API Secret is not the TOTP QR/setup
+  secret and that lowercase Base32 is valid. Its official TOTP guide exposes a
+  QR flow, so the app asks for the QR-encoded secret or a manual key only when
+  Upstox supplies one.
+- Added regression coverage for mixed-case RFC Base32 decoding, internal
+  canonicalization and every host-owned TOTP input surface. Android advances
+  to `versionCode 158`, `versionName 3.9.158`; this is APK-only and no OTA is
+  published.
+- Files: `src/components/BrokerConnectionModal/{upstoxModal,DeviceTotpReconnectGate,DhanConnectModal,KotakModal,DefinEdgeConnectModal,ArihantConnectModal,AliceBlueConnect}.js`,
+  `src/screens/Broker/BrokerCredentialScreen.js`, focused TOTP/contract tests,
+  `docs/BROKER_CONNECTION.md`, `docs/OTA_RELEASE.md`, `android/app/build.gradle`,
+  and `package.json`.
+
+## 2026-09-30 — Android 3.9.157 stale-OTA and Dhan EDIS loop fix
+
+- Clear retained CodePush packages after a native binary version change and
+  accept future OTA downloads only when their target exactly matches the
+  running binary version. OTA publishing scripts no longer use open-ended
+  Android/iOS version floors.
+- Preserve the saved investment target when available cash is zero; regression
+  tests forbid the retired “Update total investment to ₹0” path.
+- After Dhan CDSL completion, poll the live per-holding EDIS response, propagate
+  it to the parent order flow, and verify only selected SELL holdings with
+  sufficient approved quantity before reopening review.
+- No OTA was published or changed for this release.
+- Signed APK:
+  `artifacts/AlphaB2B-3.9.157-ota-baseline-dhan-edis-release.apk` (SHA-256
+  `7f53e054c93de22b37aabc08c69ddc843d96eb7e19c87f5742546c6c4bb43e29`).
+
+## 2026-09-30 — Dhan CDSL quantity-recovery contract
+
+- Documented `DH-906 Validate Qty from CDSL` as explicit
+  `SELL_AUTH_REVOKED` evidence rather than a terminal generic rejection.
+- Dhan authorization now requires live per-symbol approved quantities after
+  the CDSL callback and immediately before retry dispatch; a callback or
+  checkbox alone cannot persist success.
+- Confirmed the shared orchestration was not changed: the complete SELL phase
+  runs first, zero successful SELLs withhold all dependent BUYs, and at least
+  one successful SELL may release the approved BUY phase.
+- Runtime changes are in synchronized Tidi `07b2e886` and ccxt `e78a4153`;
+  AlphaB2B 3.9.157 adds the corresponding live-status handoff and selected-
+  SELL aggregate quantity gate.
+
+## 2026-09-30 — accurate broker health and actionable recovery blockers
+
+- The home status pill now labels persisted credentials **Broker Linked**.
+  Only a recent successful funds probe for the exact current account/broker is
+  **Broker Live**; unresolved account recovery is **Broker Linked · Check**.
+- Recovery state is retained in `TradeContext` and ranked ahead of the generic
+  repair shortcut, so ownership, authentication and pending-order blockers are
+  named directly and route to review.
+- Rebalance/refresh alerts use the server's blocker message and a state-specific
+  title instead of repeating “broker verification” or implying retries can fix
+  deterministic data conflicts.
+- Backend counterpart and production evidence are documented in
+  `ccxt-india/docs/server_issues/2026-09-30-aliceblue-dhan-account-recovery.md`.
+  The signed recovery-health APK is
+  `artifacts/AlphaB2B-3.9.156-recovery-health-release.apk` (SHA-256
+  `1714d33eb715cd86d43faa33660981bfd6722f529b307c36a91bfea33c7a4833`).
+
+## 2026-09-30 — Android 3.9.156 formatted TOTP keys and explicit biometric retry
+
+- Phone-owned TOTP setup now accepts broker-formatted Base32 keys containing
+  grouping spaces/dashes, invisible clipboard marks, labelled `secret=` values,
+  and complete `otpauth://` clipboard values. Only the extracted Base32 secret
+  is retained.
+- Upstox labels its primary action “Continue to Upstox login” and provides a
+  separate normal-login path even when optional quick-reconnect details are
+  incomplete. An invalid quick-reconnect seed therefore cannot look like an
+  OAuth WebView failure.
+- Zerodha instructions now match the official Kite Web path: Client ID → My
+  profile / Settings → Password & Security → Enable External TOTP → Can't
+  scan? Copy the key. The Kite-app equivalent remains in the note.
+- Protected reconnect waits for an explicit customer tap instead of presenting
+  Android authentication as the broker sheet opens. Keychain authentication
+  cancellation/failure now explains how to retry with fingerprint, face unlock,
+  or device PIN instead of exposing “Wrapped error: User not authenticated.”
+- Android Show/Hide now updates the mounted secure input as well as React state,
+  and remains attached to the same stable field when optional quick-reconnect
+  fields appear. FYERS normal OAuth can return to quick-reconnect setup without
+  deleting/reopening the broker.
+- FYERS assisted-login errors distinguish its four-digit app login PIN from a
+  rotating authenticator code and always retain the normal-login escape path.
+- Kotak no longer performs an apiKey-only SDK dual write after a successful
+  TOTP/MPIN login. Rebalance payloads use the current NEO apiKey/jwtToken/sid/
+  baseUrl contract rather than the retired consumer-key naming.
+- Groww's authorization guide links directly to its CDSL TPIN page and states
+  that authorization does not sell holdings. The acknowledgement action safely
+  reopens review/recalculates instead of closing to Home.
+- Android advanced to `versionCode 156`, `versionName 3.9.156`. No OTA was
+  created.
+
+## 2026-09-30 — Android 3.9.155 automatic TOTP enrollment and broker-book readiness
+
+- Quick-reconnect setup now asks for the fixed Base32 setup key, not a rotating
+  six-digit TOTP. The phone generates the live code, the broker verifies it,
+  and the phone saves the seed/factors only after success. Dhan Direct, Kotak,
+  Arihant and DefinEdge no longer recheck an expired pre-request code;
+  AliceBlue setup also generates its verification code locally.
+- Dhan, Kotak, Arihant, DefinEdge and AliceBlue show clearer portal/TOTP/static-
+  IP instructions, while the existing shared Angel One/Motilal/Zerodha/Fyers
+  and Upstox flows retain their broker-specific guides.
+- Update Investment is disabled while broker-scoped portfolio data is loading.
+  The ccxt route now prepares the exact broker book on the first write, and a
+  missing target allocation says data is unavailable instead of falsely
+  claiming premium access is required.
+- Android advanced to `versionCode 155`, `versionName 3.9.155`. No OTA was
+  created.
+
+## 2026-09-30 — authoritative empty model-holdings snapshots
+
+- Fixed the stale POLYSPIN card shown after its final share had been sold.
+  `latestHeldExec` now treats the newest valid dated snapshot as authoritative
+  even when it contains no rows, because that is the persisted representation
+  of a complete exit. Undated empty legacy placeholders remain non-authoritative.
+- The holdings source resolver now distinguishes “snapshot exists” from
+  “snapshot has holdings.” A valid empty CCXT snapshot therefore cannot fall
+  back to an older non-empty subscription mirror and resurrect sold stock.
+- Added focused regressions for both snapshot selection and CCXT-versus-mirror
+  precedence. The related backend Calculate flow now prices T1 positions using
+  their actual Zerodha symbol/exchange before mapping them to model aliases.
+- Files: `src/utils/rebalanceHelpers.js`,
+  `src/utils/modelPortfolioHoldings.js`, and their focused test suites. This is
+  JavaScript-only and is eligible for a signed OTA release.
+
+## 2026-09-30 — Android 3.9.154 Upstox fresh-TOTP enrollment verification
+
+- Fixed the misleading post-connect **TOTP secret or verification code is
+  invalid** alert. Upstox previously attempted to validate the exact six-digit
+  code typed before OAuth only after OAuth had completed, so a correct code was
+  normally outside its 30-second window by then.
+- Upstox now validates the seed/code pair before OAuth, stages only the seed and
+  PIN in memory, waits for the next fresh TOTP window after the canonical
+  connection is persisted, and verifies a newly generated code through the
+  Firebase-authenticated Node/Upstox TOTP-token route. It retries once on a
+  TOTP-window/network/server failure.
+- The biometric/device-passcode keychain record is written only after Upstox
+  accepts that fresh code. The normal OAuth access token may be active even if
+  phone enrollment fails; the revised alert states those two outcomes
+  separately and tells the customer to enroll again.
+- Upstox now uses the same contextual quick-reconnect instruction surface as
+  the other corrected brokers, including the official TOTP setup path and an
+  explanation of fixed Base32 key versus changing six-digit code.
+- Android advanced to `versionCode 154`, `versionName 3.9.154`. No OTA was
+  created.
+
+## 2026-09-30 — Android 3.9.153 broker-specific TOTP creation guide
+
+- Selecting **Enable quick reconnect on this phone** now keeps the choice in
+  place and immediately expands broker-specific instructions before the TOTP
+  inputs. Previously the inputs were inserted above the checkbox with no
+  explanation of where the Base32 secret came from.
+- Angel One now links directly to its TOTP setup page and explains Client ID +
+  MPIN/PIN login, registered mobile/email OTP verification, copying the manual
+  Base32 secret shown with the QR, adding it to an authenticator, and entering
+  the current six-digit code. It also warns that the changing six-digit code is
+  not the fixed secret key.
+- Equivalent contextual setup guidance is included for Motilal Oswal, Zerodha
+  and FYERS so every broker owned by the shared phone-TOTP gate explains how to
+  obtain its secret before requesting it.
+- Android advanced to `versionCode 153`, `versionName 3.9.153`. No OTA was
+  created.
+
+## 2026-09-30 — Android 3.9.152 complete phone-TOTP broker enrollment
+
+- The shared phone-TOTP enrollment sheet no longer hides stable API fields
+  merely because a broker slot already exists. Fyers now always shows App ID
+  and Secret ID, Angel One shows the personal SmartAPI API Key, and Motilal
+  Oswal shows API Key and Client Code before quick reconnect is enabled.
+- The same sheet renders each applicable broker's complete developer-portal,
+  redirect-URL and static-IP guide during enrollment. Zerodha remains correctly
+  exempt because it uses AlphaQuark's Publisher key rather than a
+  customer-created developer app.
+- Angel One now asks only for its SmartAPI API Key and Client Code—there is no
+  API Secret in this flow. Its duplicate SDK "Before you start" block is
+  suppressed in AlphaB2B, and the single authoritative portal callback is
+  `https://ccxtprod.alphaquark.in/angelone/callback` (the tenant URL is only the
+  post-callback app destination).
+- Angel One first connect now retains the optional "save TOTP on this phone"
+  choice. After normal OAuth creates the broker slot, the app verifies a fresh
+  TOTP window and stores only the seed, Client ID and MPIN in the biometric/
+  device-passcode-protected keychain.
+- Audited the other device-TOTP host flows: Upstox, Dhan Direct, Kotak, Groww,
+  DefinEdge and Arihant already keep their required customer credentials and
+  IP guide visible; AliceBlue remains a partner-login flow.
+- Supplied API credentials are sent only to the Firebase-authenticated Node
+  reconnect route. After the broker accepts the login, Node refreshes the
+  encrypted server copy; the TOTP seed and personal login factors remain in
+  the phone's protected keychain.
+- Android advanced to `versionCode 152`, `versionName 3.9.152`. No OTA was
+  created.
+
+## 2026-09-29 — backfill: warn-mode model-owned SELL choice (feature `faa01d0`)
+
+- `src/components/ReviewTradeModal.js` and
+  `src/components/ReviewZerodhaTradeModal.js` now show a warning only when an
+  outside-model SELL reaches shares saved against a model portfolio.
+- `src/components/AdviceScreenComponents/SellModelImpactNotice.js`,
+  `src/hooks/useSellModelImpact.js`, and `src/utils/sellModelImpact.js` provide
+  the pre-filled choices: sell only free shares, or sell all and authorize the
+  exact saved-quantity reduction. There is no free-text input and no new block;
+  failed preview/reservation calls keep the previous order flow.
+- Zerodha writes the hold immediately before Kite opens and passes
+  `sellReservationRef` to record-orders. Direct brokers carry
+  `modelAuthorization` only to the Node sell-impact boundary; broker payloads
+  do not receive it.
+- Copy is explicit that this lowers the saved model quantity, not that an
+  immediate rebalance is required. The target remains unchanged, so a later
+  rebalance may suggest buying the shares back.
+- Corporate-action adjustment is server-owned: applicable historical fills are
+  split/bonus scaled, and the notice is suppressed while a demat credit is
+  pending.
+- Tests: `src/__tests__/SellModelImpactNotice.test.js` and
+  `src/__tests__/utils/sellModelImpact.test.js` (13 focused cases), plus the
+  existing review-modal suites. Architecture backfill: `APP_ARCHITECTURE.md`,
+  `MODEL_PORTFOLIO_ARCHITECTURE.md`, and the design-system doc trio.
+
+## 2026-09-29 — Angel One: device-TOTP full-login fallback is per-customer SDK, not the shared-SmartAPI sheet
+
+- `src/components/BrokerConnectionModal/BrokerConnectModalDispatch.js`: Angel One
+  now always resolves to `Phase3SdkBrokerModal` (was
+  `angelOnePerCustomer && !secureTotpHostFlow`, which sent device-TOTP tenants
+  to `AngleoneBookingTrueSheet` — the platform-shared SmartAPI key — on first
+  connect and "Continue with normal Angel One login"). Removed the
+  `'Angel One'` case/import from `renderLegacyModal`.
+  `DeviceTotpReconnectGate` still wraps the SDK modal for quick reconnect.
+- New `src/__tests__/brokerDispatchRouting.test.js`: asserts the routing matrix
+  for every broker, device TOTP on/off, SDK flag on/off.
+- Docs: `BROKER_CONNECTION.md` routing matrix (issue closed),
+  `PHASE3_ARCHITECTURE.md`, `PHASE3_BROKER_AUDIT.md`, `PHASE3_PROGRESS.md`.
+- Ships in Android 3.9.151 (`versionCode 151`), built 2026-09-29.
+
+## 2026-09-29 — docs: canonical broker routing matrix (SDK vs host vs device-TOTP gate)
+
+- `docs/BROKER_CONNECTION.md`: new top section "Broker connect routing matrix"
+  — the three lanes, the dispatcher's exact decision order, a per-broker table
+  (device TOTP off/on, quick-reconnect endpoint), the SDK-vs-host rule for new
+  work, the device-TOTP gate lifecycle (server-authoritative state, background
+  enrollment, disconnect wipes phone vaults), where each secret lives, and
+  diagnostics (breadcrumbs, ccxt `[assisted-login]`, nginx `rt=`).
+- Corrected stale `SDK_LEGACY_FALLBACK` statements (actual: `['IIFL']`) in
+  `BROKER_CONNECTION.md` and `PHASE3_ARCHITECTURE.md`; work-log entry in
+  `PHASE3_PROGRESS.md`. `CLAUDE.md` broker-connect block now points to the matrix.
+- No code change.
+
+## 2026-09-29 — BRANCHES: `release/deploy_5.1` is the build branch; `release/untouched_5.0` is the stable anchor
+
+- New work and all iOS/Android release artifacts now come from
+  **`release/deploy_5.1`**. **`release/untouched_5.0`** is frozen at the same
+  commit (`aa492f1`, Android 3.9.149) and only receives deliberate merges of
+  versions proven stable in production. `feature/sdk-plus-config_forkv2` is
+  retired as the build branch. Matches the web/backend repos' convention.
+- Files: `CLAUDE.md` (§ Build & Run), `docs/CLAUDE_NAV.md`,
+  `docs/WHITELABEL_RECIPE.md` (fork upstream branch),
+  `docs/OVERALL_SYSTEM_TEST_ARCHITECTURE.md` (branch header).
+
+## 2026-09-29 — Android 3.9.149 release cut (holdings re-fetch fix)
+
+- Android advanced to `versionCode 149`, `versionName 3.9.149` (3.9.148 +
+  `13126e8`, merged in `2333b74`). Signed APK
+  `artifacts/AlphaB2B-3.9.149-holdings-perf-release.apk`; details and hashes in
+  `docs/OTA_RELEASE.md`. Files: `android/app/build.gradle`,
+  `docs/OTA_RELEASE.md`, `docs/CHANGELOG.md`.
+
+## 2026-09-29 — PERF: stop re-fetching broker holdings on every user refresh
+
+- `TradeContext` re-fetched `/<broker>/holdings` and `/<broker>/all-holdings`
+  whenever the `userDetails` object changed. Every `getUser` refresh creates a
+  new object, so the home-card **Accept rebalance** broker check
+  (`useRefreshBrokerStatus` → `getUserDeatils()`) fanned out into repeated live
+  broker calls — tidi nginx logs showed ~12 Fyers calls in 10 s for one tap
+  (funds ×4, holdings ×3, all-holdings ×5) while "Checking broker…" spun.
+- The effect now keys on `holdingsRefreshKey(userDetails)` (user, broker,
+  connection status, client code, token), so holdings re-fetch only when the
+  broker session changes. `refreshAccountState` (the `refreshEvent` /
+  `OrderPlacedReferesh` listener) now calls both holdings loaders explicitly so
+  post-order refresh is unchanged.
+- Files: `src/screens/TradeContext.js`, `src/utils/holdingsRefreshKey.js` (new),
+  `src/__tests__/utils/holdingsRefreshKey.test.js` (new, 8 cases),
+  `docs/APP_ARCHITECTURE.md` §6.1a. Related suites (56) pass; ESLint errors in
+  `TradeContext.js` 7 → 6 (all pre-existing).
+- Not changed yet: `useRefreshBrokerStatus` still issues its own `getUser` plus a
+  context `getUserDeatils()` (one duplicate lightweight user read per check).
+
+## 2026-09-29 — prevent false alignment for unaffordable target shares
+
+- An empty rebalance carrying `TARGET_SHARES_UNAFFORDABLE` now shows **Target
+  Allocation Is Not Yet Reachable** and explicitly says that no orders were
+  placed; it no longer falls through to the green **Already Aligned** panel.
+- The same state is excluded from the zero-order auto-acknowledgement path, so
+  the app cannot persist `subscriber-execution: executed` for a portfolio whose
+  target shares could not be bought.
+- Added focused contract coverage for the warning, visible state and execution
+  guard. Files: `src/components/AdviceScreenComponents/RebalanceModal.js`,
+  `src/__tests__/rebalanceReviewContract.test.js`, `docs/REBALANCING.md`, and
+  `docs/MODEL_PORTFOLIO_ARCHITECTURE.md`.
+
+## 2026-09-29 — Fyers quick-reconnect enrollment waits for a fresh TOTP (Android 3.9.150)
+
+- Android advanced to `versionCode 150`, `versionName 3.9.150` (3.9.149 was
+  already taken by the holdings re-fetch build `aa492f1`, which 3.9.150 includes).
+- 3.9.148 device test: connect succeeded, but the background enrollment's
+  server-side Fyers login was rejected within 2 s. Most likely cause: it
+  generated the same 30 s TOTP the customer had just typed on the Fyers page
+  (brokers reject a reused code), so the correct secret was never saved.
+- New `src/utils/deviceTotpEnrollment.js`: `waitForNextTotpWindow()` (sleep
+  to the next 30 s boundary + 1.5 s) and `isRetryableEnrollmentError()`
+  (retry only `*_ASSISTED_TOTP_FAILED`, HTTP 5xx, or a request that got no
+  response; PIN / Client ID / 409 / no-session errors are reported at once).
+- `DeviceTotpReconnectGate.finishPendingEnrollment` — still started after the
+  account refresh and never awaited — now waits for the next window, retries
+  once one window later, and shows "<Broker> quick reconnect enabled" when the
+  keychain save completes. Breadcrumb `enrollment_retry` added.
+- Backend pairing: ccxt-india `d9997fcd` (deployed 2026-09-29) logs the failing
+  assisted-login step + broker message and returns
+  `FYERS_ASSISTED_<STEP>_FAILED`; Node passes `error_code` through.
+- Tests: `src/__tests__/utils/deviceTotpEnrollment.test.js` (code after the wait
+  always differs from the typed code at every offset in a window; retry
+  classification), contract assertions in `deviceTotpReconnect.contract.test.js`.
+- Files: `src/utils/deviceTotpEnrollment.js` (new),
+  `src/components/BrokerConnectionModal/DeviceTotpReconnectGate.js`, tests,
+  `android/app/build.gradle`, `docs/BROKER_CONNECTION.md`.
+
+## 2026-09-29 — Fyers quick-reconnect enrollment after the connect confirmation (Android 3.9.148)
+
+- 3.9.147 device test: Fyers connected, but `POST /api/device-totp-reconnect/fyers`
+  returned 400 "Saved FYERS app credentials are incomplete" and the
+  "Connected Successfully" alert covered the failure alert.
+- **Backend root cause (aq_backend `b72b4cf`, deployed to tidi
+  2026-09-29):** the route read only `broker_connect_redirect_url` /
+  `REACT_APP_BROKER_CONNECT_REDIRECT_URL` from `appadvisors`; tenants store
+  `brokerConnectRedirectUrl`, so `redirectUri` was empty. Recorded in
+  `prod-alphaquark-github/docs/BROKER_CONNECTION_ARCHITECTURE.md` changelog.
+- **App:** `DeviceTotpReconnectGate.handleFallbackSuccess` no longer awaits
+  `finishPendingEnrollment()`. Enrollment performs a second server-side broker
+  login (up to 60 s) and now starts after the account refresh, so it cannot
+  delay the connect confirmation and its failure alert is shown after (not
+  under) the success alert. Breadcrumbs `enrollment_saved` / `enrollment_failed`.
+- Measured 3.9.147 connect timeline (nginx, testaccount): Fyers login page
+  ~36 s (customer), `PUT /api/user/connect-broker` ~23 s (its `/fyers/funds`
+  credential check via ccxt), post-connect refresh ~7 s.
+- Android advanced to `versionCode 148`, `versionName 3.9.148`.
+- Files: `src/components/BrokerConnectionModal/DeviceTotpReconnectGate.js`,
+  `src/__tests__/deviceTotpReconnect.contract.test.js`, `android/app/build.gradle`,
+  `docs/BROKER_CONNECTION.md`.
+
+## 2026-09-29 — device TOTP Hermes crash + Fyers connect stability (Android 3.9.147)
+
+- Android advanced to `versionCode 147`, `versionName 3.9.147`.
+- **Crash fix (root cause of the "tap Connect → app crashes" report):**
+  `otplib` v13 constructs `new TextDecoder()` at module load. Hermes has no
+  `TextDecoder`, so the first device-TOTP check (`isValidDeviceTotpSeed`, on
+  submit) threw `ReferenceError: Property 'TextDecoder' doesn't exist` as a
+  fatal module-load error. v13 also no longer exports the v12 `authenticator`
+  object, so generate/check could never have worked on device. Jest mocked
+  `otplib`, which hid both problems. Introduced to the reconnect gate by the
+  2026-09-27 device-TOTP commit; the Kotak/AliceBlue assisted-login paths
+  (2026-08-29) imported the same object.
+  - New `src/utils/totp.js`: RFC 6238 TOTP (SHA-1, 6 digits, 30 s, ±1 step on
+    check) on `crypto-js` HMAC-SHA1, with the same `authenticator.generate` /
+    `check` API.
+  - `DeviceTotpVault.js`, `DeviceBrokerLoginVault.js`, `ArihantConnectModal.js`,
+    `AliceBlueConnect.js` import it instead of `otplib`; their tests mock the
+    new module.
+  - `src/__tests__/utils/totp.test.js`: unmocked RFC 6238 Appendix B vectors,
+    drift window, invalid-secret rejection, and a guard that fails if any file
+    under `src/` imports `otplib` again. (`test/broker-qa/generateAuth.js`
+    still uses `otplib` under Node and is not part of the app bundle.)
+- **Typing lag / broken "next":** `BrokerConnectStepperSheet` fields accept an
+  opt-in `uncontrolled` flag (seeded via `defaultValue`, never rewritten from
+  JS) plus `autoCapitalize`. `DeviceTotpReconnectGate` marks all of its
+  normalised fields (App ID, Secret ID, TOTP secret, current TOTP, Client ID,
+  PIN/MPIN/password) uncontrolled, so a busy JS thread can no longer fight the
+  keyboard. Fields are keyed by label rather than index so conditional fields
+  cannot inherit another field's native text.
+- **One account fetch, one surface:** the gate hands its already-fetched user
+  id to `FyersConnect` (`initialUserId`), so the staged hand-off no longer
+  downloads the full user document again. While the staged hand-off runs,
+  `FyersConnect` shows a single light "Opening Fyers login…" overlay instead of
+  a second credential sheet and `EgressIpCallout`. Any failure (update-key,
+  redirect mismatch, token exchange, user-id load, renderer loss) sets
+  `autoStartFailed` and reveals the normal credential sheet for a retry.
+- **WebView renderer loss:** `FyersConnectUI` wires `onRenderProcessGone` /
+  `onContentProcessDidTerminate`; the WebView is unmounted, a
+  `webview_render_process_gone` breadcrumb is recorded, and the customer is
+  asked to retry instead of being left on a dead WebView.
+- Not addressed here: a separate pre-existing `Maximum update depth exceeded`
+  crash (VirtualizedList `_updateCellsToRender` loop) reported on 3.9.142 and
+  earlier; needs a symbolicated trace from a build with a matching source map.
+- Files: `src/utils/totp.js` (new), `src/services/DeviceTotpVault.js`,
+  `src/services/DeviceBrokerLoginVault.js`,
+  `src/components/BrokerConnectionModal/{ArihantConnectModal,AliceBlueConnect,DeviceTotpReconnectGate,FyersConnect,BrokerConnectStepperSheet}.js`,
+  `src/UIComponents/BrokerConnectionUI/FyersConnectUI.js`, tests
+  (`utils/totp`, `services/DeviceTotpVault`, `services/DeviceBrokerLoginVault`,
+  `deviceTotpReconnect.contract`, `fyersConnectCrashContract`),
+  `android/app/build.gradle`, `docs/BROKER_CONNECTION.md`.
+
+## 2026-09-29 — host-owned Fyers reconnect hardening (Android 3.9.146)
+
+- Android advanced to `versionCode 146`, `versionName 3.9.146`.
+- Fyers biometric/TOTP remains host-owned and bypasses the Phase 3 SDK. A
+  refreshed server slot status plus credential-readiness classifier now chooses
+  quick reconnect versus OAuth; array-entry presence alone is no longer enough.
+- Fyers OAuth sends only `{uid, authCode}` to Node's new
+  `/api/fyers/exchange-token`; Node owns stored App ID/Secret resolution and the
+  ccxt exchange. The SDK contract was not changed.
+- Both broker-disconnect surfaces verify through a fresh server read that the
+  slot is absent before reporting success, and then clear the phone-owned
+  quick-reconnect vaults. The brokerless path no longer continues after a
+  failed delete.
+- The Fyers modal retains only the account id, makes token exchange idempotent,
+  ignores malformed OAuth query segments, removes URL/full-object logging, and
+  emits credential-free Crashlytics breadcrumbs for branch, WebView,
+  refresh/reconciliation and memory-warning phases.
+- Added reconnect-state, disconnect-ordering, OAuth-crash and host-exchange
+  contract tests.
+
+## 2026-09-29 — consolidate and stabilize Fyers first connect
+
+- Android advanced to `versionCode 145`, `versionName 3.9.145`.
+- First-time Fyers quick-reconnect setup now collects the activated App ID,
+  Secret ID, TOTP secret/current code, Client ID and PIN in one scrollable
+  form. A valid submission proceeds directly to the existing Fyers OAuth page;
+  customers are no longer sent through a duplicate API-credential form.
+- Invalid TOTP input now renders a persistent inline error and preserves every
+  entered value. It no longer opens the animated global alert above the broker
+  overlay and active Android keyboard, which was the reported crash path.
+- The long setup guide and dedicated-IP card stay memoized while typing, and
+  keyboard **Next** advances focus to the following field.
+- Normal Fyers login and flag-off tenants retain the existing App ID/Secret ID
+  form followed by Fyers-hosted login.
+
+## 2026-09-29 — prioritize orders in the rebalance review
+
+- Android advanced to `versionCode 144`, `versionName 3.9.144` for this test
+  release. Production OTA v96 targets only this exact version so the older
+  open-ended OTA cannot restore the outdated Fyers screen.
+- The mobile rebalance review now gives the order list the available height;
+  funding explanations scroll after the orders instead of permanently
+  occupying the footer above the action button.
+- The low-funds explanation is collapsed to a one-line summary with an
+  accessible **View details** control. Removed the redundant **Funding used
+  for this calculation** strip and duplicate additional-funds note.
+- Calculation, consent, broker authorization, order quantities and submission
+  behavior are unchanged. Contract and component tests pin the compact state.
+
+## 2026-09-29 — keep enabled Fyers onboarding from silently falling back
+
+- Fyers remains controlled by the advisor's `deviceTotpEnabled` flag; flag-off
+  tenants continue to see only the normal App ID/Secret flow.
+- For an enabled tenant, a transient account-slot lookup failure no longer
+  silently skips the combined TOTP/Algo-app setup screen. **Continue with
+  normal Fyers login** remains the explicit bypass.
+
+## 2026-09-29 — ship Fyers combined onboarding without OTA downgrade
+
+- Android advanced to `versionCode 143`, `versionName 3.9.143` for the
+  verified Fyers first-connect build.
+- The matching Production OTA is scoped to `3.9.143`, so the older open-ended
+  v93 device-TOTP baseline cannot replace the APK's newer combined Fyers
+  setup. First connect retains the mandatory Algo-app/static-IP guidance and
+  the optional phone-protected quick-reconnect enrolment on the same journey.
+
+## 2026-09-29 — require execution identity before pending reconciliation
+
+- Fixed a calculated-but-unsubmitted model rebalance being trapped behind
+  **Broker confirmation is still pending** when the subscriber summary was
+  stale and no order had reached the broker.
+- **Check Order Status** now resolves the current recommendation's exact
+  Publisher/advice attempt before enrolling the status queue. Holdings
+  snapshots, another recommendation's history, and identity-free summaries
+  cannot create a model-only reconciliation request.
+- If no execution identity exists, the app asks authoritative `get-repair`
+  recovery. A verified empty result returns to the read-only Calculate/review
+  flow; unknown or genuinely in-flight broker evidence remains fail-closed.
+
+## 2026-09-29 — restore seamless Zerodha SELL → BUY continuation
+
+- Fixed the post-SELL affordability request sending all MARKET BUY legs with
+  `price: 0`, which caused the backend to withhold all eight valid buys.
+  Mobile now refreshes broker-safe prices before refit and uses the same price
+  snapshot for Kite protection; the calculated price is retained for durable
+  recovery.
+- A pending BUY continuation is cleared only after Kite opens. Refused or
+  empty refits stay retryable and can no longer become a false **Portfolio is
+  Already Aligned** acknowledgement.
+- Removed the nested result modal that had no Continue callback, and accepted
+  all verified refit outcomes (`applied`, `not_needed`, and
+  `attempt_with_shortfall`). Added focused 1-SELL/8-BUY regression coverage.
+
+## 2026-09-29 — prevent false alignment after Groww sell-authorization retry
+
+- An empty calculation returned immediately after the manual Groww sell-
+  authorization acknowledgement now renders **Sell Authorization Still
+  Pending**, rather than **Your Portfolio is Already Aligned**.
+- The recovery calculation carries UI-only broker and portfolio correlation
+  metadata so only this ambiguous retry uses the pending state; ordinary
+  authoritative zero-trade calculations keep the aligned-success screen.
+- Pending sell-authorization results cannot auto-mark the model-portfolio
+  subscriber execution as `executed`. The screen also makes clear that
+  dependent buy orders remain unplaced until the sells complete, with a direct
+  **Retry Sell Authorization** action.
+
+## 2026-09-29 — combine Fyers onboarding with optional quick reconnect
+
+- First-time Fyers connection now shows the developer-portal instructions,
+  redirect URL, dedicated-static-IP acknowledgement and activated **Algo
+  trading app** requirements together with the optional device-TOTP quick-
+  reconnect enrolment. Normal Fyers login remains an explicit alternative.
+- Both first-time choices continue to App ID/Secret entry and OAuth. Device
+  values remain in memory and are saved to the biometric keychain only after
+  normal authorization and assisted verification succeed; existing connected
+  customers retain the compact quick-reconnect path.
+- Corrected the shared Fyers setup guide: customers must open and activate the
+  Fyers-provided **Algo trading app**, not create an ordinary app that cannot
+  place orders.
+
+## 2026-09-29 — restore broker-evidence Fyers sell authorization
+
+- Removed Fyers' cached `is_authorized_for_sell` pre-block from model-portfolio
+  execution. Rebalance, recommendation and cart paths now open
+  `FyersTpinModal` only for explicit `SELL_AUTH_REQUIRED` or
+  `SELL_AUTH_REVOKED`; generic rejection, empty response and transport errors
+  keep their actual error/result.
+- Fyers `submit-holdings` CDSL HTML now uses the shared app-root broker WebView
+  and hides the native information sheet while open, preventing the TPIN form
+  from appearing behind another Android Modal or losing keyboard focus.
+- Added strict sell-auth classification tests and updated the device-TOTP
+  routing contract test.
+
+## 2026-09-29 — design-boundary audit covers dynamic import()
+
+- `scripts/audit-design-boundaries.js` now treats `import()` as a dependency
+  edge: a string or template-literal specifier is resolved like a static import
+  and a non-literal `import(expr)` is rejected. `designs/**` still has 0
+  violations. Pinned by `src/__tests__/designBoundaryDynamicImport.test.js`.
+- `docs/VARIANT_CREATION_GUIDE.md` documents how to change a variant's design
+  or UX end to end (decision table, boundary rule, `literals.json`, Maestro
+  baselines); `CLAUDE.md` and `AGENTS.md` point design work at it.
+
+## 2026-09-28 — clarify AliceBlue partner-login reconnect choices
+
+- AliceBlue now uses the existing `deviceTotpEnabled` advisor switch for its
+  phone-protected reconnect choice; the older AliceBlue-only flag remains a
+  backwards-compatible alias.
+- The customer sees two explicit variants of the same AlphaQuark partner
+  connection: **Quick Reconnect on this phone**, which biometric-unlocks and
+  fills the AliceBlue WebView with device-only credentials/TOTP, and **Normal
+  AliceBlue Login**, which leaves the broker page entirely manual.
+- Neither choice creates a customer Individual Trader API app or asks for a
+  customer static IP. Flag-off tenants retain the existing manual partner
+  OAuth flow unchanged.
+
+## 2026-09-28 — separate Dhan Partner Login and Direct API quick reconnect
+
+- Added an explicit Dhan mode choice behind the existing
+  `deviceTotpEnabled` flag. Partner Login stays on Dhan's browser consent and
+  needs no customer static-IP setup; flag-off tenants retain that exact flow.
+- Added Direct API setup with customer Client ID, phone-protected TOTP seed and
+  PIN, and a hard unique-dedicated-IPv6 claim/whitelist gate. The seed never
+  leaves the phone and the broker access token never returns to it.
+- Direct reconnect now runs only for a broker slot marked `direct_api`; legacy
+  or partner Dhan slots cannot enter the PIN+TOTP endpoint. Missing or inactive
+  dedicated egress fails closed for token minting and order routing.
+- Dhan Direct uses the free per-customer Route64 IPv6 path and never opens the
+  dedicated-IPv4 subscription/paywall.
+- Android advanced to `versionCode 142`, `versionName 3.9.142`.
+
+## 2026-09-28 — expose Fyers/Zerodha phone-TOTP enrolment on first connect
+
+- Fixed the first-connect gate that immediately diverted Fyers and Zerodha to
+  their ordinary broker modal before the device-TOTP option could render.
+- Opt-in enrolment now carries the locally validated TOTP seed and broker login
+  factors through the existing first OAuth/login authorization, verifies them
+  against the assisted reconnect endpoint with a newly generated code, and
+  writes them to the device-only biometric keychain only after success. The
+  Base32 seed is never sent to the server.
+- Normal login remains an explicit bypass, and `deviceTotpEnabled=false`
+  retains the previous flow. A failed assisted verification does not undo the
+  already successful broker connection; it reports that only quick reconnect
+  was not saved.
+- Documented why Dhan's partner flow uses the organisation's whitelisted
+  server egress and therefore must not ask each app customer for a static IP.
+
+## 2026-09-28 — restore B2B style enforcement after SELL-retry UI
+
+- `src/UIComponents/RebalanceAdvicesUI/RebalanceCard.js` now renders the new
+  SELL-retry badge with `useTokens()` color and typography instead of adding
+  hardcoded `#FFFFFF` and `Satoshi-Medium` literals.
+- This restores `audit:styles` to its enforced 4,409-color / 1,147-font
+  baseline so future regressions fail CI again. There is no execution or copy
+  change; the same server-owned SELL-first recovery state is displayed.
+- Updated the Model Portfolio and design-system architecture/audit/progress
+  documents because RebalanceCard is both an MP runtime and a pending Phase I
+  design-system surface.
+
+## 2026-09-28 — bound heavy-account recommendation startup payloads
+
+- AlphaB2B now sends the advisor-configured 1–365 day visibility window to
+  `trade-reco-for-user`, allowing the backend to remove irrelevant historical
+  recommendation bulk before it crosses the React Native bridge. Older live
+  and executed positions remain included by the backend safety exemption.
+- Recommendation requests now use generation tokens and an account/advisor/
+  window single-flight key. Superseded responses cannot overwrite a newly
+  selected account, and account changes clear the previous in-memory feed
+  without deleting server history or device-encrypted broker credentials.
+- Added regression coverage for bounded requests and stale-response guards.
+
+## 2026-09-28 — cross-broker status and Dhan recovery parity
+
+- Unified Flutter/RN order classification across COMPLETE/EXECUTED/TRADED and
+  quantity-evidence contradictions.
+- Added the Node installed-client status projection and canonical ccxt polling
+  adapters for Upstox, ICICI and all supported brokers.
+- Replaced the Dhan protected-reservation Retry Calculation loop with an
+  actionable review-other-portfolio contract.
+- Aligned Tidi funds verification with AlphaB2B's broker-specific ccxt routes.
+
+## 2026-09-28 — SELL-first model-portfolio recovery
+
+Terminal rejected/cancelled SELLs now open an explicit SELL-only Repair review;
+completed SELLs cannot replay and BUYs wait for the retry outcome. The order
+status modal labels this action `Review failed SELL` and explains the ordering.
+Status refresh carries exact attempt identity when available, while the backend
+rejects orphan identity-less compatibility enrollment instead of creating a
+cross-broker blocker.
+
+## 2026-09-28 — complete the B2B presentation boundary
+
+The final 55 forbidden design-to-app import edges were removed. Home,
+Bespoke Performance, MP Invest, Portfolio, Knowledge Hub, authentication,
+stock/basket, Live Room, NBA, Portfolio Health and Portfolio Summary now use
+src-owned containers or injected slots. Payment, Digio, SDK, navigation,
+storage, context and service behavior stays outside `designs/**`.
+
+`NbaBannerContainer`, `PortfolioHealthSheetContainer`, and
+`PortfolioSummaryCardContainer` now own their respective state/effects and
+feed pure registered presentations. The registered `AumPerformanceCard` was
+deleted after confirming it had no runtime consumer. The boundary scanner now
+discovers zero violations; focused design/portfolio contracts pass 19/19 and
+targeted lint passes.
+
+The visible app shell is also variant-controlled: `Navigation.js` keeps route
+state and tab events, while registered `shell.AppHeader` and
+`shell.MainTabBar` presentations own the toolbar/tab layout, icons and visual
+treatment. A fork can replace either shell key without copying navigation
+logic.
+
+CI now also runs `npm run audit:styles`. Its initial production-source ratchet
+records 4,409 hex-color literals and 1,147 font-family literals outside the
+token implementation; either count can only decrease. This prevents new style
+debt while the existing files are converted in reviewed batches.
+
+## 2026-09-28 — shrink design-boundary debt and stabilize config consumers
+
+The Home container now owns the provisional-entitlement request, tenant/auth
+headers, dismissal state and date formatting. `ProvisionalBanner` receives only
+display-ready `viewModel` data and a dismiss action. The dormant
+`PortfolioTransitionCard` likewise receives its feature gate as a prop instead
+of reading `ConfigContext`. These extractions reduce the enforced design
+boundary baseline from 62 edges in 17 files to 55 edges in 15 files.
+
+`ConfigContext.Provider` now memoizes its public value on `[config, loading]`.
+This removes the token-hook regression where an unrelated provider render
+created a new config object and rebuilt all six token families for every
+consumer. Focused contract coverage pins that provider behavior.
+
+## 2026-09-27 — make the complete B2B design variant contract executable
+
+Design variants now control all six token families. `useTokens()` resolves the
+active variant's color, asset, spacing, typography, radius and shadow builders,
+with per-family fallback to the default implementation. The design resolver
+also preserves and merges the `sdk` component map; `SdkProviderRoot` forwards
+that map to `AqSdkProvider`, so the three SDK trade-overlay slots currently
+consumed by the installed SDK can be replaced from `designs/<variant>/sdk/`.
+All registered variants are validated against the default component/SDK key
+floor and fail fast on private contract keys.
+
+A new `npm run audit:design` CI gate enforces the presentation-only boundary.
+It blocks new network, storage, Firebase, navigation, context, service or
+src-owned UI imports under `designs/**`, and it fails when a resolved exception
+is not removed from the exact baseline. The initial baseline exposes 62
+existing forbidden import edges across 17 files; those remain documented
+extraction debt rather than being treated as clean presentation. Focused Jest
+coverage pins token/component/SDK fallback, key validation and provider wiring.
+
+Files touched (and why):
+
+- Runtime contract: `src/theme/useTokens.js`, `src/design/resolveDesign.js`,
+  `src/design/useDesign.js`, `src/sdk/SdkProviderRoot.js`, and
+  `designs/default/index.js` (all-family token resolution, SDK-map resolution,
+  provider passthrough, and accurate slot-floor comment).
+- Enforcement: `scripts/audit-design-boundaries.js`,
+  `scripts/design-boundary-baseline.json`,
+  `src/__tests__/designVariantContract.test.js`, `package.json`, and
+  `.github/workflows/lint-imports.yml` (local/CI contract gates).
+- Required documentation: `docs/DESIGN_SYSTEM_ARCHITECTURE.md`,
+  `docs/DESIGN_COMPONENT_AUDIT.md`, `docs/DESIGN_MIGRATION_PROGRESS.md`,
+  `docs/SDK_DESIGN_PASSTHROUGH.md`, `docs/VARIANT_CREATION_GUIDE.md`, and this
+  `docs/CHANGELOG.md` entry (live behavior, debt baseline, active/pending SDK
+  slot status, and the corrected variant recipe).
+
+## 2026-09-27 — re-enable IIFL with customer-owned direct API credentials
+
+IIFL is restored to the broker picker using the same direct Individual Trader
+API model as web. The app now tells the customer to register the exact
+displayed redirect URL and whitelist the exact displayed Route64 IPv6 in the
+IIFL developer portal, collects their App Key/App Secret, AES-wraps both, and
+uses Node `/api/iifl/update-key` to obtain the broker login URL. The WebView
+only accepts the configured callback; Node `/api/iifl/exchange` supplies the
+stored App Secret server-side, and `/api/user/connect-broker` persists the live
+session in the normal MongoDB broker record. Saved direct credentials support
+the required daily browser re-login through `/api/iifl/reauth-url`.
+
+The IIFL picker/support registry, guide, IPv6 gate, order-book and cancel
+routing, token-expiry reconnect behavior, callback parser, manual test plan,
+and focused Jest coverage were updated together. IIFL stays in the Phase 3
+legacy fallback because the current SDK schema models a different
+credentials/TOTP product; this is now a working correctness fallback, not an
+unavailable broker. Corresponding production prerequisites were delivered in
+Node backend `6c30f2d`, ccxt-india `672996fec`, and web `e7cd1e25e`.
+
+Focused verification: IIFL callback parser, broker availability, order-book
+and cancellation routing, and broker trade-flow contract suites (130 tests)
+passed before final callback-origin hardening; the release build verification
+is recorded with the APK handoff.
+
+## 2026-09-25 — prevent hidden bottom tabs reacting to broker OTP keyboards
+
+The second Crashlytics event came from Android 3.9.132 during the Alice Blue
+OTP flow. Its exact release source map resolved `handleKeyboardShow` to React
+Navigation's bottom-tab keyboard hook. The Home tab navigator remains mounted
+behind stack-level broker screens, and the library installed keyboard listeners
+even though this app keeps its tab bar visible when a keyboard opens.
+
+Android 3.9.133 explicitly keeps `tabBarHideOnKeyboard` disabled and carries a
+durable package patch that skips the keyboard subscription in that mode. Broker
+OTP keyboards therefore cannot update the hidden tab bar. A source contract
+guards both the app option and the dependency patch.
+
+## 2026-09-25 — stop MarketIndices' unused clock from crashing broker screens
+
+Crashlytics identified the physical-device process closure on Android 3.9.131
+as React's `Maximum update depth exceeded`, not a FYERS or native WebView
+failure. Symbolicating the exact release bundle mapped the fatal state update
+to `MarketIndices.js`: an unused five-second clock forced toolbar renders while
+the Manage Connections transition was updating the surrounding screen. The
+unused clock state and interval are removed in Android 3.9.132; market prices
+continue to update through their WebSocket and REST fallback paths.
+
+## 2026-09-25 — add Crashlytics diagnostics for FYERS OAuth crashes
+
+Android 3.9.131 adds Firebase Crashlytics after a physical-device report that
+the app process closed on the FYERS OTP page. Reports are correlated with the
+authenticated Firebase UID and a credential-free breadcrumb marks entry into
+the broker OAuth WebView; email addresses, API credentials, passwords, OTPs,
+OAuth codes and access tokens are not recorded by this instrumentation.
+
+Crashlytics JavaScript-fatal capture and release collection are enabled while
+debug-build collection remains disabled. The native Gradle plugin is included,
+so this diagnostic capability ships in the APK and is not dependent on OTA.
+
+## 2026-09-24 — link distinct standalone exit deliveries to their entries
+
+Standalone manager exits now pair through the API's canonical position identity
+(`positionAdviceRecoId` / `sourceAdviceRecoId`) rather than assuming the exit
+reuses the entry's `advice_reco_id`. This preserves the legacy same-ID fallback
+and prevents an unfilled entry from remaining actionable after a distinct-ID
+full-close delivery. Backend `positionStatus` remains authoritative for whether
+an executed holding is open or closed.
+
+## 2026-09-24 — sign the app and Live Activity as separate targets
+
+The TestFlight workflow now maps independent App Store provisioning profiles
+to the app and embedded Live Activity extension. The previous command forced
+the main app's profile (`in.alphaquark.alphapro`) onto the extension
+(`in.alphaquark.alphapro.TradeLiveActivity`), so Xcode correctly rejected the
+archive. CI keeps the existing app profile and uses the App Store Connect API
+to download or create the extension profile, then signs both targets with the
+installed distribution certificate.
+
+## 2026-09-24 — align iOS minimum with signed OTA runtime
+
+The iOS app and test targets now declare iOS 15.5, matching the minimum
+required by `@revopush/react-native-code-push` and its CodePush pod. The first
+2.5 TestFlight run reached a macOS runner after billing was restored, then
+failed during a clean `pod install` because the project still advertised iOS
+13.4. The Podfile now pins 15.5 explicitly so React Native's lower template
+default cannot reintroduce the mismatch. Live Activity targets remain at 16.1.
+
+## 2026-09-23 — pin OTA delivery to Android 3.9.130 and iOS 2.5
+
+The OTA scripts now explicitly target the new native baselines. Signed,
+mandatory Production packages were built from clean source \`2b6acce\` and SDK
+\`6554c15\`: AlphaPro-Android v89 targets \`3.9.130\`, and AlphaPro-iOS v58 targets
+\`2.5\`. This prevents the new iOS binary from acquiring the older pre-hotfix
+2.4 package and makes the crash-safe current source the OTA head.
+
+## 2026-09-23 — revert unsafe Android native-modal unmounting
+
+Production Android OTA v85 changed several shared modal roots from mounted and
+hidden to conditionally mounted. The two 3.9.129 devices that activated it—one
+on Android 12 and one on Android 16—then reported the app process closing on
+Home, Broker, More, Manage Connections, broker edit, re-auth and reconnect
+paths. OTA v86 retained the same modal lifecycle code.
+
+The experiment is reverted: `ProfileModal`, broker disconnect/manage modals and
+the holdings-migration modal remain mounted and use their existing visibility
+props. This preserves v86's unrelated tenant-aware model-portfolio loading fix
+while removing the only runtime change shared by all affected screens. A source
+contract test prevents the conditional native-root teardown from returning.
+The unauthenticated Android 16 launch path remains stable; authenticated
+physical-device verification is still required for the affected screens.
+
+## 2026-09-23 — closed native modals no longer consume navigation taps (reverted)
+
+Android users reported that Manage Connections, Profile and unrelated menu
+rows sometimes required more than one tap. The controls were correctly wired;
+the suspected cause was dormant native modal windows retained behind the active
+screen on the React Native New Architecture path.
+
+OTA v85 made `ProfileModal` unmount after its exit animation and made broker
+disconnect/manage and holdings-migration sheets mount only while visible.
+Component and source-contract checks passed, but the two Android devices that
+activated the release subsequently reported process-level crashes. The change
+was therefore reverted by the hotfix above.
+
+## 2026-09-22 — Groww rebalance no longer stalls before broker dispatch
+
+Production traces for `vanshjaiswal505@gmail.com` showed repeated repair reads
+but no SDK `place-rebalance` or ccxt `process-trade` request after Place Order.
+The reviewed prices were never sent to Groww. The RN SDK opened a second
+sell-authorization gate using empty local user details; behind the app's Step 3
+modal, that unresolved gate appeared only as a permanent spinner.
+
+The SDK now reads the authenticated sell-auth endpoint immediately before an
+equity-delivery SELL. Authorized Groww sessions proceed; unavailable or
+unauthorized verdicts fail closed to the host without a hidden modal.
+`RebalanceModal` also routes SDK rejection through its common error handler, so
+loading clears without a duplicate legacy placement. Android is now 3.9.126
+(versionCode 126); SDK commit `6a9f018`. The signed release passed APK
+signature verification and the mandatory arm64 16 KB ELF-alignment check:
+`android/app/build/outputs/apk/release/AlphaB2B-3.9.126-groww-rebalance.apk`
+(SHA-256
+`c8dcf48149d44e1e874ab0021650aa39040bb21f1f7f8e1a714c5a935f8b26c3`).
+
+## 2026-09-22 — Zerodha SDK WebView recovery and safe profile-modal close
+
+AlphaB2B 3.9.125 hardens two independent Android failure surfaces reported on
+the same build. Zerodha is routed through the SDK in this configuration. The RN
+SDK broker WebView (`alphaquark-mobile-sdk` `8e67bad`) now replaces a native view after Android renderer loss (or
+Apple content-process termination); one repeat failure returns to the existing
+retry UI instead of leaving a dead login surface. The profile screen remains a
+normal app path: after save it dismisses the keyboard/modal first, refreshes the
+parent only from `onModalHide`, and uses the centralized tenant header on both
+read and write.
+
+Runtime files: SDK `WebViewBrokerAuthFlow.tsx`, `ProfileModal.js`, and Android
+`build.gradle`. Regression coverage: SDK `zerodhaWebViewSession.spec.ts` and app
+`ProfileModal.phone.test.js`. Phase 3 architecture/audit/progress and broker
+connection architecture were updated in the same change. Android advances to
+3.9.125 (versionCode 125). The signed release build passed, including the
+mandatory 16 KB arm64 ELF-alignment check; artifact:
+`android/app/build/outputs/apk/release/AlphaB2B-3.9.125-zerodha-profile-stability.apk`
+(SHA-256
+`a55fb046d049a88923744f52dc2bd7f90932f92ea9ec4f2c0737e9d3e2e0b948`).
+
+## 2026-09-22 — Kotak reconnect no longer breaks after a successful rebalance login
+
+The rebalance screen opens broker reconnect through the app-root
+`ModalManager`, whose shared close contract is `onClose`. `KotakModal` still
+unconditionally called the older inline-only `setShowKotakModal` callback after
+the backend had accepted the credentials. That callback is absent in the root
+path, so a successful Kotak reconnect threw `setShowKotakModal is not a
+function` while completing the flow.
+
+Kotak now closes through `onClose`, with the old setter retained only as a
+guarded fallback for legacy inline callers. The general broker-modal setter is
+guarded as well. A source contract test pins the root/rebalance invocation
+shape. Android advances to 3.9.124 (versionCode 124) for the replacement APK.
+The signed release build passed; artifact:
+`android/app/build/outputs/apk/release/AlphaB2B-3.9.124-kotak-reconnect.apk`
+(SHA-256
+`827fce6125005626cdd63dd20467694694aafd85da2b949bcd5dfc07b4e4786c`).
+
+## 2026-09-18 — An unconfirmed order says so, instead of "Unknown"
+
+`getOrderStatusDisplay` mapped an empty status to "Unknown" and returned the raw
+string for `needs_reconciliation`. Both are "we cannot tell" states — one a row
+nothing has stamped, the other a leg the stale-order sweeper could not find in
+the broker order book — and neither is a broker status we failed to classify.
+prod/arulthakur's five orphan rows all rendered as "Unknown".
+
+An empty status now reads "Not sent" and `needs_reconciliation` reads "Awaiting
+broker confirmation", through the shared vocabulary
+(`contracts/order-status-vocabulary.json`, now v2: a `needs_reconciliation`
+alias, its label, and a `not_sent` label). `normalizeOrderStatus` gains the
+`needs_reconciliation` canonical; status counts are unchanged, because it was
+already falling through to unknown.
+
+Pinned in `src/__tests__/utils/orderStatusUtils.test.js`.
+
+## 2026-09-18 — A refused Publisher attempt voids the order rows it wrote
+
+`update-reco-with-zerodha-model-pf` writes one `traderecos` row per leg before
+anything authorises the attempt. When the intent is refused those rows are left
+behind with no status and no owner — never in a `publisher_intent`, never
+reserved, no record-back — so nothing will ever update them and the Orders screen
+shows them as "Unknown". prod/arulthakur's refused second launch left five
+(2026-09-17).
+
+Each publisher modal now voids its own attempt's rows when the intent is
+refused, through the new `voidUnsentPublisherRecos` (`utils/brokerPublisher.js`)
+and `POST /zerodha/model-portfolio/void-reco-with-zerodha-model-pf`. Only legs
+carrying a recorded `tradeId` are sent, so a multi-batch run only ever voids the
+batch that was refused.
+
+It voids only on a **definitive 4xx** refusal. A timeout or a 5xx is an
+ambiguous outcome — the plan may be consumed and the basket may still open — so
+those are left alone, matching the rule `publisherBatchDispatch` already applies
+past `authorize()`. The server guards the other half: it voids a row only if it
+carries neither a status nor an `orderId`.
+
+Pinned by `src/__tests__/utils/voidUnsentPublisherRecos.test.js`.
+
+## 2026-09-18 — The Place Order gate now covers every publisher modal
+
+Alphab2bapp `87f7a8c` stopped the review modal re-offering Place Order while the
+Kite run's record-back and order-book check were still running — but only in
+`RebalanceModal`. `MPReviewTradeModal` and `UserStrategySubscribeModal` still
+re-opened as fully placeable screens in that window, which is how
+prod/arulthakur's second launch minted seven orphan `traderecos` rows
+(2026-09-17).
+
+Both now derive `awaitingOrderStatus` the same way
+(`zerodhaStatus === 'success' && !isWebView`), disable their place-order control
+behind it, and say "Checking your order status" instead of silently looking
+untouched. Closing the modal still ends the wait.
+
+`UserStrategySubscribeModal` never cleared `zerodhaStatus`, so the gate would
+have latched on permanently; its order-book check now clears it, matching the
+other two modals.
+
+Pinned by `src/__tests__/publisherPlaceOrderGate.test.js` across all three
+modals — derivation, disabled control, explanation, and no latch.
+
+## 2026-09-18 — Publisher polling waits for the whole basket, not the first order
+
+Every consumer of `useKitePublisherPolling` closes the Kite WebView when the hook
+settles, and the hook settled on the **first** new order it saw. Kite submits
+basket items one at a time, about a second apart, so a multi-leg basket was torn
+down with the remaining legs still queued on the Kite page — they never reached
+Zerodha at all, not even as rejections.
+
+prod/arulthakur, 2026-09-17: a 7-leg basket against ₹1,000.20 of live cash
+reached Zerodha as two orders (RTNPOWER, JPPOWER, both filled). The other five
+legs left five status-less `traderecos` rows behind, which the Orders screen
+renders as "Unknown". Record in
+`prod-alphaquark-github/docs/server_issues/2026-09-17-arul-zerodha-orders-unknown-orphan-rows.md`.
+
+`start({ expectedOrderCount })` now tells the hook how many legs the open basket
+carries; a tick that sees fewer new orders than that is progress, not
+settlement, and polling continues. Omitting the count keeps the legacy
+first-order behaviour for callers that cannot count their legs.
+`RebalanceModal`, `MPReviewTradeModal` and `ReviewZerodhaTradeModal` pass their
+basket size.
+
+A partial basket is not blocked by the rule. Kite's redirect still stops the
+poll when it finishes the basket page — a refused or unwritable leg does not
+stop Kite redirecting — and otherwise the 90-second timeout settles it. That
+timeout now carries the orders the poll did see; the reason stays `timeout`
+(unconfirmed), so nothing is promoted to success, but the legs that did reach
+the broker are no longer discarded as an empty result.
+
+Pinned by `src/__tests__/useKitePublisherPolling.test.js` — whole-basket wait,
+legacy fallback, timeout as unconfirmed carrying partial evidence,
+stop-after-settle, and caller wiring.
+The suite now pins `NODE_ENV` in `src/__tests__/setup.js`: React strips `act()`
+from its production build, and a shell exporting `NODE_ENV=production` made five
+hook-rendering suites fail.
+
+## 2026-09-18 — SELL to the held exchange; the Order Status modal shows un-sent legs
+
+Two defects on prod/testaccount, record in
+`prod-alphaquark-github/docs/server_issues/2026-09-18-publisher-sell-exchange-and-hidden-unsent-leg.md`.
+
+**Kite rejected SELL VIKASECO 82 with "Holding quantity: 0".** The book and the
+broker snapshot both said 82 — settled, unpledged, authorised — held as **BSE**.
+`/zerodha/convert-symbol` maps `VIKASECO-EQ` to NSE (its -EQ series) and both
+`convertToBasketItem` and `resolveZerodhaSymbol` let that override the leg's
+exchange, so the basket went to Kite as NSE / CNC, where the holding is 0. A
+SELL now keeps the leg's exchange when it has one (the calculator resolved it
+from the broker's holdings row); a BUY keeps the scripmaster's listing, which is
+what makes Kite accept BE / BSE-only scrips.
+
+**"1 completed · 0 need action" while the card said Awaiting Broker Confirmation.**
+A two-leg Publisher attempt where Kite took ZEELEARN and never took TAPARIA.
+`extractLatestModelPortfolioOrderAttempt` ranked candidates newest-first, and
+record-back writes `advice_executed` seconds after the intent with only the
+accepted leg, so it outranked the attempt and TAPARIA's NOT SENT row was hidden.
+The server attaches `publisherAttempt` only while it still needs verification or
+Repair — it is the current action and now wins outright. The card was right.
+
+## 2026-09-18 — Keep the investment amount the customer stated at purchase
+
+The amount a customer types at plan purchase is only durable once it reaches
+`model_portfolio_user.subscription_amount_raw`. It was not getting there, so the
+first rebalance asked for it again — and on the Razorpay one-time path the app
+threw right after a successful payment, which the caller rendered as
+**"Payment Failed — The payment could not be processed. Please try again."** to a
+customer whose money had just been taken.
+
+One cause, two shapes.
+
+`MPInvestNowModal.js` read `latestRebalance.model_Id` unguarded while building
+the `insert-user-doc` payload. `latestRebalance` is `useState(null)` in both
+`ModelPortfolioScreen` and `MPPerformanceScreen`, and is only set when
+`portfolioData.model.rebalanceHistory.length > 0` — false for a model with no
+rebalance yet, and unreachable when the pre-purchase strategy fetch returns
+access-restricted and takes the `catch` early return. On a first purchase it was
+`null`, the read threw, and the throw aborted the function before either
+`insert-user-doc` call.
+
+The same class was fixed in `PaymentHandle.js` on 2026-07-07 (arfs) by gating
+the write on `if (strategyDetails && latestRebalance)`. That removes the throw,
+but when `latestRebalance` is null it also skips the write — so the crash became
+a silent data loss on exactly the same first-purchase case.
+
+`model_id` is optional to `/rebalance/insert-user-doc`: the server scopes by
+model name when it is absent, and only reads `model_id` when `adviceDetail` is
+present, which it is not here. So both sites are now `if (strategyDetails)` plus
+`latestRebalance?.model_Id` — the write always runs, and nothing can throw.
+
+Pinned by `src/__tests__/investmentAmountPersistence.test.js`, which fails if
+either shape returns.
+
+Server side, `insert_user_doc` now also carries the stated amount onto the new
+book when a broker is connected, so an amount stated before connecting a broker
+survives that fork. Full record:
+`prod-alphaquark-github/docs/server_issues/2026-09-18-stated-investment-lost-at-purchase.md`.
+
+## 2026-09-18 — Anchor the reduce-to-funded write to the reviewed plan
+
+`POST /rebalance/reduce-to-funded` accepts an optional `plan_id`. When the plan
+still verifies server-side (same email / broker / model / `model_id`, state
+`pending_acceptance`, and a cash figure the backend itself marked
+`continuity_estimate`) the server honours that plan's frozen
+`reducedAuthorizedAmount` instead of re-reading live cash — the path that exists
+precisely because, in ccxt's own words, "re-reading account cash here can race
+broker settlement and silently change the requested total".
+
+None of the three call sites were sending it, so all took the live-cash re-read:
+a settlement or deposit landing between calculate and the tap made the button
+quote one number while the account got another. All three now send
+`rebalanceContract.plan.id` — the same contract object the funding-consent panel
+the customer is looking at came from:
+
+- `src/screens/Rebalance/RebalanceReviewScreen.js`
+- `src/components/AdviceScreenComponents/RebalanceModal.js`
+- `src/components/ModelPortfolioComponents/MPReviewTradeModal.js`
+
+Anything that does not verify falls back to the live read exactly as before, so
+this only narrows a divergence — it grants nothing new and changes no gate.
+Pinned by `every reduce-to-funded write is anchored to the reviewed plan` in
+`src/__tests__/utils/rebalanceFundingConsentParity.test.js`.
+
+Ported from tidi_new `b94a9a6` (Flutter), which found the gap.
+
+## 2026-09-17 — Fix: the verification read was hitting the wrong tenant
+
+Same-day follow-up to "Verify broker persistence before resuming rebalance".
+
+- The verification `getUser` sent `X-Advisor-Subdomain` from
+  `getAdvisorSubdomain()` (the **build variant**) instead of
+  `REACT_APP_HEADER_NAME` (the **tenant**). On AlphaPro those differ
+  (`alphaquark` vs `prod`), so the read landed in the wrong tenant, found no
+  account, and blocked **every** SDK-lane broker connect with
+  `BROKER_PERSISTENCE_NOT_VERIFIED`. Markup / MoneyMan / zamzam were unaffected
+  only because their variant and tenant happen to be the same string.
+- The guard now fails CLOSED only on positive contradiction (a record was read
+  and names a different broker). When the account simply cannot be read it fails
+  OPEN and logs, so a read-path defect can never again block connects fleet-wide.
+- Account reconciliation is likewise suppressed only by a contradiction, not by
+  an unreadable record — restoring pre-gate behaviour in that case.
+- New tests pin both rules: tenant-header precedence, and fail-open on an
+  unreadable/missing record vs. hard-block on a contradicting one.
+
+## 2026-09-17 — Verify broker persistence before resuming rebalance
+
+- All SDK-routed broker connections now reread the canonical user record (one
+  bounded retry) before success, modal dismissal, reconciliation, or rebalance
+  continuation. A failed read keeps the SDK sheet open and actionable.
+- A broker WebView login is no longer treated as a saved connection. Failed
+  verification never replays a single-use OAuth token — only the idempotent
+  read is retried.
+- Account reconciliation is enqueued only for a verified broker, so an unsaved
+  selection cannot reconcile the account onto the wrong broker.
+- Legacy-lane modals are only partially covered: they dismiss before the
+  callback runs, so verification suppresses their success toast but cannot hold
+  the sheet open. Their blocking guarantee remains the rebalance-entry gate.
+  See BROKER_CONNECTION.md § Per-lane strength.
+- Rebalance no longer opens the all-broker picker merely because the canonical
+  user refresh failed; it preserves the account choice and asks the user to
+  retry.
+
+## 2026-09-17 — Stop post-login broker loops and unblock CDSL authorization
+
+- A same-broker OAuth reconnect now retries the funds preflight when `getUser`
+  returns a newer access token. This prevents a valid Zerodha reconnect from
+  being judged using the stale token captured before login.
+- The DDPI information sheet now hides while the app-root CDSL WebView is
+  active. Android native `Modal` windows can no longer cover the TPIN/OTP page.
+
+## 2026-09-16 — Preserve CDSL TPIN keyboard focus
+
+- Froze the active native WebView configuration and memoized its root host.
+  Live price/order-state renders can no longer refresh native props and dismiss
+  the keyboard on the redirected CDSL TPIN page.
+
+## 2026-09-15 — Keep Zerodha Publisher keyboard focused
+
+- The first OTA mounted the absolute overlay inside the portfolio screen, so
+  its bounds could clip the Zerodha page into the feed. That label was disabled.
+  The corrected implementation mounts `PublisherWebViewHost` once in `App.js`
+  above Navigation; flow components now only launch/update that root host.
+- Moved every Place Order Publisher WebView out of React Native's native
+  `Modal` dialog into `PublisherWebViewOverlay`, matching the working Broker
+  Settings touch/focus architecture.
+- Kept the Publisher HTML source memoized and added a regression contract that
+  requires the overlay branch to run before any native Modal is mounted.
+- Mirrored the same implementation and test in Markup and MoneyMan.
+
+## 2026-09-13 — Document server-owned cross-flow recovery
+
+- Documented that EOD and a later authenticated broker reconnect perform
+  read-only recovery for model portfolios, single/bespoke orders and baskets.
+- Clarified that the app never automatically resubmits an uncertain quantity;
+  it refreshes the backend-owned recovery and current-plan status.
+- Recorded the frozen-plan price boundary: live price affects new calculation
+  and BUY affordability, not order identity, completion or retry authority.
+- Recorded basket broker-unit/manual-lot normalization and the separation of
+  positively identified non-model recovery from model-portfolio admission.
+- Documentation only; no native bundle, dependency or OTA payload changed.
+
+## 2026-09-07 — Publisher recovery parity with Markup
+
+Ported Markup fddc60ef4 with tenant configuration preserved. Runtime files:
+`src/utils/publisherAcknowledgement.js`, `src/utils/portfolioResume.js`,
+`src/screens/TradeContext.js`, and `RebalanceModal.js`, `MPReviewTradeModal.js`,
+`UserStrategySubscribeModal.js` in their existing component directories.
+Updated/new tests: `src/__tests__/utils/publisherAcknowledgement.test.js`,
+`portfolioResume.test.js`, `publisherPlanLifecycle.test.js` in that directory.
+Documentation: MODEL_PORTFOLIO_ARCHITECTURE, SDK_ORCHESTRATION_AUDIT,
+SDK_ORCHESTRATION_PHASES, APP_ARCHITECTURE, REBALANCING, OTA_RELEASE and this log.
+Why: permit slower durable acknowledgement, reject denied activation, and
+refresh server-provided Retry/Repair status when returning to the app without
+assuming completion or automatically resubmitting trades.
+
+## 2026-09-05 — wait for recalculation after reducing model allocation
+
+- The funding-shortfall Reduce action now shows a blocking loading state and
+  waits for the replacement Calculate response. The old frozen basket cannot
+  be acted on after the amount write supersedes it.
+- Added a source-level regression test for the lifecycle.
+
+## 2026-09-05 — fix(modelpf): synchronize repair and execution safety
+
+- Retry now stays on broker-authoritative repair discovery: pending evidence
+  waits, failed legs open Repair, explicit allocation drift opens Calculate,
+  and a live-verified complete result clears stale partial status.
+- Calculation warnings, minimums, funding data, and order rows are scoped to
+  the selected model, so one portfolio cannot inherit another portfolio's
+  low-balance banner.
+- A verified zero-trade result is persisted as executed; its follow-up refresh
+  runs in the background so the card spinner does not wait on redundant reads.
+- All Holdings is broker-only and retains a clearly labelled last verified
+  snapshot behind an explicit Ignore action when the broker is disconnected.
+- Zerodha mixed model-portfolio orders are fail-closed and SELL-first across
+  both publisher entry points. The compact portfolio view and Android holdings
+  editor focus/crash fixes are also synchronized across all three white labels.
+- Android advanced to 3.9.112 (versionCode 112) for the review APK.
+
+
+## 2026-09-04 — fix(performance): stop app request floods
+
+- Stabilized the model-portfolio `TabView` scene component identities so
+  unrelated context/quote refreshes no longer remount the Performance chart.
+- Added bounded five-minute in-flight/result deduplication for the portfolio
+  history and Nifty benchmark requests.
+- This closes the native-app bursts observed against CCXT (hundreds of paired
+  Performance requests per minute) while preserving refresh on a later visit.
+
+Files: `src/screens/Drawer/MPPerformanceScreen.js`,
+`src/components/ModelPortfolioComponents/PerformanceChart.js`,
+`src/__tests__/moneymanTesterRegression.test.js`.
+
+## 2026-09-04 — fix(model portfolio): fail closed on unsafe Zerodha phase order
+
+- Both supported model-portfolio Publisher entry points now assert at the final
+  mobile boundary that mixed Zerodha orders are split into homogeneous batches
+  and every SELL batch precedes BUY.
+- A future mapper or input-order regression stops before Kite instead of
+  placing only the BUY portion. The existing live DDPI/CDSL authorization gate
+  remains mandatory before equity SELL placement.
+- This is the current-client backstop for the legacy Test Account incident;
+  exact no-id SELL recovery remains server-owned and broker-verified.
+
+## 2026-09-04 — fix(recommendations): authenticate the first customer fetch
+
+- The mobile recommendation feed now waits for a Firebase ID token and sends
+  it with `/api/user/trade-reco-for-user`, matching the protected web request.
+- A rejected unauthenticated cold-start request can no longer be mistaken for
+  a successful empty recommendation list. Customer email query values are
+  URL-encoded.
+
+Files: `src/screens/TradeContext.js`, `src/utils/customerAuthHeaders.js`,
+`src/__tests__/customerRecommendationAuth.test.js`.
+
+## 2026-09-04 — fix(recommendations): recover missing and stale LTPs
+
+- Recommendation cards now authenticate their shared market-data connection,
+  join symbol rooms immediately after subscription, and accept both gateway
+  quote event formats.
+- Missing quotes recover through REST after four seconds, while open screens
+  refresh stale quotes every 30 seconds.
+- Symbols and exchanges are normalized before subscription so equity and
+  derivative recommendations use the correct feed rooms.
+
+Files: `src/components/AdviceScreenComponents/DynamicText/WebSocketManager.js`,
+`src/__tests__/recommendationMarketDataRecovery.test.js`,
+`src/__tests__/recommendationWebSocketManager.test.js`.
+
+## 2026-09-03 — fix(home): recover market-index cards after socket/config races
+
+- The Home market-summary hook no longer waits for advisor configuration
+  before registering the public NIFTY, SENSEX and BANKNIFTY subscriptions.
+- Added the same batched REST LTP safety net already used by the legacy market
+  index component: hydrate immediately and refresh every 30 seconds while live
+  WebSocket ticks remain authoritative between polls.
+- This prevents all three header cards remaining on `Loading...` after a cold
+  start, delayed tenant config, missed socket snapshot, or reconnect race.
+
+Files: `src/screens/Home/hooks/useHomeMarketSummary.js`,
+`src/__tests__/homeMarketSummaryRecovery.test.js`.
+
+## 2026-09-03 — fix(modelpf): web/mobile execution parity
+
+- Broker-verified frozen legs now open direct Repair without depending on the
+  mutable subscriber-status projection; partial rows with unresolved evidence
+  refresh Repair and cannot fall through to a fresh Calculate.
+- Allocation-only drift is retained as an explicit Review Allocation action.
+- Mixed Zerodha Publisher runs now persist a durable attempt, confirm the sell
+  phase from broker truth, expose remaining buy continuation, and keep the
+  subscriber status pending until the terminal batch completes.
+- Current-holdings confirmation reads the canonical holdings snapshot rather
+  than the latest execution attempt. Post-order funds bypass stale cache, and
+  derivative Publisher quantities expand lots to exchange units.
+- Published as a mandatory 100% Production OTA for AlphaPro-Android 3.9.108.
+
+
+## 2026-09-03 — fix(recommendations): keep closed stocks out of Home
+
+- A terminal single-stock row now exits recommendation partitioning before
+  active checks. Legacy rows retaining `trade_place_status: recommend` after
+  `closurestatus: fullclose` can no longer reappear on Home.
+
+Files: `src/screens/TradeContext.js`,
+`src/__tests__/tradeContextRefresh.test.js`, `docs/APP_ARCHITECTURE.md`,
+`docs/CHANGELOG.md`.
+
+## 2026-09-03 — fix(android): keep Metro available in debug builds
+
+- CodePush now owns bundle resolution only in release builds; debug APKs use
+  Metro instead of requesting an `index.android.bundle` they do not package.
+- Production direct-refresh, signed OTA and embedded fallback behavior are
+  unchanged.
+- A debug-only network-security overlay permits Metro's local HTTP endpoint;
+  production remains HTTPS-only.
+- The JavaScript entry point also bypasses the CodePush wrapper in debug, so
+  an installed OTA cannot restart a Metro session into a production bundle.
+- Expanded the OTA policy regression test and architecture documentation.
+
+Files: `index.js`, `android/app/src/main/java/com/alphaquark/MainApplication.kt`,
+`android/app/src/debug/res/xml/network_security_config.xml`,
+`src/__tests__/otaInstallPolicy.test.js`, `docs/OTA_RELEASE.md`,
+`docs/APP_ARCHITECTURE.md`, `docs/CHANGELOG.md`.
+
+## 2026-09-02 — build(android): AlphaB2B 3.9.108 OTA baseline
+
+- Increased the Play Store release to `versionName 3.9.108` and
+  `versionCode 108`.
+- Matched Markup's launch-safe direct-refresh policy: optional OTA releases
+  activate on the next restart, while mandatory signed releases activate
+  immediately during app launch and never interrupt an active trading session.
+- Added regression coverage for the three OTA install-policy settings and
+  documented the native/OTA compatibility boundary.
+
+Files: `android/app/build.gradle`, `index.js`,
+`src/__tests__/otaInstallPolicy.test.js`, `docs/OTA_RELEASE.md`,
+`docs/APP_ARCHITECTURE.md`, `docs/CHANGELOG.md`.
+
+## 2026-09-01 — ops(prod): repair testaccount Zerodha rebalance status
+
+- Corrected only `testaccount@gmail.com`'s Zerodha subscriber execution for
+  `agust test portfolio` (`model_Id
+  4249c9e9-b29b-447e-b0bd-3b85ce877c6b`) from the false terminal `executed`
+  state to `pending`. The latest Publisher episode contains four unconfirmed
+  order rows and the status-check queue is still active, so `pending` prevents
+  both the incorrect grey “No actions required” state and an unsafe duplicate
+  placement.
+- Saved the complete pre-change model document in prod
+  `incident_model_portfolio_backups` as `_id
+  6a9682586df53892cd0f1c05`; post-write read-back confirmed the scoped Zerodha
+  row is `pending`. Other users, portfolios and broker execution rows were not
+  changed.
+
+## 2026-09-01 — fix(rebalance): keep failed Zerodha Publisher runs actionable
+
+- Rebalance cards no longer trust a stale `subscriberExecution.status =
+  executed` when broker reconciliation contains failed legs.
+- A rejected or incomplete Zerodha Publisher run now shows the enabled Repair
+  action instead of greying the portfolio with “No actions required.”
+- Added regression coverage for an executed summary paired with a rejected
+  NIFTY leg.
+
+Files: `src/UIComponents/RebalanceAdvicesUI/RebalanceCard.js`,
+`src/__tests__/utils/rebalanceCardGate.test.js`,
+`docs/MODEL_PORTFOLIO_ARCHITECTURE.md`, `docs/CHANGELOG.md`.
+
+## 2026-09-01 — fix(zerodha): expand basket lots at Publisher handoff
+
+- Fixed Zerodha derivative basket closure/placement so the review multiplier
+  remains a lot count while Kite receives `lots × lot size` as its exchange
+  quantity (for example, 17 NIFTY lots become 1,105, not 17 or 1).
+- Added a fallback to the original basket advice when the compact review row
+  omits `Lots` or the symbol-lot-size lookup does not match, preventing Kite's
+  “quantity should be multiple of 65” rejection.
+- Equity quantities remain unchanged. Added regression coverage for NFO and
+  NSE conversion.
+
+Files: `src/components/ReviewZerodhaTradeModal.js`,
+`src/utils/basketUtils.js`, `src/__tests__/utils/brokerPublisher.test.js`,
+`docs/APP_ARCHITECTURE.md`, `docs/CHANGELOG.md`.
+
+## 2026-09-01 — Direct, clearer rebalance review
+
+- Repair/retry now opens the frozen order review directly after live broker
+  preflight; it no longer routes through preference or holdings-edit screens.
+- Normal accept also skips the obsolete customer “2% vs full” choice because
+  calculator mode is advisor-owned.
+- Review screens show a three-value funding summary, suppress zero-fund notes,
+  and explicitly show the total order count plus a scroll cue when more rows
+  are below the viewport.
+- Broker switching now refreshes user/broker identity before forcing funds and
+  Home datasets. Order completion forces cash immediately and once more after
+  two seconds, preventing the Broker screen from reusing a pre-trade balance.
+- Background Repair discovery remains fail-closed and retries silently, but no
+  longer shows a page-level “Could not verify previous execution” banner when
+  there is no customer action. Verified repair legs still surface normally.
+
+## 2026-08-28 — SDK public documentation completion
+
+- Added durable acceptance/status/cancel examples and exact 202/409/paused host behavior.
+- Distinguished registered, configured, operationally approved and live/UAT-certified brokers.
+- Recorded specialized model-portfolio, Zerodha Publisher, GTT and manual boundaries.
+- Recorded the signed OTA/store release requirement and the temporary need for scoped broker dispatch allowlists until backend `certified` metadata is enforced.
+
+## 2026-08-28 — SDK durable acceptance and lost-response safety
+
+- AlphaB2B no longer falls back to legacy placement after an SDK attempt.
+- RN and Flutter return paused `checking_broker` for ambiguous placement, with resubmission forbidden; eligible bespoke API orders use durable async acceptance plus job status/cancellation.
+- Model-portfolio helpers remain guarded, now SELL-before-BUY with immutable plan metadata and stable `clientAdviceId` forwarded as CCXT `attempt_id`.
+- Zerodha Publisher remains on its dedicated Publisher workflow.
+
+## 2026-08-28 — RB-01 Android parity and strict broker lifecycle automation
+
+- ModifyInvestment1 now uses the same feature flag, reconciled-current-value
+  endpoint, reliability fallback and Full Amount semantics as web.
+- Added pure investment parity fixtures and stable investment input/confirm IDs.
+- Broker cards/status/actions and pending-order labels expose stable test IDs.
+- Detox broker checks now fail when required controls are absent.
+- Android order normalization consumes the synchronized versioned vocabulary
+  shared with web, Node and Python notification code.
+
+Files: ConfigContext, ModifyInvestment1, investmentUpdate, orderStatusUtils,
+broker/order UI components, Detox broker spec, the shared status contract,
+tests and architecture docs.
+
+## 2026-08-28 — fix(baskets): canonical visibility and exact cancellation
+
+- Expanded active basket recognition across requested/ordered/AM/AMO,
+  confirmation, partial-fill, manual-placement and reconciliation aliases;
+  unknown nonempty broker states fail visible.
+- Pending cancellation now requires broker + basket + trade + order identity
+  and prefers the broker persisted on the leg over the current selection.
+- Added rendered-component cancellation tests; the backend compatibility
+  projection protects older installs that do not contain this UI.
+
+
+## 2026-08-28 — feat(baskets): cancel pending broker order before retry
+
+- Production hotfix: aq_backend `19d19a2` restored
+  `/api/user/trade-reco-for-user` after the rejected-basket visibility change
+  referenced an undefined local variable and caused the whole feed request to
+  fail. No recommendation data was lost.
+- `src/UIComponents/StockAdvicesUI/BasketCard.js` now lists active
+  pending/open/placed basket legs and offers per-order cancellation with a
+  confirmation prompt; missing order identity stays blocked.
+- `src/screens/TradeContext.js` retains in-flight basket legs in Active
+  Recommendations. Previously those statuses fell through its allowlist, so a
+  placement attempt could incorrectly produce the empty-recommendations screen.
+- `src/services/OrderService.js` calls the idempotent ccxt
+  `POST /orders/mutate` boundary with exact basket, leg, and broker order
+  identity. An acknowledgement keeps retry blocked until terminal read-back.
+- Added service and basket-flow regression coverage. Updated
+  `docs/BASKETS_ARCHITECTURE.md`; the existing production backend mutation
+  contract is unchanged.
+
+---
+
+## 2026-08-28 — refactor(zerodha): canonicalize Publisher basket items
+
+- `src/utils/brokerPublisher.js` is now the final payload builder for all six
+  native Publisher call sites, including exchange-aware product mapping and
+  protected-price normalization.
+- `ReviewZerodhaTradeModal`, `RebalanceModal`, `MPReviewTradeModal`,
+  `IgnoreTradesScreen`, `StockAdvices` and `AddtoCartModal` retain their
+  flow-specific symbol, lot, price and batching work, then pass it as explicit
+  overrides to `convertToBasketItem()` instead of duplicating Kite mappings.
+- Added converter/caller regression coverage and updated `APP_ARCHITECTURE.md`,
+  `REBALANCING.md` and `MODEL_PORTFOLIO_ARCHITECTURE.md`. No backend contract,
+  record-back flow or rebalance sequencing changed.
+
+---
+
+## 2026-08-28 — fix(home): preserve loading fail-safes in shared mobile source
+
+- Model-portfolio entitlement lookups now time out after 10 seconds and always
+  resolve their readiness gate when identity/config is unavailable, preventing
+  an indefinite **"Checking status…"** state.
+- Public market-index subscriptions and previous-close requests no longer wait
+  for cached advisor config; the build-pinned subdomain is the fallback.
+- Added regression checks so downstream white-label syncs retain these guards.
+
+---
+
+## 2026-08-27 — fix(mp): do not show completed holdings as an empty portfolio
+
+- Ported the subscribed-portfolio refresh/loading correction shared with the
+  Markup fork to `AfterSubscriptionScreen`.
+- Summary values render neutral placeholders and the Holdings tab confirms the
+  latest broker snapshot instead of flashing ₹0 / “No Holdings Yet.”
+- Holdings refresh on screen focus and `HOLDINGS_REFRESH`.
+- Added `resolveModelPortfolioHoldings`: populated CCXT executions remain
+  authoritative, but an empty CCXT array can no longer hide a valid
+  subscription-backend execution mirror.
+- Added five source-resolution regression cases; no order-placement or backend
+  mutation behavior changed.
+
+All notable changes to the AlphaQuark B2B Mobile App are documented here.
+
+- Customers can now whitelist a second static IP (OVH Mumbai) beside their
+  existing one, so orders keep flowing if one network fails (Route64 was
+  down ~2 h on 2026-10-16). Shown only when the backend returns `ovh_address`
+  (`egress_frontend_config.ovh_secondary_enabled`); older builds unaffected.
+- Connect sheet shows both IPs in role order; Manage Connections shows an
+  "Add a backup IP" card per broker with "I've added it"
+  (`POST /egress/ovh/added`); the backend confirms it on the next order.
+- Files: `src/components/BrokerConnectionModal/EgressIpCallout.js`
+  (`SecondStaticIp`, `markOvhAdded`, `fetchEgressEntry`),
+  `src/components/BrokerConnectionModal/BackupStaticIp.js` (new),
+  `src/screens/Home/ManageConnectionsModal.js`,
+  `src/__tests__/secondStaticIp.render.test.js`,
+  `docs/BROKER_CONNECTION.md` § "Second whitelisted IP (OVH Mumbai)".
+- Backend: ccxt-india `0481615b`, `a0ba0660` (deployed; design
+  `docs/EGRESS_OVH_PRIMARY_DESIGN.md`). Web: prod-alphaquark-github `3fb1d63b8`.
+- No OTA; ships with the next binary.
 - Ported from Alphab2bapp `5a7c14c1`.
 
 ## 2026-10-08 — Rebalance card names what its pending badge is waiting on
@@ -6840,3 +9162,65 @@ Each entry follows:
 ### Removed (removed features)
 ### Security (security-related changes)
 ```
+# 2026-08-29 — Fyers OAuth crash and stale low-balance retry
+
+- Restored the `StyleSheet` contract passed by `FyersConnect` to its OAuth
+  WebView. Both fresh connection and stored-credential reconnect previously
+  crashed when the flow changed from the credential step to the OAuth step
+  because the referenced `styles` identifier had been removed.
+- An empty rebalance whose positions were all skipped for low allocation is
+  now shown as **Investment Amount Needs Review**, never **Already Aligned**.
+- The paired ccxt-india change invalidates a reusable frozen calculation after
+  `subscriptionAmountRaw` is updated, so retrying with a higher amount cannot
+  receive the prior low-balance response from the two-minute idempotency cache.
+## [unreleased] - 2026-08-29 — fix(fyers): recover from redirect URL mismatch
+
+- Production evidence confirmed Fyers may render `redirectUrl mismatch`
+  when a customer's App ID has a developer-dashboard callback different from
+  the advisor callback sent by AlphaB2B.
+- The Fyers WebView now detects that broker-rendered error, exits the dead-end
+  OAuth screen, and shows the exact advisor callback the customer must
+  register before retrying. Detection covers both `redirectUrl` and
+  `redirect_uri` spellings and fires only once per attempt.
+- Android version advanced to `3.9.103` (`versionCode 103`).
+
+## [unreleased] - 2026-09-02 — fix(app): close model detail and entitlement gaps
+
+- Detail facts prefer the selected Plan's positive minimum investment and
+  authored risk profile, ignoring empty sparse projections.
+- Portfolio model holdings render only from TradeContext's completed canonical
+  entitlement snapshot and are cleared during loading or for non-subscribers.
+- Privacy and Terms screens consume normalized semantic config fields before
+  falling back to build configuration.
+- Added focused regression coverage for these contracts.
+# 2026-09-15 — Android 3.9.120 embedded execution recovery release
+
+- Embedded the current model-portfolio recovery, Zerodha Publisher handoff,
+  actionable `NOT_OBSERVED`, internal-ID removal, and completed-duplicate exit
+  fixes in the base Android binary.
+- Stabilized all four Kite Publisher WebView sources so live price/context
+  renders cannot dismiss the Android login keyboard, including the initial
+  allocation screen.
+- Bumped Android to `versionCode 120`, `versionName 3.9.120`, making fresh
+  installs safe before their first OTA check.
+- Embedded deferred OTA activation so a freshly installed app cannot be
+  force-restarted during authentication/configuration restoration and stranded
+  on Splash.
+## 2026-10-01 — Angel One first-connect primary ordering (backend-only)
+
+- `aq_backend_github/Routes/sdk/v1/connections.js`: Angel One's successful
+  pre-OAuth credential validation now returns `credentials_staged` instead of
+  trying to set a broker primary before an authenticated connection slot
+  exists. `/exchange-token` still persists and promotes fail-closed.
+- Updated `docs/PHASE3_ARCHITECTURE.md`, `docs/PHASE3_BROKER_AUDIT.md`,
+  `docs/PHASE3_PROGRESS.md`, and `docs/SELL_AUTH_ARCHITECTURE.md`.
+- Server-only fix: AlphaPro 3.9.169 remains the required APK; no OTA was
+  published and no new mobile artifact is required for this incident.
+
+# 2026-10-05 — Reviewed model-portfolio exits (source only)
+
+- `Terminate Portfolio` now opens the normal rebalance review with
+  `exitPortfolio:true` instead of simulating immediate success.
+- The review is labelled SELL-only, shows server prices/quantities and explains
+  that closure waits for broker confirmation while billing remains separate.
+- Source pushed for device testing; no OTA was published.

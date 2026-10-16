@@ -1,3 +1,215 @@
+## 2026-10-15 (e) — Android 3.9.192 (192) AlphaPro release APK: Base64 TOTP keys accepted
+
+- APK: `artifacts/AlphaB2B-3.9.192-release.apk` (versionCode 192), `release/deploy_5.1` at `fe1ade2d` + version bump, SDK `develop` `404f87d`.
+- Signed with the AlphaPro upload key (`my-key-alias-zamzam`, SHA-1 `C7:78:CD:34…A5:B4`); 16 KB aligned.
+- SHA-256 `c01e08f0d05cd75bfc25d9844ec10ba2d2e04243160b884c417ca3296d177719`.
+- Adds over 3.9.191: a TOTP secret pasted in Base64 is converted to Base32 (`f1e079ef`); rejected TOTP keys say why (`19984427`); plus `fe1ade2d` (rebalance held-buys wording, another session). Bundle checked: new messages present, old "Base32 uses letters A–Z" message gone.
+- Supersedes 3.9.191. Not published to Play or Revopush.
+
+## 2026-10-15 (d) — Android 3.9.191 (191) AlphaPro release APK: quick-reconnect fixes
+
+- APK: `artifacts/AlphaB2B-3.9.191-release.apk` (versionCode 191), `release/deploy_5.1` at `e9e9ba20` + version bump, SDK `develop` `404f87d`.
+- Signed with the AlphaPro upload key (`my-key-alias-zamzam`, SHA-1 `C7:78:CD:34…A5:B4`); 16 KB aligned.
+- SHA-256 `0b6b2d228aa7be66874dc5780bb7f494b26d2b693e4f5504b001b90cff0a1b0a`.
+- Adds over 3.9.190: Angel One phone-saved 4-digit MPIN kept on unlock (quick reconnect no longer fails "Client ID, MPIN and six-digit TOTP are required"); Groww "Reconnect with saved key" in one tap; Upstox empty TOTP box message. Server-side (live 06:33 UTC, no build needed): a phone quick reconnect makes that broker active.
+- Supersedes 3.9.190. Not published to Play or Revopush.
+
+## 2026-10-15 (c) — Android 3.9.190 (190) AlphaPro release APK: Groww phone save keeps the TOTP token
+
+- APK: `artifacts/AlphaB2B-3.9.190-release.apk` (versionCode 190), `release/deploy_5.1` at `20725ad0` + version bump, SDK `develop` `404f87d`.
+- Signed with the AlphaPro upload key (`my-key-alias-zamzam`, SHA-1 `C7:78:CD:34…A5:B4`); 16 KB aligned (0 unaligned arm64-v8a libs).
+- SHA-256 `7088dffa4ec355d9776f1b39a409fa687bf265687de3c117dc8dbe5c3d0b5af1`.
+- Adds over 3.9.189: Groww "Protect this TOTP key on this phone" stores the TOTP token with the secret; one unlock fills both; older secret-only records gain the token on the next successful connect. Bundle checked: contains the 189 face-unlock text, not the pre-189 text.
+- Supersedes 3.9.189. Not published to Play or Revopush.
+
+## 2026-10-15 (b) — Android 3.9.189 (189) AlphaPro release APK: face-unlock key fix
+
+- APK: `artifacts/AlphaB2B-3.9.189-release.apk` (versionCode 189), `release/deploy_5.1` at `c43c4ede` + version bump, SDK `develop` `404f87d`.
+- Signed with the AlphaPro upload key (`my-key-alias-zamzam`, SHA-1 `C7:78:CD:34…A5:B4`); 16 KB aligned (0 unaligned arm64-v8a libs).
+- SHA-256 `a10848114a3f63a4bbc269445525a2232c6f7f7f63be23e21c9667196a81be3e`.
+- Adds over 3.9.188: phone-saved broker keys (TOTP, API credentials, AliceBlue login) unlock with the same access rule they were saved with, so face unlock no longer passes the prompt and then fails with "Could not unlock key".
+- Supersedes 3.9.188. Not published to Play or Revopush.
+
+## 2026-10-15 — Android 3.9.188 (188) AlphaPro release APK: Groww "TOTP Token" label
+
+- APK: `artifacts/AlphaB2B-3.9.188-release.apk` (versionCode 188), `./gradlew assembleRelease` from `release/deploy_5.1` (`fd332d81` + version bump `bff32fcc`) with the SDK at `develop` `404f87d` (PR #8), lib rebuilt via `npm run ota:sdk:build`.
+- Signed with the AlphaPro upload key (`my-key-alias-zamzam`, SHA-1 `C7:78:CD:34…A5:B4`), explicit `-P` signing. 16 KB aligned (0 unaligned arm64-v8a libs).
+- SHA-256 `c2e08525368c4f26212a4b701411de6491ca0b8d144d9d5d6fa48fd3b6340137`.
+- Groww's first credential is labelled "TOTP Token" everywhere (SDK form, connect modal, guide "How to get your TOTP token", help, errors); the old "Groww API key from groww.in" prerequisite is gone from the bundle. Includes all 5.1 work since 3.9.187 (Reconnect has no side effects before login, holdings-review card, design tokens).
+- Not published to Play or Revopush.
+
+## 2026-10-13 (b) — AlphaPro Production Android v98 / iOS v64: Orders tab plan name + "Placed manually"
+
+Fix `09c032f4`: Orders tab shows each order's plan (backend `planName`,
+aq_backend `fe8e081d`) and `manually_placed` reads "Placed manually". Built
+from each live binary's exact source + only this commit; SDK pinned `fec0929`.
+
+| App | Deployment | Target | Source | SDK | Package hash | Mandatory |
+|---|---|---|---|---|---|---|
+| `AlphaPro-Android` | Staging v38 → Production **v98** | `3.9.187` | `34255b98` (`95e9ebaa` + `09c032f4`, branch `ota/orders-plan-3.9.187`) | `fec0929` | `65b96fa2e24fa5c38442e037883df05db6f9ca7b5e5a70f2316ee9f7260a994b` | no |
+| `AlphaPro-iOS` | Staging v32 → Production **v64** | `2.7` | `14b8d284` (`7af5154f` + `09c032f4`, branch `ota/orders-plan-ios-2.7`) | `fec0929` | `1e2f06c1dbc8331f1654f1d5ed0974b529584b2e12d50131ebf657072464ee73` | no |
+
+`--force` covered only the unchanged DDPI/onboarding assets. Cross-repo record:
+prod-alphaquark-github `docs/MOBILE_OTA_RELEASES.md`.
+
+## 2026-10-13 — AlphaPro-iOS Production v63: enforce the iOS update floor on 2.4/2.5
+
+**Why.** SupportAQ (`prod.appadvisors`) now sets iOS latest = minimum = `2.7`
+(App Store live 2026-10-12) and Android `3.9.187`. AlphaPro's update check
+required strict semver, and iOS reports a two-part version (`2.5`, `2.7`), so
+`semver.valid` was null and **no iOS user was ever prompted** (the 2.5 floor
+set on 09-24 never fired either). Fix `ec9c39a9` (release/deploy_5.1) ports
+Markup's numeric dot-sequence comparator (`src/utils/appVersion.js`).
+
+| App | Deployment | Target | Source | SDK | Package hash | Mandatory |
+|---|---|---|---|---|---|---|
+| `AlphaPro-iOS` | Production **v63** | `2.4 - 2.5` | `6a8f483e` (= v62 source `ddce059` + `ec9c39a9`, branch `ota/ios-version-gate-v62-baseline`) | `d2f7ad6` | `3d47121b483da4b3176d804d4402068f26a787f16e41fd1c31dc08961ada4886` | yes |
+
+- Scoped to the binaries that were running v62 without the `[aq-target]`
+  guard. Built from v62's exact source + SDK so nothing else changes for them;
+  installs on next cold start, after which `2.5 < 2.7` opens the
+  non-dismissible App Store prompt (App Store id `6757178187`, added to
+  `appadvisors` the same day).
+- Read-only `update_check` after publishing: `2.4`/`2.5` → v63 (mandatory);
+  `2.6`/`2.7` → v62 as before, which their `otaPolicy.js` rejects (no
+  `[aq-target ios 2.6|2.7]`). Android not touched — its versions are
+  three-part, the fix is a no-op there; the Android floor already works.
+- Bundle check: Hermes bundle contains `isAppVersionOlder` and the
+  `/^\d+(?:\.\d+)*$/` comparator; `EXECUTION_BUNDLE_VERSION` unchanged
+  (2026091102). `--force` covered only the unchanged DDPI/onboarding assets.
+- Native 2.7+ builds carry the fix from the next binary off `release/deploy_5.1`.
+
+## 2026-10-08 — Android 3.9.185 pending-badge wording + "Mark as placed" fill
+
+## 2026-10-12 — iOS TestFlight: AlphaPro 2.7 (24) and Markup 32 (33)
+
+Rebuild to carry the result-screen fix (`orderPlaceRows` — single-stock trades
+no longer show "No Orders Placed" after a fill). TestFlight only, not submitted
+for review; supersedes 2.6 (23) / 31 (32).
+
+| App | Version (build) | Source | Run | Delivery UUID |
+|---|---|---|---|---|
+| AlphaPro iOS | 2.7 (24) | Alphab2bapp `7af5154f` | 38211373293 | `1773e0c2-4ab5-46f8-b7f2-39ef69c65bb8` |
+| Markup iOS | 32 (33) | markup_app `723afaad4` (SDK `fec0929`) | 38211376465 | `6a1b5de0-58b1-49f8-a31b-2388df80ccfe` |
+
+Revopush: unchanged; no `[aq-target ios 2.7|32]` release exists. Nothing published.
+
+## 2026-10-12 (b) — Android AABs AlphaPro 3.9.187 (187) and Markup 1.0.86 (166)
+
+Rebuild of the morning AABs to include the result-screen fix (`orderPlaceRows`:
+single-stock trades no longer show "No Orders Placed" after a fill — see
+prod-alphaquark-github `docs/server_issues/2026-10-12-app-bespoke-no-orders-placed.md`).
+Same procedure as 3.9.186 / 1.0.85; those files are superseded (new codes in
+case they were already uploaded).
+
+| App | Version (code) | Source | Upload key | AAB SHA-256 |
+|---|---|---|---|---|
+| AlphaPro | 3.9.187 (187) | Alphab2bapp `95e9ebaa` | key A `C7:78:CD:34…` | `3088a88f501f758e67c26c61848c4244a504230cf3c244f7648b1ad90b35b150` |
+| Markup | 1.0.86 (166) | markup_app `a75a9ac89` | `markup-upload-key` `D5:58:35:36…` | `1ffeab3252bfadbb63f3649e5bfff42fedd3a89a447cef7ab9b5171a90cfb148` |
+
+Files: `Alphab2bapp/artifacts/AlphaPro-3.9.187-187-release.aab`,
+`markup_app/artifacts/Markup-1.0.86-166-release.aab`. 16 KB check: 0 unaligned
+64-bit libs, "ELF Verification Successful" (both). SDK `fec0929`. Revopush:
+unchanged; no `[aq-target android 3.9.187|1.0.86]` release exists, so no OTA can
+replace these bundles; nothing published or changed.
+
+## 2026-10-12 — Android AABs: AlphaPro 3.9.186 (186) and Markup 1.0.85 (165)
+
+Built locally (not uploaded to Play — handed over as files). Sequential,
+`taskset -c 0-11 ./gradlew bundleRelease --no-daemon --max-workers=4`, explicit
+`-PMYAPP_UPLOAD_STORE_FILE/-PMYAPP_UPLOAD_KEY_ALIAS`, clean worktrees beside each
+repo, SDK `develop` `fec0929` rebuilt first (`packages/rn` `tsc`).
+
+| App | Version (code) | Source | Upload key (verified) | AAB SHA-256 |
+|---|---|---|---|---|
+| AlphaPro `com.arpint.alphaquark` | 3.9.186 (186) | Alphab2bapp `9fd14ce2` | key A `my-key-alias-zamzam`, SHA-1 `C7:78:CD:34…A5:B4` | `ff81b629f4b634aaed98cf2fde8585662cd4a17d3947067b5e4f12a9c4ba52b2` |
+| Markup `com.aq.markup` | 1.0.85 (165) | markup_app `0ad77f49f` | `markup-upload-key`, SHA-1 `D5:58:35:36…B0:97` | `79dbe6699cc7892984c40b36792cbfc76b8650a81f9f80931ffa1b3a8f40e311` |
+
+Files: `Alphab2bapp/artifacts/AlphaPro-3.9.186-186-release.aab`,
+`markup_app/artifacts/Markup-1.0.85-165-release.aab`. Markup skips code 164 —
+Play production already has 1.0.84 (164) though the repo still said 1.0.83 (163).
+
+- **16 KB check:** `check_elf_alignment.sh` → 0 unaligned `arm64-v8a`/`x86_64`
+  libs in both, "ELF Verification Successful" (the old `libjingle_peerconnection_so`
+  WebRTC exception no longer appears).
+- AlphaPro manifest contains the new `app.alphaquark.in` `/api/redirect/prod~` +
+  `/api/redirect/prod.alphaquark.in` App Link filter.
+- Markup build needed its untracked `android/app/google-services.json`
+  (Firebase `markup-d381e`, package `com.aq.markup`) copied into the worktree.
+- **Revopush audit (read-only):** open-ended Android releases exist (AlphaPro
+  `>=3.9.129`, Markup `>=1.0.79`); none carries `[aq-target android 3.9.186]` /
+  `[aq-target android 1.0.85]`, so `otaPolicy.js` rejects them, and
+  `MainApplication.kt` clears retained CodePush updates on the versionCode change.
+  No OTA created, promoted, disabled or retargeted.
+
+## 2026-10-11 — iOS TestFlight: AlphaPro 2.6 (23) and Markup 31 (32)
+
+Uploaded via GitHub Actions `ios-build.yml` (TestFlight only — not submitted
+for App Store review).
+
+| App | Version (build) | Source | Run |
+|---|---|---|---|
+| AlphaPro iOS `in.alphaquark.alphapro` | 2.6 (23) | Alphab2bapp `dc35217c` (`release/deploy_5.1`), SDK `develop` | actions run 38123474077 |
+| Markup iOS `com.aq.markup` | 31 (32) | markup_app `4688f915c` (`main`), SDK `fec0929` | actions run 38123476005 (delivery `bcf5074b-82ad-478d-8e86-5b27602aea5e`) |
+
+Contents beyond 2.5 / 30: biometric one-tap execute, WhatsApp/Telegram execute
+links open the matching card, Apple hidden-email link + delete confirmation,
+email-change sends the verified sign-in; AlphaPro only: claims
+`app.alphaquark.in/api/redirect/prod~*` + `/api/redirect/prod.alphaquark.in`
+(`applinks:app.alphaquark.in`).
+
+Fixes needed to get here: org Actions were blocked by a failed card payment
+(every run `startup_failure` since 2026-10-08); AlphaPro clean `pod install`
+needed modular headers for FirebaseCoreExtension / FirebaseInstallations /
+GoogleDataTransport / nanopb (`dc35217c`); Markup Release signing had been
+switched to Automatic/"Apple Development" by `14df2ec8c` (no CI build since
+2026-09-30) — Release restored to Manual / iPhone Distribution with the CI
+profile UUIDs (`4688f915c`), Debug unchanged; Markup SDK pin moved from
+`116b092` (17 commits behind) to `fec0929`. prod `appadvisors.iosBundleId`
+corrected `com.arpint.alphaquark` → `in.alphaquark.alphapro` so the AASA matches.
+
+- **Revopush audit (read-only):** AlphaPro-iOS / Markup-iOS releases with
+  open-ended targets (`>=2.4`, `>=22`) exist, but none carries
+  `[aq-target ios 2.6]` / `[aq-target ios 31]`, so `otaPolicy.js` rejects them,
+  and iOS CodePush ignores retained packages from a different binary version.
+  No OTA was created, promoted, disabled or retargeted.
+- Next: install from TestFlight and verify on device — WhatsApp advice button
+  opens AlphaPro; an execute link lands on the right card; an expired session
+  goes straight to biometric.
+
+APK-only release on `release/deploy_5.1` at `87a06db7` plus the version bump.
+New since 3.9.184: `9d80b736` ("Mark as placed" records the real fill,
+cautionary rows only) and `87a06db7` (the rebalance card names what its pending
+badge is waiting on: "Portfolio holdings need review" / "Verification needs
+support" instead of "Awaiting Broker Confirmation" for non-broker blockers).
+The same day's server fixes (Dhan DH-906 refusal, HDFC egress, placement
+latency) are on tidi and need no binary.
+
+- **Revopush audit (read-only, 2026-10-08):** AlphaPro-Android Production has
+  enabled open-ended releases v88, v90, v91 and v93 (`>=3.9.129`); Staging has
+  v35–v37 (`>=3.9.129`). By range alone they would match 3.9.185, so they rely
+  on the client guards. Both are in this source: `src/utils/otaPolicy.js`
+  accepts only a package whose description carries
+  `[aq-target android 3.9.185]` (none does), and `MainApplication.kt` clears
+  retained CodePush updates on the `versionCode` change (184 → 185).
+- No OTA release was created, promoted, disabled, or retargeted.
+  `config.ota_android_target` left at `3.9.161`.
+- SDK bundle rebuilt first (`npm run ota:sdk:build`, `packages/rn/lib` at
+  2026-10-08 22:44 IST; SDK `develop` `94b76f2`, no RN source change since
+  3.9.184).
+- Signed APK: `artifacts/AlphaB2B-3.9.185-release.apk`
+- Package/version: `com.arpint.alphaquark`, `3.9.185`, code `185`
+- APK SHA-256: `d1d28db4158b55ceb69b6ba6c22fa7102360f4ed59a41035100212e621297306`
+- Size: `62,161,964` bytes; certificate SHA-1
+  `c778cd34b6c93a7d4440efa6594ad6d247b5a5b4`
+- Validation: release build successful (4m 40s; turbo off, `taskset -c 0-11`,
+  `--no-daemon --max-workers=4`, explicit `-P` signing); ARM64 ELF alignment
+  verified at 16 KB (`2**14`, "ELF Verification Successful"); embedded Hermes
+  bundle contains `pendingVerificationBadgeLabel`,
+  `pendingVerificationRecovery`, `confirmPlacement`, `openPlacementEditor`, the
+  new badge copy and the `[aq-target` guard; `tenant prod` / variant
+  `alphaquark` `.env`.
+
 ## 2026-10-02 — Android 3.9.178 MoneyMan broker tenant-session fix
 
 APK-only QA release. AlphaB2B could mint its SDK session while still on the

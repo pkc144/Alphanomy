@@ -1,5 +1,40 @@
 # Phase 3 — SDK-Primary Broker Connect: Architecture
 
+## 2026-10-05 — Angel One publisher callback contract
+
+Angel One personal publisher login uses encrypted `apiKey` plus plain
+`clientCode`, with no API Secret. `/update-credentials` stages that registration
+without creating/promoting a slot. `/login-url` selects the personal lane by
+API Key presence; `/exchange-token` saves the final publisher `auth_token`
+directly through the canonical `/api/user/connect-broker` before primary
+promotion. The canonical handler uses the staged personal registration under
+the tenant mode and mirrors both credential surfaces, preserving today's
+sell-auth via the existing helper. There is no publisher `generate-session` hop.
+Empty-body legacy shared-key clients retain their compatibility path.
+
+RN and Flutter intercept Angel One returns independently of the tenant landing
+URL, on exact HTTPS callbacks at `ccxtprod.alphaquark.in/angelone/callback`,
+`alphaquark.in/api/deploy/broker/callback`, and
+`prod.alphaquark.in/stock-recommendation`. A non-empty query/fragment
+`auth_token` is required; unrelated paths, lookalike hosts, userinfo and
+nonstandard ports are rejected. The matcher applies to personal and shared
+modes. Tokens and exchange bodies are not printed in SDK callback logs.
+
+Tidi `3.0.45+148` now follows the owner-approved September 29 personal-key
+rollout. Both selection and Manage Brokers always route Angel One through the
+SDK, with API Key / Client Code form, static-IP callout and copyable registered
+callback `https://ccxtprod.alphaquark.in/angelone/callback`. It no longer uses
+the dotenv shared-key default or autojumps with a saved legacy platform key.
+Post-connect persistence verification and model-portfolio housekeeping remain
+unchanged. No customer-data migration, trade routing or sell-auth policy change.
+
+Validation: 19 Tidi form/persistence tests, 2 callback tests on each SDK
+platform, 13 backend personal-key/staging/persistence tests, RN typecheck and
+signed release APK build pass. The release certificate matches the prior APK.
+Real-account login and funds/holdings/controlled-order certification remain
+pending. This evidence does not upgrade the broker's certification verdict.
+
+
 > **Source of truth for the Phase 3 SDK migration design.** Update this doc BEFORE writing the matching code change. See `CLAUDE.md § Phase 3 SDK Broker Migration — BLOCKING DOCUMENTATION REQUIREMENT`.
 
 ## Broker WebView renderer lifecycle (2026-09-22)
@@ -81,6 +116,14 @@ equivalent) for App ID/Secret entry and OAuth. The staged device values are
 persisted only after that authorization succeeds. This sequencing is made by
 the host and does not indicate SDK failure or legacy fallback.
 
+The feature flag is also the presentation gate. With
+`deviceTotpEnabled !== true`, no enrollment, biometric, saved-key or forget
+control is mounted. With it enabled, `DeviceTotpReconnectGate` and the native
+broker sheets choose among available/not-enrolled, saved/locked and unlocked
+states from device-vault plus server-slot evidence. `BrokerConnectStepperSheet`
+resolves those states through active tenant tokens; visual variants do not own
+or override the flag.
+
 **Re-auth pre-fill (no authUrl path).** When the user reconnects an already-connected broker, `Phase3SdkBrokerModal` fetches `userDetails` on mount, reads `connected_brokers[broker]` via `src/utils/brokerCredentials.js#getStoredBrokerCreds`, and builds a per-broker `schemaOverride` whose fields carry `initialValue`. The SDK form's `useState` initialiser merges these with the base schema and seeds the controllers. One unified path.
 
 **Re-auth direct-to-OAuth (post 2026-04-30).** For OAuth-flow brokers in `OAUTH_REAUTH_AUTOJUMP_BROKERS` (Zerodha, Upstox, ICICI Direct, Hdfc Securities, Motilal Oswal, Fyers, Dhan, AliceBlue, Axis Securities), the `Phase3SdkBrokerModal` skips `<BrokerCredentialForm>` entirely on re-auth and hands stored apiKey + secretKey + clientCode directly to `<WebViewBrokerAuthFlow>` as `extraExchangeBody`. The SDK's `/login-url` route mints a fresh OAuth URL from those creds, the WebView opens the broker's login page, and the user is usually one TOTP away from done — restoring the legacy `reauthConfig.authUrl` UX without the legacy round-trip. The auto-jump is single-fire (`reauthJumpFiredRef`) so `userDetails` refreshes during the WebView phase don't yank the user back.
@@ -100,7 +143,7 @@ The legacy pre-signed `authUrl` flow (`src/utils/reauthHelpers.js#handleSmartRea
 | Groww | apiKey + growwTotpSeed | `getStoredBrokerCreds` returns `{apiKey, totpToken}`; SDK schema field name is `growwTotpSeed`. Both stored encrypted; decrypted client-side. |
 | Motilal Oswal | apiKey + clientCode | Two-field schema. |
 | Fyers | apiKey + secretKey + clientCode | `getStoredBrokerCreds` already inverts Fyers' DB naming (DB.secretKey → modal.apiKey, DB.clientCode → modal.secretKey + modal.clientCode); see `brokerCredentials.js:46-53`. We pass through what it returns. |
-| Angel One (per-customer) | apiKey + secretKey + clientCode | Shared mode would need a different override (empty-fields like Zerodha); first-connect for shared advisors today still surfaces the per-customer form. Tracked as Known Gap. |
+| Angel One (per-customer) | apiKey + clientCode (no secret) | Shared mode would need a different override (empty-fields like Zerodha); first-connect for shared advisors today still surfaces the per-customer form. Tracked as Known Gap. |
 | Upstox / ICICI Direct / Hdfc Securities | apiKey + secretKey | Standard two-field credential schema. |
 | IIFL Securities | (legacy-owned App Key/App Secret) | Schema mismatch keeps IIFL on the deliberate fallback. The legacy modal uses Node `/api/iifl/reauth-url` to reuse saved direct credentials, so no SDK override applies. |
 
@@ -119,6 +162,18 @@ The legacy pre-signed `authUrl` flow (`src/utils/reauthHelpers.js#handleSmartRea
 **`SDK_LEGACY_FALLBACK = new Set(['Angel One', 'Zerodha'])`** is kept defensively while the allowlist is empty; it has no practical effect (the broker has to be in the allowlist for the fallback to even matter). Once a broker is promoted, `SDK_LEGACY_FALLBACK` is the immediate kill-switch for that broker without removing it from the allowlist. If the allowlist stays empty long-term, `SDK_LEGACY_FALLBACK` and the entire `useSdkBrokerFlow() && !isReauthFlow && ...` block become dead code and can be deleted.
 
 ## Angel One — per-customer SmartAPI only (2026-07-18)
+
+### Pre-OAuth staging boundary (2026-10-01)
+
+The per-customer SDK form first calls
+`PUT /sdk/v1/connections/Angel%20One/update-credentials`. That call validates
+and stores the SmartAPI API key/client code so the WebView can start, but it
+does **not** represent a connected broker and must not set the broker primary.
+It returns `connection_state: "credentials_staged"` and `is_primary: false`.
+Only the post-OAuth `/exchange-token` path may persist the authenticated
+`connected_brokers[]` slot and promote it. This ordering lets first-time users
+reach SmartAPI instead of failing on a primary-slot lookup that cannot yet
+succeed.
 
 AlphaB2B no longer permits the platform/shared SmartAPI key for customer
 connections. `BrokerConnectModalDispatch` routes Angel One directly to
@@ -213,7 +268,7 @@ Source: `../../alphaquark-mobile-sdk/packages/rn/src/components/BrokerCredential
 | Groww | credentials | accessToken | connect |
 | Kotak | credentials_totp | consumerKey, consumerSecret, mobileNumber, password, mpin | update-credentials |
 | IIFL Securities | credentials | apiKey, interactiveSecret, marketSecret, userId | update-credentials |
-| Angel One | oauth | apiKey, secretKey, clientCode | (oauth → exchange-token after WebView) |
+| Angel One | oauth | apiKey, clientCode (no secret) | (oauth → exchange-token after WebView) |
 | Zerodha | oauth | (empty — auto-skip to onContinueToOauth) | (oauth) |
 | Upstox | oauth | apiKey, apiSecret | (oauth) |
 | Fyers | oauth | apiKey, apiSecret | (oauth) |
@@ -403,9 +458,20 @@ Triggered by `ManageConnectionsModal`'s smart-reauth handler when an existing br
   customer to select **Login to Kite web** on the next screen. That preserves
   the Kite web session for the broker's normal next-few-hours session window;
   it is instructional only and does not claim to change Kite's expiry policy.
+- OAuth-only Zerodha, Dhan, AliceBlue and Axis Securities have concise
+  broker-specific host guides explaining the broker-owned sign-in/OTP handoff.
+  `BrokerGuideCard` accepts optional `title`, `noticeTitle` and `noticeText`;
+  API-key brokers retain the one-time setup defaults. Routes and SDK schemas
+  are unchanged.
 - IIFL is enabled through the deliberate legacy fallback. Its re-certified
   customer-owned direct flow shows the IIFL developer portal, the exact
   redirect URL, and the customer's assigned Route64 IPv6; both values must be
   registered before continuing. App Key/App Secret are AES-wrapped for Node
   `/api/iifl/update-key`, callbacks exchange through `/api/iifl/exchange`, and
   the resulting session is persisted by `/api/user/connect-broker`.
+### Runtime tenant callback authority
+
+The host resolves SDK broker OAuth callbacks from the active tenant first and
+passes the same URI into the WebView login and exchange flow. Broker business
+logic and persistence remain SDK/source owned; the presentation layer does not
+infer or replace callback configuration.

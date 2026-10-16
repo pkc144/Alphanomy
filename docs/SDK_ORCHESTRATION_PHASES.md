@@ -1,5 +1,27 @@
 # SDK Orchestration Phases — Sequenced Migration Plan
 
+## 2026-10-05 work log — Angel One connect recovery
+
+Tidi `3.0.45+148` now follows the owner-approved September 29 personal-key
+rollout. Both selection and Manage Brokers always route Angel One through the
+SDK, with API Key / Client Code form, static-IP callout and copyable registered
+callback `https://ccxtprod.alphaquark.in/angelone/callback`. It no longer uses
+the dotenv shared-key default or autojumps with a saved legacy platform key.
+Post-connect persistence verification and model-portfolio housekeeping remain
+unchanged. No customer-data migration, trade routing or sell-auth policy change.
+
+RN and Flutter intercept Angel One returns independently of the tenant landing
+URL, on exact HTTPS callbacks at `ccxtprod.alphaquark.in/angelone/callback`,
+`alphaquark.in/api/deploy/broker/callback`, and
+`prod.alphaquark.in/stock-recommendation`. A non-empty query/fragment
+`auth_token` is required; unrelated paths, lookalike hosts, userinfo and
+nonstandard ports are rejected. The matcher applies to personal and shared
+modes. Tokens and exchange bodies are not printed in SDK callback logs.
+
+No migration done-when checkbox or public orchestrator API changed.
+Real-account broker certification remains pending.
+
+
 ## 2026-09-29 work log — compact trade review
 
 - The host review gives the trade rows the available height and moves optional

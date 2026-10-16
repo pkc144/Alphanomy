@@ -1,6 +1,75 @@
 # Phase 3 — SDK Migration Progress Log
 
+## 2026-10-12 — release/deploy_5.2: named host tokens on `Phase3SdkBrokerModal` / `EgressIpCallout`
+
+- Brokers affected: none functionally (chrome colours/fonts only).
+- Files: `Phase3SdkBrokerModal.js` (`brokerSheet.*`, `brokerSheet.guideAccent`
+  null default keeps the runtime accent chain), `EgressIpCallout.js`
+  (`brokerSheet.egress.*`; brand from `useColors()` unchanged).
+- Verdict changes: none; `SDK_ELIGIBLE_MODALS` / `SDK_LEGACY_FALLBACK` unchanged.
+- Evidence: both files equal 5.1 with tokens at default values (normalised
+  diff); Phase 3 and broker contract tests pass.
+
+## 2026-10-10 — `ModalManager` forwards `autoUnlock` (one-tap execute)
+
+`ModalManager` now passes `modalPayload.autoUnlock` to
+`BrokerConnectModalDispatch`, which forwards it via `...rest` to the host
+device-TOTP sheets (`DeviceTotpReconnectGate`, `upstoxModal`). Only
+`BrokerSelectionModal`'s expired-execution path sets it. No routing change:
+`SDK_ELIGIBLE_MODALS`, `SDK_LEGACY_FALLBACK`, the re-auth bypass and the routing
+matrix are untouched; SDK modals receive and ignore the prop. Detail:
+`BROKER_CONNECTION.md` § Device-TOTP gate lifecycle ("One-tap execute").
+
+## 2026-10-05 — Tidi Angel One regression and shared SDK repair
+
+Tidi `3.0.45+148` now follows the owner-approved September 29 personal-key
+rollout. Both selection and Manage Brokers always route Angel One through the
+SDK, with API Key / Client Code form, static-IP callout and copyable registered
+callback `https://ccxtprod.alphaquark.in/angelone/callback`. It no longer uses
+the dotenv shared-key default or autojumps with a saved legacy platform key.
+Post-connect persistence verification and model-portfolio housekeeping remain
+unchanged. No customer-data migration, trade routing or sell-auth policy change.
+
+Angel One personal publisher login uses encrypted `apiKey` plus plain
+`clientCode`, with no API Secret. `/update-credentials` stages that registration
+without creating/promoting a slot. `/login-url` selects the personal lane by
+API Key presence; `/exchange-token` saves the final publisher `auth_token`
+directly through the canonical `/api/user/connect-broker` before primary
+promotion. The canonical handler uses the staged personal registration under
+the tenant mode and mirrors both credential surfaces, preserving today's
+sell-auth via the existing helper. There is no publisher `generate-session` hop.
+Empty-body legacy shared-key clients retain their compatibility path.
+
+RN and Flutter intercept Angel One returns independently of the tenant landing
+URL, on exact HTTPS callbacks at `ccxtprod.alphaquark.in/angelone/callback`,
+`alphaquark.in/api/deploy/broker/callback`, and
+`prod.alphaquark.in/stock-recommendation`. A non-empty query/fragment
+`auth_token` is required; unrelated paths, lookalike hosts, userinfo and
+nonstandard ports are rejected. The matcher applies to personal and shared
+modes. Tokens and exchange bodies are not printed in SDK callback logs.
+
+Validation: 19 Tidi form/persistence tests, 2 callback tests on each SDK
+platform, 13 backend personal-key/staging/persistence tests, RN typecheck and
+signed release APK build pass. The release certificate matches the prior APK.
+Real-account login and funds/holdings/controlled-order certification remain
+pending. This evidence does not upgrade the broker's certification verdict.
+
+
 > **Chronological record of every Phase 3 commit, broker verdict change, regression observed, and rollback decision.** Append-only. See `CLAUDE.md § Phase 3 SDK Broker Migration — BLOCKING DOCUMENTATION REQUIREMENT`.
+
+## 2026-10-03 — Broker host chrome follows tenant tokens
+
+**Broker(s) affected:** all; explicit OAuth guidance for Zerodha, Dhan,
+AliceBlue and Axis Securities; device-TOTP visuals where backend-enabled.
+**Files touched:** shared broker guide/stepper, focused contract and docs.
+**Change summary:** host guidance and device-TOTP lifecycle states now use
+active tenant tokens. `deviceTotpEnabled` still controls whether the optional
+controls mount.
+**Verdict change(s):** none.
+**Regression(s) observed:** none in focused tests.
+**Rollback decision:** no; default tokens preserve AlphaB2B styling.
+**Next step:** per-tenant visual verification; real broker certification is
+unchanged.
 
 ## 2026-09-29 — Angel One device-TOTP fallback no longer reaches the shared-SmartAPI sheet
 
@@ -1215,3 +1284,23 @@ the correct production route.
 **Next step:** real-account test: create/register the IIFL app, whitelist the
 displayed IPv6, connect, then verify a next-day reconnect using saved app
 credentials.
+# 2026-10-01 — Angel One pre-OAuth staging no longer promotes early
+
+**Broker affected:** Angel One per-customer SmartAPI.
+
+Production AlphaPro 3.9.169 reached the SDK `update-credentials` route and
+successfully validated the API key, but the route immediately called the
+primary-broker endpoint. A first connection has no Angel One slot until OAuth
+token exchange, so it returned HTTP 500 `Broker Angel One not found` and the
+WebView never opened. The backend now returns a successful
+`credentials_staged` response and defers fail-closed primary promotion to
+`/exchange-token`. Existing 3.9.169 binaries pick up the server fix; no APK or
+OTA release is needed.
+
+## 2026-10-03 — tenant-owned SDK OAuth callback
+
+The shared SDK broker host now uses one active-tenant callback for guidance,
+login and token exchange, with a fail-closed missing-configuration state.
+This prevents branded Upstox/Fyers flows from exchanging codes against the
+AlphaQuark production callback. Focused source-contract coverage was added;
+real-account certification remains a separate operational step.

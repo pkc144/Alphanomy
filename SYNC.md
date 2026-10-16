@@ -10,8 +10,8 @@ you're new here.
 - **Repo**: `https://github.com/alpha112233/Alphab2bapp` (local clone at
   `/home/pk/Alphaquark_docs/AlphaQuark/codes/github/Alphab2bapp`)
 - **Tracked branch**: `release/deploy_5.1`
-- **Last synced commit**: `0e68359d` (`perf(rebalance): keep the ccxt
-  connection warm while model portfolios are on screen`) — 2026-10-02.
+- **Last synced commit**: `0287d8e7` (`fix(ios): one React in the bundle —
+  CI iOS builds crashed at launch`) — 2026-10-16.
 
 ## ⚠️ This fork has unrelated git history with upstream
 
@@ -167,6 +167,35 @@ from `WHITELABEL_RECIPE.md` works as designed. The 2-line conflict on
 merge.
 
 ## Sync history
+
+### 2026-10-16 — Full shared-layer reconciliation to `0287d8e7`
+
+3-way merge (base = upstream `0e68359d`, ours = this fork, theirs = upstream
+`0287d8e7`) of the 234 files upstream changed since the 10-02 sync: 112 taken
+verbatim, 46 new, 14 merged, 16 conflicts. Every conflict was an upstream
+commit already cherry-picked here under another hash (Oct 7–16 ports), so
+shared `src/` and `designs/default/` were set to upstream byte-for-byte. Two
+"clean" merges had duplicated those cherry-picks (`RebalanceModal.js` held-buys
+branch, `ManageConnectionsModal.js` import) — after a merge, always diff
+against upstream, not just check for conflict markers. Brings: supportAQ
+gateway on every purchase + native PhonePe, course resume/watch-time,
+last-good holdings totals, named design host tokens (`hostTokens.json`),
+themed toasts, broker-reconnect fixes, Motilal re-listed, second IP (OVH).
+
+Fork-specific (kept / adapted):
+- **Not taken:** upstream version bumps, the WhatsApp `app.alphaquark.in/api/redirect/prod~`
+  intent filter + iOS `applinks:app.alphaquark.in` (prod-only claims; Alphanomy
+  can claim its own `alphanomy~` paths once registered in WellKnownRouter).
+  `redirectLink.test.js` made tenant-aware for that.
+- **Taken natively:** metro singleton `resolveRequest` (one React), Podfile
+  Firebase modular-header pods; iOS workflow drops the SDK's own React and
+  runs `scripts/verify_mobile_env.sh .env alphanomy alphanomy`.
+- **Fix:** `designs/alphanomy/screens/BespokePerformanceScreen.js` now renders
+  upstream's `BespokePerformanceModals` — before, Invest now set `paymentModal`
+  and rendered nothing.
+- Release: Android 1.0.48 (86), iOS 1.0.48.
+- Known upstream test failure (fails in AlphaB2B too):
+  `brokerSessionRejectedDisplay.test.js` (react-native-pure-jwt ESM).
 
 ### 2026-10-02 — Full shared-layer reconciliation to `0e68359d`
 

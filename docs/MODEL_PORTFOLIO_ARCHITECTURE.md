@@ -1,5 +1,59 @@
 # Model Portfolio Architecture
 
+## 2026-10-10 — rebalance execute links open the card's Accept flow
+
+A WhatsApp/Telegram rebalance link (surfaces `rebalance` / `rebalance_execute`)
+now lands on Home and the `RebalanceCard` for that `model_name` runs
+`runAcceptRebalanceButton()` — the same Repair / pending-refresh / change-check
+branch as its Accept button and the Portfolio-tab "Invest" `openRebalanceFlow`
+event (both now call this one function). The card waits until repair data has
+loaded (`isDatafetchinRepair`), so a Repair is never opened as a fresh
+Calculate; an already-executed rebalance claims the link and says so without
+orders. The link places nothing — the customer confirms in the normal review.
+Full flow: `APP_ARCHITECTURE.md` § "Execute deep links".
+
+## 2026-10-07 — Repair "Mark as placed" records the real fill
+
+On a Repair row, the cautionary-listing chip now opens an inline editor for the
+shares and average price the broker actually filled, instead of saving the leg
+quantity at the live LTP (which sent `actualPrice: null`, and was rejected, when
+no LTP had arrived). The funds / partial / funding-pending / T1 chips no longer
+offer manual placement, because Repair re-places those legs. Details: § 6g.
+
+## 2026-10-06 — a resolved model never acknowledges a different rebalance
+
+When the customer taps Accept, `RebalanceCard.handleRepairDiscovery` reads
+`get-repair`. If a model in `resolvedModels` (from `normalizeRepairResponse`)
+matches the current rebalance, the card sends
+`PUT /rebalance/update/subscriber-execution {executionStatus:'executed'}` and
+places nothing. That lookup matched by rebalance id **or model name**, so an
+operator-resolved **previous** rebalance (same model name, different
+`modelId`) acknowledged today's rebalance as executed. The server parks such a
+browser claim as `pending` / `frontend_terminal_hint_awaiting_server_evidence`,
+evidence that can never arrive, and the card stays on "awaiting confirmation"
+with no Accept (markup uagaskar, DefinEdge, 2026-10-06: September `bfc6d856`
+resolved October `ca653c31`).
+
+**Rule:** `findResolvedModelForRecommendation` (`src/utils/rebalanceReconciliation.js`)
+is the only matcher. Identity wins whenever both sides carry one: an item whose
+`modelId` or `completionRecommendationId` differs from the card's `model_Id` is
+never a match. The model name is a fallback only when an id is missing. This is
+the same guard `verifiedRepair` already applies via `completionRecommendationId`.
+Pinned by `src/__tests__/utils/rebalanceReconciliation.test.js`.
+
+## 2026-10-03 — Model-detail presentation contract
+
+`src/screens/Drawer/MPPerformanceScreen.js` remains the behavior owner for the
+model-detail route. In addition to the existing strategy, pricing, entitlement
+and portfolio state, its registered presentation now receives display-ready
+methodology, target-allocation rows and research-report rows. Opening a report
+or notifications is exposed only as an action callback. A tenant design may
+rearrange these sections, but it may not fetch reports, infer subscription
+access, initiate payment or place/retry orders.
+
+This extension is additive: the default presentation and all execution,
+payment, Digio, broker and entitlement behavior are unchanged.
+
 ## 2026-10-01 — Cancel & Retry is driven by broker truth (3.9.168)
 
 `RebalanceCard.handleCancelAndRetry` cancels each still-open order via
@@ -326,8 +380,16 @@ Mobile exposes this result once through `TradeContext` as
 the browse-card action state and the embedded Portfolio summary status badges
 must consume that snapshot. Holdings, the catalog's historical `subscription`
 field, and `ClientList.subscriptions` are not alternative entitlement sources.
-Until the server query resolves, the browse card says **“Checking status…”**;
-it must not label a plan active or expired speculatively.
+The entitlement request may start as soon as a signed-in email is available:
+tenant routing comes from `getTenantSubdomain(configData)`, whose canonical
+runtime/build fallback remains valid while the legacy stored advisor-config
+record is hydrating or incomplete. Waiting for that stored record can strand
+the request indefinitely after a reload.
+
+Until the server query resolves, a presentation must suppress purchase and
+active/expired actions (the default card may say **“Checking status…”**). A
+tenant presentation may use a non-action loading state, but must not infer
+entitlement from the catalog or show a speculative Subscribe button.
 
 The Portfolio and Research tabs on `MPPerformanceScreen` are protected by the
 same entitlement. Research reports are a subscriber benefit: before an active
@@ -1225,6 +1287,8 @@ for a fresh calculation.
   - `item.isPartialFill === true` → amber "Partial fill last time (X/Y)"
 - **Only the cautionary chip is tappable (since 2026-10-07).** The funds, partial-fill, funding-pending and T1 chips are informational: Repair re-places those legs itself, so recording them by hand as well would book a fill that Repair then buys again (same rule as the Trade Details modal, 2026-09-23).
 - Tap on the cautionary chip → an **inline editor in the row** (no nested Modal) asks for the shares actually filled (pre-filled with the leg qty, capped at it) and the average fill price (pre-filled with LTP when one has arrived, otherwise empty and required). Confirm → `PUT /api/model-portfolio-db-update/manual-placement` with those values. The server books them as the holding's cost basis and rejects a missing or non-positive price; until 2026-10-07 this path sent `item.qty` at the live LTP, or `actualPrice: null` before any LTP arrived, which 400'd. Local state flips the chip to "Marked as placed ✓" (green) and `getRebalanceRepair()` refreshes the repair list. Emits `portfolioEvents.emit(PORTFOLIO_EVENTS.HOLDINGS_REFRESH, …)` after success. Pinned by `src/__tests__/utils/repairManualPlacementPrice.test.js`. Ported from Alphab2bapp `9d80b736`.
+- **Only the cautionary chip is tappable (since 2026-10-07).** The funds, partial-fill, funding-pending and T1 chips are informational: Repair re-places those legs itself, so recording them by hand as well would book a fill that Repair then buys again (same rule as the Trade Details modal, 2026-09-23 — `manualPlacementRepairSuppression.test.js`).
+- Tap on the cautionary chip → an **inline editor in the row** (no nested Modal — see the RN blank-modal class) asks for the shares actually filled (pre-filled with the leg qty, capped at it) and the average fill price (pre-filled with LTP when one has arrived, otherwise empty and required). Confirm → `PUT /api/model-portfolio-db-update/manual-placement` with those values. The server books them as the holding's cost basis and rejects a missing or non-positive price; until 2026-10-07 this path sent `item.qty` at the live LTP, or `actualPrice: null` before any LTP arrived, which 400'd. Local state flips the chip to "Marked as placed ✓" (green) and `getRebalanceRepair()` refreshes the repair list. Emits `portfolioEvents.emit(PORTFOLIO_EVENTS.HOLDINGS_REFRESH, …)` after success. Pinned by `src/__tests__/utils/repairManualPlacementPrice.test.js`.
 - Data source: `failedTrades[i].orderStatusMessage` + `failedTrades[i].classification`, shipped by ccxt-india `rebalancing/utils/db_manager.repair()` since 2026-05-11.
 
 ---
@@ -1934,3 +1998,10 @@ broker-scoped absolute expiry. Missing or expired backend policy still fails
 closed as `MARKET_CLOSED`; Zerodha and every other broker retain the local
 closed-market button gate. This does not guarantee acceptance or a fill—the
 broker may queue or reject a DAY/CNC order under its own rules.
+# 2026-10-05 — exit holdings before closure
+
+The customer exit action routes to `RebalanceReview` with
+`exitPortfolio:true`. The backend supplies a SELL-only frozen basket for this
+model's attributed holdings. The app does not unsubscribe immediately and does
+not cancel billing; closure follows broker-confirmed completion, while partial
+or failed quantities return through Repair.

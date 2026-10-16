@@ -1,5 +1,116 @@
 # Mobile App Architecture
 
+## Mandatory native-version gate
+
+`AppUpdateChecker` is mounted at the application root and resolves
+`latestAppVersion` and `minAppVersion` from AppAdvisor configuration
+(`<db>.appadvisors`, edited in SupportAQ), preferring the current platform's
+`Android` or `Ios` override. Google Play installations and all iOS installations
+below `minAppVersion` receive a non-dismissible store upgrade modal; Android
+sideloads remain exempt because they cannot safely complete a Play Store update.
+
+Native version values are numeric dot sequences rather than strict semantic
+versions. AlphaPro Android publishes three-part values such as `3.9.187`, while
+AlphaPro iOS uses a two-part marketing version such as `2.7`. All comparisons go
+through `src/utils/appVersion.js` (ported from Markup `9d2c7dbf6`), which compares
+numeric components, zero-fills missing parts, and fails open for malformed
+configuration. Do not reintroduce strict-semver validation: `semver.valid('2.7')`
+is null, which silently disabled the iOS gate until this change.
+
+Raise the SupportAQ floor only after the target binary is publicly installable
+from that platform's production store. An App Store Connect or Play Console
+upload alone is not enough; otherwise the modal dead-ends every customer on that
+platform.
+
+## release/deploy_5.2 additive container fields — 2026-10-12
+
+Home, Account, Portfolio and Notification containers expose extra
+`viewModel`/`actions` fields for variant presentations (see CHANGELOG
+2026-10-12). Default presentations ignore them. Google sign-in/sign-up share
+`src/utils/googleAuth.js` (`configureGoogleAuth`, `signInWithGoogleFirebase`);
+Login behaviour is unchanged. Log Out always resets the stack to Login (all
+apps); Reset Password's back follows the manifest `authNavigation` (default
+`legacy`).
+
+## Execute deep links (WhatsApp/Telegram → card) — 2026-10-10
+
+A per-customer execute link (`https://app-links.alphaquark.in/l/<tenant>?dl=x&t=<token>`)
+now opens the app **on the recommendation it names** and starts the same review
+the customer would reach by tapping that card's Accept / Trade button. Before
+this, the app resolved the token and then navigated to `PushNotificationScreen`,
+which ignored the params (a TODO), so the customer landed on a generic list.
+
+| Step | Where | What |
+|---|---|---|
+| 1 | `App.js` `handleDeepLink` → `utils/smartLink.js` `handleSmartLink` | `/l/` link with `t` → `handleFunctionalDeepLink` |
+| 2 | `smartLink.js` `resolveFunctionalDeepLink` | `POST /api/deep-link/resolve` (Firebase identity-matched). Returns the resolved pointer **or** the server error code (`token_expired`, `identity_mismatch`, `already_used`, 402 billing…). Result stashed under `PENDING_DEEPLINK_KEY`; signed-out taps stash only the token. Navigates to Home and emits `PENDING_DEEPLINK_EVENT` (Home may already be focused). |
+| 3 | `screens/Home/HomeScreen.js` `consumePendingDeepLink` | On focus + on the event: resolves a token stashed before sign-in, shows `deepLinkResolveErrorMessage(...)` on failure, routes `broker_reauth` to Subscriptions, otherwise `startDeepLinkExecuteTarget(resolved)`. Module-wide in-flight guard (Home can be mounted twice). The old once-per-session `_deeplinkConsumed` ref is gone — a second link in the same session now works. |
+| 4 | `utils/deepLinkExecuteTarget.js` | Holds one pending target and re-announces it on `DEEP_LINK_EXECUTE_EVENT` at 0.8/2/4/7/11/16 s while cards mount and load. `claimDeepLinkExecuteTarget` hands it to exactly one card. Unclaimed after the last announcement → cleared + "Nothing pending for this link" toast, so a stale target can never open a card later. A newer link replaces an older one. |
+| 5a | `RebalanceCard` (surfaces `rebalance`, `rebalance_execute`; match `model_name`) | Waits until `isDatafetchinRepair`, `loading` and `actionOpeningRef` are clear, then runs `runAcceptRebalanceButton()` — the same Repair / pending-refresh / change-check branch as the Accept button and the Portfolio-tab "Invest" `openRebalanceFlow` event (now shared). Already executed → claims and says so; no orders. |
+| 5b | `StockAdvices` (surface `trade_execute`; match `advice_reco_id` on pending stock rows; `type` `home`/`All` only) | One row → `handleSingleSelectStock` (the card's Trade Now: broker, expiry, funds, market-hours, sell-auth gates, then the review). Several rows → each added to the cart, the last add opens the cart sheet. Waits while `isDatafetching`. |
+| 5c | `BasketCard` (surface `basket_execute`; match `advice_reco_id` on legs) | Runs `handleTradeNowBasket` only when the Trade button would be enabled (same condition as `designs/default/composites/BasketCard.js`); waits while the entry authorization loads; a basket that is expired/cancelled/closed/blocked claims the link and explains why. Closure baskets never match. |
+
+**Nothing in this path places an order.** It only opens the existing review;
+the customer still confirms there, and an expired broker session goes through
+the one-tap biometric reconnect (`BROKER_CONNECTION.md` § One-tap execute).
+The token is not consumed by the app (only the web `/x` execute consumes it),
+so reopening a link just reopens the review; order idempotency is unchanged.
+
+**Links must be app-links to reach the app.** The app claims only
+`app-links.alphaquark.in/l` (Android App Link + iOS Universal Link). ccxt sends
+execute links in that form per channel and per advisor flag: WhatsApp follows
+`rebalance_applink_enabled` (rebalance pushes) / `advice_applink_enabled`
+(trade/basket advice) — each needs its template's button base on
+`app-links.alphaquark.in/l/{{1}}`; personal Telegram follows its own
+`telegram_applink_enabled` (no template; ccxt `f4c7c104`). Helpers:
+`comms/deep_link_client.py` `applink_execute_url` / `tg_applink_button_value`.
+With a flag off, that channel's links stay on the web `/x?t=` page. Turn an
+advisor's flags on only after its app release includes this handling —
+before that, an installed app lands on the notification list instead of the
+working web confirm page. Rollout state:
+prod-alphaquark-github `docs/server_issues/2026-10-10-execute-links-applink-rollout.md`.
+SmartLinkRouter falls back to that web page when the app isn't installed.
+
+**WhatsApp advice buttons on the existing UTILITY template (2026-10-10, NATIVE
+CHANGE — needs a store build).** prod's advice template `portfolio_update_2`
+keeps its approved base `https://app.alphaquark.in/api/redirect/{{1}}` (a clone
+with an app-link base was re-categorised MARKETING by Meta). AlphaPro now claims
+its own tenant's forms on that host:
+`/api/redirect/prod~<token>` (per-customer execute link) and
+`/api/redirect/prod.alphaquark.in` (generic "View update").
+- Android: a separate `autoVerify` intent filter for `app.alphaquark.in` in
+  `AndroidManifest.xml` (assetlinks there = the same WellKnownRouter list).
+- iOS: `applinks:app.alphaquark.in` in `AlphaQuark.entitlements`; the server
+  AASA lists `/api/redirect/<tenant>~*` + `/api/redirect/<advisor domain>` per
+  app (aq_backend `83b730a1`, `redirectPathsFor`).
+- JS: `src/utils/redirectLink.js` `parseRedirectLink` (pure) →
+  `smartLink.handleSmartLink` falls through to `handleRedirectLink`: execute →
+  the same `handleFunctionalDeepLink` as `/l/…?t=` (opens the matching card);
+  generic → recommendations Home; another tenant's link is ignored.
+- Not installed (or an older build without the claim) → the Node
+  `/api/redirect/:advisor` route serves the web pages exactly as before.
+- **Forks:** never copy prod's paths. A fork that wants this adds its own
+  `<tenant>~` / domain paths to its manifest + `applinks:app.alphaquark.in`;
+  the server side already lists every app's own paths.
+Tests: `src/__tests__/redirectLink.test.js`.
+
+**Apple "Hide My Email" customers (2026-10-10).** The server matches the
+Firebase ID-token **email** against the customer the link was sent to. A
+hidden-email Apple user's token has no email (`no_identity`) or a private-relay
+email (`identity_mismatch`) while the account is keyed by the address they
+typed. `needsEmailVerificationForLink` (in `deepLinkExecuteTarget.js`) detects
+exactly those two cases — never a mismatch with a real email — and Home then
+keeps the link (`emailVerifyAttempted: true`), asks the customer to confirm
+their email, opens the existing `EmailScreenAppleLogin` one-time-code flow
+(`/api/auth/apple/verify-email-otp`, which writes the verified email onto the
+Firebase user), and retries the link once. If the confirmation merges into an
+existing account ("sign in with Apple once more"), the kept link opens after
+the next sign-in. Deliberately NOT done: trusting `users.firebase_id` /
+`apple_uid` or any uid binding — `POST /api/user/` writes those from the request
+body, so they are not identity evidence (an attempted server-side binding,
+aq_backend `8e96cc02`, was reverted in `048e259d` for that reason).
+Tests: `src/__tests__/deepLinkExecuteTarget.test.js`.
+
 ## 2026-09-29 Warn-mode model-owned SELL review
 
 The two non-model trade review paths now ask the server for an ownership
@@ -1529,6 +1640,14 @@ Check for advisor_ra_code on user record
             │       auto-set RA code → Home; else show RA ID screen
             └── Not found → show RA ID screen (manual entry)
 ```
+
+Google's native account sheet may return `SIGN_IN_CANCELLED`, Android status
+`12501`, or a provider message containing `cancel` when the user closes or
+backs out of the sheet. `isGoogleSignInCancellation()` classifies those as an
+expected no-op before error logging or failed-login telemetry. The Login screen
+clears its loading state in `finally` and remains usable; genuine provider,
+Firebase, network and backend failures still produce the normal error UI and
+telemetry.
 
 ### International Phone Collection
 

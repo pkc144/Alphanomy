@@ -65,6 +65,10 @@ variant's `import` + map entry). The trade-off is real but small.
 - `designs/registry.js` — only imports `default`. **Forks edit this** to
   add their variant; merge conflicts on this file are expected and
   harmless.
+- `designs/default/tokens/hostTokens.json` — named colours/fonts for shared
+  host surfaces (broker sheet, rebalance, watchlist, profile, toast…). **Forks
+  restyle those surfaces in `designs/<variant>/tokens/hostTokens.json`**
+  (override existing names only); no `src/` edits.
 - `src/design/*` — `DesignProvider`, `useDesign()`, `useComponent()`,
   `resolveDesign.js`. The infrastructure that makes variants work.
 - `src/theme/*` — `colors.js`, `spacing.js`, `typography.js`, `radii.js`,

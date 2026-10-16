@@ -107,6 +107,17 @@ switched to per-customer on web (`useSharedAngelOneKey:false`, 63 admin docs /
 41 tenant DBs), so web and mobile now agree everywhere. Record + rollback: prod-alphaquark-github
 `docs/BROKER_CONNECTION_ARCHITECTURE.md` §4 Angel One.
 
+### Angel One field checks (2026-10-13)
+
+Kyzen QA pasted the SmartAPI **TOTP key** into API Key and the API key into
+Client Code; Angel One then answered "Invalid API Key or App not found". The
+host override in `Phase3SdkBrokerModal.js` now gives both fields a placeholder
+and a pre-submit `pattern`: API Key rejects a 16+ character A–Z/2–7 string (TOTP
+shape); Client Code must be letters then digits (all 9 stored Angel One client
+codes fleet-wide matched on 2026-10-13). The guide step in
+`brokerGuideConfigs.js` names the Secret Key and TOTP key as the wrong values.
+Relax the Client Code pattern if Angel One ever issues another shape.
+
 ### SDK vs host — the rule for new work
 
 Use the **SDK lane** unless the broker needs one of these, which the SDK host
@@ -152,6 +163,36 @@ on a `direct_api` account) and **AliceBlue** (partner-login vault in
 customer + broker, the "Reconnect broker" step is skipped and the broker's
 sheet opens on biometric unlock; the pending order resumes on the
 `refreshEvent` the sheet emits. No vault → the normal expiry UI, unchanged.
+
+**One-tap execute — the biometric prompt raises itself (2026-10-10).** Until
+this change the sheet above still waited for a second tap on **Reconnect with
+biometric unlock** (Accept → sheet → tap → biometric). The Accept/Execute tap
+is already the customer's intent, so the expired-execution path now opens the
+sheet with `openModal(modalKey, {autoUnlock: true})`; `ModalManager` forwards
+`autoUnlock` through `BrokerConnectModalDispatch`'s `...rest` to:
+
+| Sheet | Auto-unlock condition | On failure / cancel |
+|---|---|---|
+| `DeviceTotpReconnectGate` (Angel One, Motilal Oswal, Zerodha, Fyers) | `autoUnlock && quickReconnectReady && !loading` (server confirmed the saved vault is usable), once per opening (`autoUnlockStartedRef`), calls the same `unlockAndReconnect` as the button | Existing alert; sheet stays open with the biometric button + normal login |
+| `upstoxModal` (Upstox — **newly added** to `DEVICE_TOTP_AUTO_RECONNECT`) | `autoUnlock && !reauthConfig && deviceTotpEnabled` and `hasDeviceTotp`, sharing `quickReconnectStartedRef` with the smart-reauth auto path (one prompt per opening) | Existing alert; normal Upstox sheet |
+| `DhanConnectModal` (Dhan Direct API) | Already auto-unlocked on a `direct_api` account — unchanged | unchanged |
+| AliceBlue | Not auto-unlocked (partner-login WebView assist) — unchanged | unchanged |
+
+Never retried automatically: brokers lock a login after repeated bad TOTPs.
+Upstox's success event was renamed from `'Upstox device TOTP reconnect'` to
+`'Upstox broker connection (device TOTP reconnect)'` — `RebalanceCard`'s resume
+listener matches only `broker connection` / ` connect`, so the old source
+reconnected Upstox but silently skipped resuming a pending **rebalance**
+(single-stock trades resumed because `StockAdvices` also matches `reconnect`).
+
+Resulting customer flow for a saved-vault customer whose session expired:
+**Accept → biometric → order placed.** Brokers outside the table (Kotak, Groww,
+DefinEdge, Arihant — multi-step forms) and customers with no saved vault keep
+the normal expiry UI. Scope note: this removes the reconnect tap only; it does
+*not* add a biometric confirmation to trades when the session is still valid
+(that needs a server-verifiable device signature to be meaningful as consent
+evidence — not built). Pinned by
+`src/__tests__/deviceTotpReconnect.contract.test.js` ("one-tap execute").
 
 When a customer selects **Enable quick reconnect on this phone**, the control
 stays above the enrollment inputs and expands a broker-specific TOTP creation
@@ -276,6 +317,28 @@ separately.
   since 2026-09-29.
 - TOTP runtime: never import `otplib` in `src/` (Hermes `TextDecoder` crash) —
   `src/utils/totp.js`, guard test `src/__tests__/utils/totp.test.js`.
+
+## Reconnect changes nothing until the login succeeds (2026-10-14)
+
+Manage Connections → **Reconnect** and the broker-selection login used to call
+`flipPrimaryBroker` and (Manage Connections only) `markBrokerExpired` **before**
+opening the login. An abandoned or backed-out login therefore left the account
+on an expired primary broker and labelled a live session "Session Expired"
+(Kyzen QA: Fyers token valid till next day, funds loading, yet shown expired;
+a Zerodha test tap silently made an expired Zerodha the primary).
+
+Now:
+- No primary switch and no expired mark on tap.
+- A successful login makes the broker primary server-side: SDK
+  `/sdk/v1/connections/<broker>/exchange-token` always sets `primary_broker`;
+  legacy `/connect-broker` branches set `primary_broker: user_broker`.
+- Groww silent refresh / DefinEdge "already connected" (no login screen) call
+  `flipPrimaryBroker` **after** the session is confirmed live.
+- A dead session is shown from positive evidence: the Broker connection
+  screen's live funds check (`brokerSessionRejected`, 2026-10-13).
+- Web `subscription.js` still flips up-front (unchanged here).
+
+Test: `src/__tests__/reconnectNoSideEffectsBeforeLogin.test.js`.
 
 ## 2026-10-01 fixes (3.9.168): Angel One save-before-login, ICICI return, Zerodha quick-reconnect step
 
@@ -421,6 +484,17 @@ the card; customers tapping **Reconnect** on Manage Connections landed on the
 full setup page and did not see it (Fyers report). Applies to every broker the
 gate owns (Angel One, Motilal Oswal, Zerodha, Fyers). Pinned by
 `src/__tests__/deviceTotpReconnect.contract.test.js`.
+
+### Tenant-themed conditional states (2026-10-03)
+
+- `deviceTotpEnabled !== true`: render only normal broker connection; do not
+  mount enrollment, biometric, saved-key or forget controls.
+- `deviceTotpEnabled === true`: device/server evidence selects
+  available/not-enrolled, saved/locked or unlocked/in-progress. Normal broker
+  login remains the fallback.
+
+`BrokerConnectStepperSheet` consumes `useTokens()` for these states, so tenant
+styling changes without forking the backend gate or secret-handling behavior.
 
 ## Fyers first-connect combines setup and optional quick reconnect (2026-09-29)
 
@@ -1526,6 +1600,35 @@ Ports web `b25d105` (UI polish + visible error state + steps preamble), `0f1f3bf
 
 **Net code change: zero.** The app's `src/components/BrokerConnectionModal/EgressIpCallout.js` (706 lines) already implements every feature covered by these three web commits — they were ported piecewise during the earlier broker wire-up commits (`321fb92` wired 5 brokers + `99a0c69` wired Kotak). This audit confirms parity and documents where each web feature lives in the app file so future divergence is bisectable.
 
+### Fyers reconnect sends the App ID (2026-10-13)
+
+Current Fyers records store `connected_brokers[].apiKey` = App ID (plain or
+AES, "-200" shape) and `clientCode` = the Fyers user ID; legacy records kept
+the App ID in `clientCode`. `getStoredBrokerCreds('Fyers')` now returns
+`appId` (whichever stored value has the App ID shape) and `fyersUserId`, and
+`buildOauthReauthExtras` sends `apiKey = AES(appId)`, `clientCode = user
+ID`, `secretKey = AES(secret)` — the same fields the fresh form sends. The
+old mapping sent the user ID as the App ID, `/api/fyers/update-key` logged
+`REJECTED malformed appId (not -200)`, and every reconnect failed its first
+attempt. Test: `fyersReauthCredentials.test.js`. (Separately the SDK accepts a
+Fyers `auth_code` return on any non-fyers.in host — SDK `12fba4d`/`ae7861e`.)
+
+### Unticked IP acknowledgment: taps go to the checkbox (2026-10-13)
+
+In the SDK connect sheet (`Phase3SdkBrokerModal`), while a whitelist-required
+broker's "I have added <IP> to my … whitelist" box is unticked, the credential
+form is dimmed and covered by a transparent `Pressable`
+(`testID="egress-ack-lock-overlay"`). Any tap on it — a field or the
+Continue/Connect button — calls `nudgeEgressAck()`, which flashes the
+checkbox (`showUnmetAck` → red pulse + "⚠ Please tick this box…") and scrolls
+the sheet to the acknowledgment row itself: `EgressIpCallout` attaches the
+parent's `ackAnchorRef` to the row (both the claimed-IP and shared-IP
+variants) and the sheet `measureLayout`s it against the ScrollView's inner
+view, falling back to the top of the sheet. Previously the form had
+`pointerEvents="none"`, so tapping Continue did nothing; only the amber
+"🔒 One step left" banner nudged, and it scrolled to the top of the sheet.
+Pinned by `src/__tests__/egressAckNudge.test.js`.
+
 ### Feature-by-feature audit
 
 | Web feature (commit) | App file location | Evidence |
@@ -1906,6 +2009,12 @@ section in the same commit.** It exists because on 2026-07-18 we lost most of a
 day to a freeze class that was ALREADY solved elsewhere in the codebase but
 undocumented — do not let that knowledge rot again.
 
+> **Named host tokens (release/deploy_5.2):** `Phase3SdkBrokerModal` and
+> `EgressIpCallout` colours/fonts come from `designToken('brokerSheet.*')`
+> (default values = the pre-5.2 literals; variants override in
+> `designs/<variant>/tokens/hostTokens.json`). Brand action colour still comes
+> from `useColors()`. Never add variant branches to these files.
+
 ### 1. The RN `<Modal>` ban (the freeze failure mode)
 
 React Native's `<Modal>` **hard-freezes this app on Android** (New
@@ -1985,7 +2094,8 @@ source of truth** for per-broker setup guidance, mirroring prod web's
   walkthroughVideoId, guideSteps[], note?, redirectUrl?}` (keys = normalized
   broker names). Currently: Upstox, HDFC, ICICI, Kotak, Groww, Fyers,
   Motilal Oswal, IIFL Securities, Angel One (per-customer SmartAPI), Arihant Capital,
-  DefinEdge Securities — i.e. EVERY static-IP/whitelist broker. opts also
+  DefinEdge Securities — i.e. EVERY static-IP/whitelist broker — plus the
+  OAuth-only Zerodha, Dhan, AliceBlue and Axis Securities handoff guides. opts also
   carries `ccxtBaseUrl` (Motilal's fixed ccxt callback redirect).
 - `<BrokerGuideCard config accent brokerName>` — the polished card (numbered
   steps with `<b>` bold parsing, tap-to-copy Redirect URL row, portal
@@ -2174,3 +2284,35 @@ are never stored in this repository.
 
 `hasProcessedCallback` remains the single-use-token guard across every
 capture path. Failed OTP/status callbacks still close without token exchange.
+### Tenant-owned SDK OAuth callback
+
+SDK OAuth brokers must use one callback resolved from the active runtime
+tenant for both the displayed setup guide and the login/token-exchange round
+trip. A platform-domain fallback is prohibited because Upstox and Fyers bind
+authorization codes to the exact redirect URI. If no tenant/runtime/build
+callback exists, the host fails closed before opening broker login.
+
+## Broker login rejected before its stored expiry (2026-10-13)
+
+A broker can reject a saved login before the `token_expire` date we store.
+The Kyzen test account's Upstox token returned "Invalid token used to access
+API". Two screens treated that as success or as an empty account:
+
+- **Broker connection** (`src/screens/Home/SubscriptionScreen.js`) still said
+  "<broker> connected". The container now passes `brokerSessionRejected`.
+  It is true only when the latest funds check failed (`fundsError`) **and**
+  `classifyFundsResponse(...)` returns `TOKEN_EXPIRED`, which is positive
+  evidence; a transient outage never flips it. Both the default and Kyzen
+  designs show their session-expired / reconnect state on it.
+- **Home holdings**: a status-1 reply from `<broker>/all-holdings` is now a
+  failure (`fetchBrokerAllHoldings` returns `{fetchFailed, message}`), not
+  zero totals. TradeContext keeps the last good saved summary, stamped
+  `staleAsOf`, and does not overwrite it.
+- **Server copy of the last good totals** (ccxt `9db1684f`,
+  `common/holdings_last_good_hook.py`): every successful
+  `/<broker>/all-holdings` stores its totals per (email, broker) in
+  `<advisor_db>.broker_holdings_last_good`, zeros included. A status-1 reply
+  carries `lastKnown {totals, asOf}` when the stored totals are non-zero.
+  The app prefers the phone's own last good summary and falls back to
+  `lastKnown`, so a new phone, a reinstall, or a cache an older build overwrote
+  still shows the last value "as of" its time.

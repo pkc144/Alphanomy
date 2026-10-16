@@ -1,5 +1,42 @@
 # Design System Migration — Progress Log
 
+## 2026-10-12 — release/deploy_5.2: named host tokens replace the host skin
+
+- **Phase**: design-system hardening for fork sync.
+- **Surfaces touched**: see DESIGN_COMPONENT_AUDIT 2026-10-12; new
+  `designs/default/tokens/hostTokens.json` (296 names), `designToken` marker +
+  Babel compilation; removed `src/design/themedColor.js`,
+  `designs/literalRemaps.js`, every `isHostSkinActive()` gate.
+- **Verdict changes**: none.
+- **What shipped**: tenants restyle shared host surfaces only through
+  `designs/<variant>/tokens/hostTokens.json`.
+- **Regressions**: none — converted files equal 5.1 at default values; full
+  Jest no new failures.
+
+## 2026-10-05 — Customer recommendation terminology
+
+- **Phase**: post-Phase-I presentation maintenance.
+- **Surfaces touched**: `designs/default/composites/StockCard.js`,
+  `BasketCard.js`, and `screens/DeleteAccountScreen.js`.
+- **Verdict changes**: none.
+- **What shipped**: rendered entry-price, P&L and retained-record copy now uses
+  “recommendation”; internal contracts and protective/legal wording are
+  unchanged.
+- **Regressions / rollbacks**: none.
+- **Next**: no OTA publication in this change; release through the normal
+  mobile release process when requested.
+
+## 2026-10-03 — Default registry floor made mechanically complete
+
+- **Surfaces touched**: default component registry and design-boundary audit.
+- **What shipped**: `PortfolioSummaryCard` is registered, and every static
+  `useComponent` request is checked against the default registry by
+  `npm run audit:design`.
+- **Validation**: design, style and literal audits pass.
+- **Contract extension**: model-detail presentations receive raw methodology,
+  target allocation and research-report rows/actions; optional variant
+  coverage manifests are enforced by the same audit.
+
 > **Chronological work log for the swappable-UI design-system migration.** Companion to `DESIGN_SYSTEM_ARCHITECTURE.md` (design source of truth) and `DESIGN_COMPONENT_AUDIT.md` (per-surface inventory). Mirrors `PHASE3_PROGRESS.md` in spirit.
 >
 > Every commit that touches design-system surfaces gets an entry here. Same rule as Phase 3 — undocumented deltas block the next delta.
@@ -18,6 +55,35 @@
 ```
 
 ---
+
+## 2026-10-03 — Model-plan catalog contract widened
+
+- **Phase**: post-Phase-I presentation maintenance
+- **Surfaces touched**: `ModelPortfolioScreen` container and
+  `alphanomyPlanShape`.
+- **Verdict changes**: none; shared logic stays in `src/` and tenant layouts
+  remain pure presentations.
+- **What shipped**: all price periods, discount/original price,
+  validity/retention and canonical entitlement readiness are now available to
+  variant catalogs. Entitlement loading can use the canonical build/runtime
+  tenant fallback while legacy stored config hydrates.
+- **Regressions / rollbacks**: none observed; default presentation is
+  unchanged.
+- **Next**: tenant variants can implement complete catalog states without
+  duplicating subscription logic.
+
+## 2026-10-03 — Tenant-themed broker host and device-TOTP states
+
+- **Phase**: SDK-bound host-chrome maintenance
+- **Surfaces touched**: `BrokerConnectStepperSheet` and `BrokerGuideCard`.
+- **Verdict changes**: none; broker connection and device TOTP remain
+  host/backend-owned.
+- **What shipped**: broker-hosted OAuth guidance and the optional setup,
+  protected/locked, biometric unlock, fallback and forget states consume the
+  active tenant tokens. With `deviceTotpEnabled` false the controls remain
+  absent; with it true the same binary renders the applicable state.
+- **Regressions / rollbacks**: none in focused contracts.
+- **Next**: variants may document their states without forking broker logic.
 
 ## 2026-10-01 — SDK design-passthrough slots consumed (SDK `7dc0fda`); default registry keeps SDK built-ins
 

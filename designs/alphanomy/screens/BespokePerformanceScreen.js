@@ -32,10 +32,11 @@ import {
     DEFAULT_RADII as RADII,
     DEFAULT_SHADOWS as SHADOWS,
 } from '../tokens';
+import { BespokePerformanceModals } from '../../default/screens/BespokePerformanceScreen';
 
 const screenWidth = Dimensions.get('window').width;
 
-const BespokePerformanceScreen = ({ viewModel, actions }) => {
+const BespokePerformanceScreen = ({ viewModel, actions, slots }) => {
     const {
         modelName = '',
         currentPrice = 0,
@@ -224,6 +225,10 @@ const BespokePerformanceScreen = ({ viewModel, actions }) => {
                     </TouchableOpacity>
                 )}
             </View>
+            {/* Payment / order / subscribe modals — the default block, so Invest
+                now opens the same money-path wiring as every other tenant
+                (before this the button set paymentModal and rendered nothing). */}
+            <BespokePerformanceModals viewModel={viewModel} actions={actions} slots={slots} />
         </SafeAreaView>
     );
 };

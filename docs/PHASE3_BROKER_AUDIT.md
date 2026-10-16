@@ -1,5 +1,35 @@
 # Phase 3 — Per-Broker Legacy → SDK Audit
 
+## 2026-10-05 — Angel One callback gap corrected
+
+Angel One personal publisher login uses encrypted `apiKey` plus plain
+`clientCode`, with no API Secret. `/update-credentials` stages that registration
+without creating/promoting a slot. `/login-url` selects the personal lane by
+API Key presence; `/exchange-token` saves the final publisher `auth_token`
+directly through the canonical `/api/user/connect-broker` before primary
+promotion. The canonical handler uses the staged personal registration under
+the tenant mode and mirrors both credential surfaces, preserving today's
+sell-auth via the existing helper. There is no publisher `generate-session` hop.
+Empty-body legacy shared-key clients retain their compatibility path.
+
+RN and Flutter intercept Angel One returns independently of the tenant landing
+URL, on exact HTTPS callbacks at `ccxtprod.alphaquark.in/angelone/callback`,
+`alphaquark.in/api/deploy/broker/callback`, and
+`prod.alphaquark.in/stock-recommendation`. A non-empty query/fragment
+`auth_token` is required; unrelated paths, lookalike hosts, userinfo and
+nonstandard ports are rejected. The matcher applies to personal and shared
+modes. Tokens and exchange bodies are not printed in SDK callback logs.
+
+Validation: 19 Tidi form/persistence tests, 2 callback tests on each SDK
+platform, 13 backend personal-key/staging/persistence tests, RN typecheck and
+signed release APK build pass. The release certificate matches the prior APK.
+Real-account login and funds/holdings/controlled-order certification remain
+pending. This evidence does not upgrade the broker's certification verdict.
+
+Current routing remains per-customer SDK-only; historical shared-key audit
+notes below do not describe the present mobile lane. No allowlist change.
+
+
 > **Source of truth for whether a broker can move from legacy modal → SDK widget.** The `SDK_ELIGIBLE_MODALS` allowlist in `ModalManager.js` MUST be derived from this doc, not the other way around. See `CLAUDE.md § Phase 3 SDK Broker Migration — BLOCKING DOCUMENTATION REQUIREMENT`.
 
 ## Zerodha runtime hardening — 2026-09-22
@@ -48,7 +78,7 @@ For each broker, the row captures:
 | Broker | visibleModal key | SDK BrokerName | Legacy modal | Verdict (today) |
 |--------|------------------|----------------|--------------|-----------------|
 | Zerodha | `Zerodha` | `Zerodha` | `ZerodhaConnectModal.js` (thin wrapper around `ZerodhaConnectUI`) | **Incomplete-audit** — Android intercept logic in UI component not yet read. Treat as SDK-broken. (User-reported Play Store hang 2026-05-26 — under live emulator investigation; see § Zerodha for live hypotheses.) |
-| Angel One | `Angel One` | `Angel One` | `Phase3SdkBrokerModal` (per-customer) | **SDK — per-customer only (2026-07-18; completed 2026-09-29).** Dispatcher always selects `Phase3SdkBrokerModal` (customer `apiKey`/`secretKey`/`clientCode` + static-IP gate), with SDK flag on or off. With `deviceTotpEnabled`, `DeviceTotpReconnectGate` wraps that SDK modal for biometric quick reconnect. The shared-SmartAPI `AngleoneBookingModal` is no longer reachable from the dispatcher (the device-TOTP fallback path to it was removed 2026-09-29). Guard: `src/__tests__/brokerDispatchRouting.test.js`. Earlier verdict (SDK-broken / `SDK_LEGACY_FALLBACK`, 2026-04-30) is historical. |
+| Angel One | `Angel One` | `Angel One` | `Phase3SdkBrokerModal` (per-customer) | **SDK — per-customer only (2026-07-18; completed 2026-09-29).** Dispatcher always selects `Phase3SdkBrokerModal` (customer `apiKey`/`clientCode` + static-IP gate), with SDK flag on or off. With `deviceTotpEnabled`, `DeviceTotpReconnectGate` wraps that SDK modal for biometric quick reconnect. The shared-SmartAPI `AngleoneBookingModal` is no longer reachable from the dispatcher (the device-TOTP fallback path to it was removed 2026-09-29). Guard: `src/__tests__/brokerDispatchRouting.test.js`. Earlier verdict (SDK-broken / `SDK_LEGACY_FALLBACK`, 2026-04-30) is historical. |
 | Upstox | `Upstox` | `Upstox` | `upstoxModal.js` | **SDK-clean** (PROMOTED 2026-04-28) — IP_WHITELIST_BROKERS + backend /exchange-token dispatch + SDK_ELIGIBLE_MODALS. Reauth still routes to legacy via `isReauthFlow` short-circuit. |
 | ICICI Direct | `ICICI` | `ICICI Direct` | `icicimodal.js` | **SDK-clean** (PROMOTED 2026-04-28) — backend `/exchange-token` ICICI dispatch already existed (connections.js:1180-1205, exchanges `apisession`→`session_token`); IP_WHITELIST_BROKERS already included; just needed allowlist promotion. |
 | Kotak Securities | `Kotak` | `Kotak` | `KotakModal.js` | **SDK-clean** (PROMOTED 2026-04-28, with documented minor diff) — credentials_totp; backend `/update-credentials` dispatches to `/api/kotak/connect-broker`. Minor diff: 30s TOTP debounce + TOTP error parsing not in SDK widget. |
@@ -68,6 +98,12 @@ For each broker, the row captures:
 IIFL remains a documented legacy fallback because of the SDK schema mismatch;
 its fallback is now production-capable and enabled. Treat the promotion counts
 in older entries below as historical snapshots rather than current routing.
+
+**2026-10-03 presentation audit.** `deviceTotpEnabled` and per-broker
+eligibility remain authoritative. The host sheet now themes all conditional
+quick-reconnect states from the active tenant; off means no device-TOTP control
+mounts. OAuth-only Zerodha, Dhan, AliceBlue and Axis also have explicit
+broker-hosted handoff guidance. No broker verdict changes.
 
 ---
 
@@ -524,3 +560,17 @@ must use the SDK per-customer credential form and the customer static-IP gate;
 the legacy shared publisher-login sheet is not a dispatch target. Existing
 connected customers are not silently migrated—the next reconnect requires their
 own SmartAPI credentials and normal broker verification.
+# 2026-10-01 Angel One production correction
+
+The per-customer SDK route remains the intended AlphaPro lane. Its
+`update-credentials` call is now explicitly a pre-OAuth staging step: backend
+validation succeeds without trying to promote a nonexistent connection slot;
+authenticated persistence and primary selection happen after token exchange.
+This is a server-only correction and requires no new APK or OTA.
+
+## 2026-10-03 — runtime tenant OAuth callback audit
+
+- Upstox/Fyers host redirect: runtime tenant value is authoritative.
+- Platform production fallback: removed.
+- Missing callback: fail closed before broker login.
+- Persistence/order/reconciliation contracts: unchanged.

@@ -41,6 +41,15 @@ to a screen via `SMART_LINK_DL_ROUTES`.
   post-install attribution is best-effort (campaign token only); the click is
   still logged server-side at redirect time.
 
+- **Execute link** (`?dl=x&t=<token>`, WhatsApp/Telegram per-customer) →
+  resolved, then Home hands it to the matching rebalance / stock / basket card,
+  which opens its own review. See `APP_ARCHITECTURE.md` § "Execute deep links".
+
+- **WhatsApp UTILITY-template button** (`https://app.alphaquark.in/api/redirect/prod~<token>`
+  or `/api/redirect/prod.alphaquark.in`) → claimed natively since 2026-10-10
+  (needs the store build) → `redirectLink.js` → same execute / Home routing. See
+  `APP_ARCHITECTURE.md` § "Execute deep links".
+
 ## Adding a campaign destination
 
 Add a row to `SMART_LINK_DL_ROUTES` in `src/utils/smartLink.js` mapping the

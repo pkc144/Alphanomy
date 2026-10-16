@@ -1,10 +1,90 @@
 # Design System Architecture — Bring-Your-Own-UI
 
-> **Source of truth for the swappable-UI design system.** Update this doc BEFORE writing the matching code change. See `CLAUDE.md § Architecture Documentation — MANDATORY` for the blocking-doc rule. Mirrors the Phase 3 doc trio: this file + `DESIGN_COMPONENT_AUDIT.md` (per-surface inventory) + `DESIGN_MIGRATION_PROGRESS.md` (chronological work log).
+## Named host tokens (release/deploy_5.2, 2026-10-12)
+
+Shared host surfaces that are not registry components — broker connect sheet
+(`Phase3SdkBrokerModal`), egress-IP callout, rebalance modal, watchlist rows,
+profile, education lists, broker alert/connection/disconnect modals, holding
+and position text, portfolio rows, the root toast, and the default design's
+Research Report and Delete Account screens — take their colours and
+fonts from **named design tokens**:
+
+- `src/` writes `designToken('<surface>.<role>')` (marker in
+  `src/design/literalTokens.js`), e.g. `watchlist.rowText`,
+  `brokerSheet.panel.backgroundColor`, `rebalance.headerRow.background`.
+- `designs/default/tokens/hostTokens.json` defines every name (594 on 2026-10-14) with
+  the value the screen hard-coded before the rework; `null` means "unset" (the
+  build emits `undefined`, which React Native ignores, so the screen's own
+  stylesheet value stays in effect).
+- A variant overrides names in `designs/<variant>/tokens/hostTokens.json`. It
+  may only override names the default defines.
+- `scripts/babel-plugin-design-literals.js` inlines the merged value at build
+  time for the active `DESIGN_VARIANT` (module-level `StyleSheet.create`
+  works, no runtime branch, no import cycle). Unknown names fail the build;
+  both JSON files are part of the Metro transform cache key. The runtime
+  fallback (non-Babel tooling) returns the default value.
+
+There is no variant check in `src/`: no `themedColor`, no
+`isHostSkinActive()`, no `designs/literalRemaps.js` (all removed). Proof at
+introduction: every converted file, with each token replaced by its default
+value, is identical to release/deploy_5.1 (normalised diff).
+`src/__tests__/hostTokens.contract.test.js` pins: every used name is defined,
+no unused names, no variant switch remains, runtime fallback, and Log Out
+stack reset.
+
+Groups added 2026-10-13: `afterSubscription.footer.*` (subscribed-portfolio
+footer buttons), `pendingOrders.*` (the Order Status sheet,
+`PendingOrdersModal` — surface, text, summary box, rows, BUY/SELL badges,
+status chips, notes, buttons) and `rebalanceNotice.*` (the funding / blocked
+notice inside `RebalanceModal`: body text and its button) and `ddpiPrompt.*`
+(the "Selling from <broker>" DDPI question sheet, `DdpiDeclarationPrompt`).
+`rebalanceCard.executed.*` is the "Rebalance Executed" card gradient and button;
+`rebalanceCard.{partial,pending,repair}.*` are the other state gradients and
+`rebalanceCard.default.gradient{Start,End}` (null = runtime gradient1/2) the
+normal one (2026-10-14).
+`rebalanceCard.content.paddingHorizontal` / `rebalanceCard.borderRadius` and
+`rebalanceAdvices.cardSideInset` are numeric layout tokens (default `null` = the
+card keeps 10 / 6 / 94% width). The build inlines them as strings, so call sites
+read them with `Number(...)`.
+
+Groups added 2026-10-14 (Kyzen QA "match the design"): `terminateModal.*`
+(the "Exit holdings and close this Model Portfolio?" sheet,
+`TerminateStrategyModal`), `recoSuccess.*` (the Trade Details result screen,
+`RecommendationSuccessModal`), `perfChart.*` (Performance vs index cards, period
+pills and chart, `PerformanceChart`), `egressCallout.*` (the remaining
+static-IP callout literals, `EgressIpCallout`) `profile.progress.*` (the
+Complete-your-profile ring gradient, `ProfileModal`) and `angelWarning.*` /
+`angelWarningSheet.*` (the two Angel One cautionary-listing warning sheets). Style-sheet entries are
+named `<group>.<styleKey>.<prop>`; inline JSX colours are named
+`<group>.<prop>.<originalValue>` (e.g. `perfChart.backgroundColor.f0fdf4`) so a
+variant can restyle each use without affecting other screens. Every converted
+file compiles byte-identically to its previous version on the default design
+(checked with the babel plugin, quotes normalised).
+
+`useColors()` now resolves through the active design's `tokens.buildColors`,
+like `useTokens()`. Default re-exports `src/theme/colors`, so nothing changes
+there; a variant that owns its palette (Kyzen ignores the web `mainColor`
+`#20c9df`) keeps it on shared surfaces such as the static-IP callout.
+
+`HomeScreen` passes `home.seeAllMPBody` (the `RebalanceAdvices type="All"`
+list) so a variant can show "View all" Portfolio Recommendations in its own
+chrome; the default design still mounts its own copy.
+
+Rule: to restyle a shared host surface for a tenant, add or reuse a named token
+here (default = current value) and set it in the tenant's
+`designs/<variant>/tokens/hostTokens.json`. Never branch on the variant in
+`src/`.
 
 ## What this is
 
 A staged refactor that splits every UI surface in the app into **logic** (lives in `src/`, never swappable) and **presentation** (lives in `designs/<variant>/`, fully swappable). The goal is "bring your own UI": a tenant or partner can ship a custom skin — tokens only, primitives only, or all the way up to whole screens — without forking the app or touching business logic.
+
+### Rendered recommendation nomenclature (2026-10-05)
+
+Customer-facing affirmative labels use “recommendation,” including entry
+price, P&L and retained-record copy. Registered legal names, protective “not
+investment advice” disclosures and internal `advice` routes/data keys remain
+unchanged.
 
 This is a **layered, opt-in extension of the existing theme system** (`src/theme/colors.js` + `useColors()`), not a replacement. Today only `colors` are swappable; this doc extends the same model to spacing/typography/primitives/composites/screens.
 
@@ -247,6 +327,17 @@ The `DesignContext` defaults to `null` so calling `useDesign()` outside the prov
 For variant `"acme"`:
 
 1. Start with `designs/default/` (every key MUST exist here — default is the contract floor).
+
+`npm run audit:design` enforces that floor statically: every literal
+`useComponent('namespace.Key')` request in `src/` or `designs/` must have a
+matching key in `designs/default/index.js`. This is a render-safety check, not
+only a layering check; a missing default entry would otherwise crash the
+entire route at runtime.
+
+Tenant variants may add `designs/<variant>/coverage.json` with
+`requiredComponents` and `requiredSdkSlots`. The same audit verifies those
+entries exist in the variant registry/SDK map, preventing a sync from silently
+replacing an approved tenant journey with the default presentation.
 2. Shallow-merge `designs/acme/`'s `components` and `sdk` maps over the
    corresponding default maps. Tokens layer-merge by namespace (variant's
    `tokens.X` replaces default's `tokens.X` if exported; otherwise default wins).
@@ -513,6 +604,9 @@ Strictly sequential. Each phase ships, soaks, and is reviewed before the next st
    - **E.1.5 — HomeScreen prep refactor ✅ Shipped 2026-05-01.** Two new hooks at `src/screens/Home/hooks/`: `useHomeScreenTabs` (consolidates `selectedTab` + 7 see-all overlay booleans behind a single `overlay: string | null` state with backward-compat boolean shims) and `useHomeScreenModals` (consolidates 4 modal-visibility booleans behind `{ activeModal, activeModalData }` with shims). HomeScreen.js sheds 12 useState declarations; call sites unchanged thanks to the shims. No `designs/` migration in this commit — internal refactor only, prepares the surface for E.2.
    - **E.2 — HomeScreen registry hookup ✅ Shipped 2026-05-02.** **Minimal scope.** `src/screens/Home/HomeScreen.js` is now a thin registry resolver (`useComponent('screens.HomeScreen')`). The legacy implementation moved to `src/screens/Home/HomeScreenLegacy.js`; default variant re-exports it. Custom variants can fully replace HomeScreen by shipping `designs/<variant>/screens/HomeScreen.js` (variants take responsibility for re-calling useTrade / useConfig / useNavigation themselves).
    - **E.3 — HomeScreen deep container/presentation split ✅ Shipped 2026-05-02.** Container at `src/screens/Home/HomeScreen.js` (~1654 lines — all hooks, state, effects, handlers, `allTabData` builder, FCM/notifee, EventEmitter). Presentation at `designs/default/screens/HomeScreen.js` (~642 lines — JSX render + 4 modals). Styles in shared `src/screens/Home/HomeScreen.styles.js`. `HomeScreenLegacy.js` deleted. The split passes a single ~50-key `home` prop bag from container to presentation. Variant overridability now works end-to-end. Sub-steps shipped: E.3.1 (styles extraction), E.3 deep split (JSX extraction).
+   - **E.4 — Home feed section data ✅ Shipped 2026-10-13.** The two execution items of `allTabData` (`RebalanceAdvicesTop`/`RebalanceAdvices` and `StockAdvicesTop`/`StockAdvices`) carry a `section` object beside their prebuilt `component`: `{kind: 'rebalances'|'recommendations', title, subtitle, onViewAll, body, hasItems?}`. `body` is the same `<RebalanceAdvices>` / `<StockAdvices>` element the default design mounts. The default design still renders `component` (unchanged output); a variant with its own visual language renders its own header from `section` and mounts `section.body`, so it never inherits the default header's light-theme colours. Feed items without `section` (plan catalogues, Knowledge Hub, ethical link) are default-design content a variant may omit.
+   - **E.6 — Bespoke plan detail shared modal block ✅ Shipped 2026-10-13.** `designs/default/screens/BespokePerformanceScreen.js` exports `resolveBespokeProps(viewModel, actions, slots)` (the single source of the presentation's prop defaults), `BespokePerformanceModals` (the MPInvestNow / PaymentSuccess / MPReviewTrade / RecommendationSuccess / UserStrategySubscribe modal block, moved verbatim) and `bespokePlanSections(plan)` (key features / benefits / methodology normalised as the screen renders them). The default screen renders `<BespokePerformanceModals>` where the block was; a render comparison of old vs new (all modals open, and subscribed) was identical. Variant presentations of `screens.BespokePerformanceScreen` render their own page and reuse the modal block so the money path is wired once.
+   - **E.5 — Plan categories ✅ Shipped 2026-10-13.** Home's `home` bag adds `bespokeCategoryGroups` (`[{key, name, label, plans}]` — bespoke plans grouped by the advisor's `bespoke_category`, uncategorised last as "Bespoke"), `modelPortfolioCategoryImage` (each group also carries its resolved `image`; resolved in the container from `usePlanCategoryImages` so designs never import the key helper), `openBespokeCategory(name|null)` and `openModelPortfolioCatalog()`. The Plans container accepts `route.params.bespokeCategory` and exposes `bespokeCategoryGroups` (with `image`), `bespokeCategoryFilter` and `onBespokeCategoryChange`. Helpers live in `src/utils/planCategories.js`. Default design ignores them. Canonical design: web repo `docs/BESPOKE_PLAN_CATEGORIES.md`.
 6. **Phase F — Authentication / Account settings.**
    - **Batch 1 ✅ Shipped 2026-05-01.** 4 clean-extracts: `ResetPassword`, `EmailScreenAppleLogin`, `TermsModal` (composite), `LogOutScreen`. All container/presentation split + registered. ~470 lines of presentation across 4 files.
    - **Batch 2 ✅ Shipped 2026-05-01.** `LoginScreen` + `SignupScreen` — paired auth screens, container/presentation split. All Firebase / Google / Apple / post-login orchestration preserved exactly in containers. Render-extraction only.
@@ -645,6 +739,14 @@ The broker SDK remains a `src/` host/SDK-bound surface. Its advisor-theme skin
 and in-app walkthrough shell are host chrome, not a replacement for SDK form
 rendering or security logic.
 
+Host-owned broker guidance, static-IP lifecycle and
+`BrokerConnectStepperSheet` resolve their surfaces, text and actions through
+`useTokens`. This includes the optional device-TOTP/biometric card. The
+backend-owned `deviceTotpEnabled` flag decides whether that control exists;
+active design tokens decide only how its available, enrolled/locked and
+unlocked states look. A tenant design must not hard-code the feature on or
+invent a second toggle.
+
 PortfolioSummaryCard is likewise presentation-only. Its portfolio-state label,
 fund-row typography, and explanatory copy must use the Portfolio screen's
 Poppins hierarchy; an expired subscription status is subordinate metadata, never
@@ -686,3 +788,11 @@ layout belongs to the presentation:
 
 This keeps tenant configuration and error state outside `designs/` without
 allowing a broken remote URL to create a blank customer-facing surface.
+
+### Model-plan catalog presentation contract (2026-10-03)
+
+`screens.ModelPortfolioScreen` may receive display-ready pricing periods,
+original/discount metadata, bespoke validity/retention, canonical subscribed
+state and entitlement readiness. Variant presentations may lay out or locally
+select those values, but may not derive entitlement from raw catalog metadata
+or own payment behavior. The shared container resolves access and actions.

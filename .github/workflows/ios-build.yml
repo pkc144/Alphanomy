@@ -61,6 +61,9 @@ jobs:
           for k in APP_VARIANT REACT_APP_AQ_KEYS REACT_APP_AQ_SECRET; do
             grep -q "^${k}=" .env || { echo "ERROR: required key ${k} missing from APP_ENV_FILE"; exit 1; }
           done
+          # Full runtime-config check shared with AlphaB2B (server URLs, keys,
+          # Firebase, tenant header = alphanomy).
+          bash scripts/verify_mobile_env.sh .env alphanomy alphanomy
 
       - name: Select Xcode 26 (iOS 26 SDK required by App Store Connect)
         run: |
@@ -102,6 +105,11 @@ jobs:
           cd "$SDK_DIR/packages/rn"
           npm install --legacy-peer-deps
           npm run build
+          # Drop the SDK's own React (its devDependency): bundled next to the
+          # app's React it crashes the app at launch ("Cannot read property
+          # 'useState' of null"). metro.config.js resolveRequest also pins these
+          # to the app (AlphaB2B 0287d8e7 / Markup 9d90a5fb8, 2026-10-16).
+          rm -rf node_modules/react node_modules/react-native node_modules/react-native-webview
 
       - name: Install dependencies
         run: npm install --legacy-peer-deps
