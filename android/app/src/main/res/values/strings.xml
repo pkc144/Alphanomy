@@ -1,3 +1,12 @@
 <resources>
     <string name="app_name">alphanomy</string>
+    <string name="CodePushPublicKey">-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwgFMTnu6CRCIKX++mlfT
+F+leN71iEbWBS0LsDCGAwXDD/Oo7nZh3kYYup8WL+A50laqZjNZIxvjRajq8DL4s
+PXx5vEnGs+WDRsZYr5xH5GKXyqjHOJwoyfnkbD6Pi6EkJJ9c53dNBXFC9dSL01hE
+WYm3pK5QECrfhKsY+rfg7VF6DQoe4FGPcUqkXqHs4NezxOse+CQhAIRGxLDYIzVv
+CYAUhbynqNJsAP1VbP4HuLIap3zQ7jozDW+wcIs4D4JyLerTZwpUhhSR0HwdzrtW
+gExFsyLraobeWcyQNGMBfnInMZGE4PqUbaYtiPUk7QcvxxF5E+RvOIe8e3nrHzKD
+zQIDAQAB
+-----END PUBLIC KEY-----</string>
 </resources>

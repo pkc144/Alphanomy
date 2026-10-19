@@ -2,6 +2,10 @@
   "name": "Alphanomy",
   "version": "1.0.0",
   "private": true,
+  "config": {
+    "ota_android_target": "1.0.49",
+    "ota_ios_target": "1.0.48"
+  },
   "scripts": {
     "android": "react-native run-android",
     "ios": "react-native run-ios",
@@ -34,7 +38,15 @@
     "detox:test:mp": "detox test -c android.emu.debug e2e/specs/modelPortfolio.test.js",
     "test:all": "jest --ci --watchAll=false && detox test -c android.emu.debug",
     "postinstall": "patch-package",
-    "audit:imports": "node scripts/audit-dangling-imports.js"
+    "audit:imports": "node scripts/audit-dangling-imports.js",
+    "ota:login": "revopush login",
+    "ota:sdk:build": "npm --prefix ../alphaquark-mobile-sdk/packages/rn run build",
+    "ota:android:staging": "npm run ota:sdk:build && revopush release-react Alphanomy-Android android -d Staging --targetBinaryVersion \"$npm_package_config_ota_android_target\" --description \"[aq-target android $npm_package_config_ota_android_target]\" --privateKeyPath ../../../keys/alphanomy/ota/alphanomy-ota-private.pem",
+    "ota:ios:staging": "npm run ota:sdk:build && revopush release-react Alphanomy-iOS ios -d Staging --targetBinaryVersion \"$npm_package_config_ota_ios_target\" --description \"[aq-target ios $npm_package_config_ota_ios_target]\" --privateKeyPath ../../../keys/alphanomy/ota/alphanomy-ota-private.pem",
+    "ota:android:production": "npm run ota:sdk:build && revopush release-react Alphanomy-Android android -d Production --targetBinaryVersion \"$npm_package_config_ota_android_target\" --description \"[aq-target android $npm_package_config_ota_android_target]\" --privateKeyPath ../../../keys/alphanomy/ota/alphanomy-ota-private.pem",
+    "ota:ios:production": "npm run ota:sdk:build && revopush release-react Alphanomy-iOS ios -d Production --targetBinaryVersion \"$npm_package_config_ota_ios_target\" --description \"[aq-target ios $npm_package_config_ota_ios_target]\" --privateKeyPath ../../../keys/alphanomy/ota/alphanomy-ota-private.pem",
+    "ota:android:promote": "revopush promote Alphanomy-Android Staging Production",
+    "ota:ios:promote": "revopush promote Alphanomy-iOS Staging Production"
   },
   "dependencies": {
     "@alphaquark/mobile-sdk": "file:../alphaquark-mobile-sdk/packages/rn",
@@ -172,7 +184,8 @@
     "react-native-dotenv": "^3.4.11",
     "react-native-svg-transformer": "^1.5.0",
     "react-test-renderer": "19.0.0",
-    "typescript": "5.0.4"
+    "typescript": "5.0.4",
+    "@revopush/code-push-cli": "^0.0.15"
   },
   "engines": {
     "node": ">=18"

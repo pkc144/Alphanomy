@@ -22,7 +22,7 @@ def enableProguardInReleaseBuilds = false
 def jscFlavor = 'org.webkit:android-jsc:+'
 // OTA plumbing is shared, but this fork intentionally has no baked-in
 // deployment. Supply an Alphanomy-specific key at build time if enabled.
-def codePushDeploymentKey = project.findProperty("CODEPUSH_DEPLOYMENT_KEY") ?: System.getenv("CODEPUSH_DEPLOYMENT_KEY") ?: ""
+def codePushDeploymentKey = project.findProperty("CODEPUSH_DEPLOYMENT_KEY") ?: System.getenv("CODEPUSH_DEPLOYMENT_KEY") ?: "8bPqpVn9c_mYNdjV4IU-j_CRMphwNy7_jWqPVl"
 
 android {
     namespace "com.aq.alphanomy"
