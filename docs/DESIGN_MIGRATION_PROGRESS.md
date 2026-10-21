@@ -1,5 +1,16 @@
 # Design System Migration — Progress Log
 
+## 2026-10-21 — SL trigger value on the stock card
+
+- **Phase**: post-Phase-I presentation maintenance.
+- **Surfaces touched**: `designs/default/composites/StockCard.js` (value line
+  shows `Trigger ₹T · Limit ₹L` for an `SL` reco with a positive trigger),
+  container `src/UIComponents/StockAdvicesUI/StockCard.js` (new `triggerPrice`
+  prop forwarded in the viewModel).
+- **Verdict changes**: none. Data arrives only through the viewModel;
+  `npm run audit:design` passes with baseline 0.
+- **Regressions**: none; other order types render as before.
+
 ## 2026-10-12 — release/deploy_5.2: named host tokens replace the host skin
 
 - **Phase**: design-system hardening for fork sync.
