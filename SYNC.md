@@ -10,8 +10,9 @@ you're new here.
 - **Repo**: `https://github.com/alpha112233/Alphab2bapp` (local clone at
   `/home/pk/Alphaquark_docs/AlphaQuark/codes/github/Alphab2bapp`)
 - **Tracked branch**: `release/deploy_5.1`
-- **Last synced commit**: `0287d8e7` (`fix(ios): one React in the bundle —
-  CI iOS builds crashed at launch`) — 2026-10-16.
+- **Last synced commit**: `94f41855` (`ci(design-literals): skip test files
+  in the compile validator`) — 2026-10-21 content port. Previous full sync:
+  `0287d8e7` (2026-10-16).
 
 ## ⚠️ This fork has unrelated git history with upstream
 
@@ -167,6 +168,36 @@ from `WHITELABEL_RECIPE.md` works as designed. The 2-line conflict on
 merge.
 
 ## Sync history
+
+### 2026-10-21 — content port through `94f41855`
+
+Upstream `0287d8e7..94f41855` by content (SL trigger `bec07198`/`f4cfb36a` and
+Kite tick `a25969a6` were already here as `d030484e` / `0faad67b`; ASC retry,
+export compliance and one-React already in the 10-16 sync). Set to upstream
+byte-for-byte (each fork file was an unmodified older upstream blob):
+sell-auth sheet only on a classified rejection, portal-broker sheet leads with
+today's approval (DDPI optional), wait for reconciliation before retry
+(`RebalanceModal.js`, `DdpiModal.js`, sell-auth contract tests); pre-sign-in
+request no longer strips the auth bearer (`authTokenInterceptor.js`);
+admin-featured plans of any type, admin-added bespoke subscribers, chart width,
+legal WebView guard (`featuredPlans.js`, `legalWebViewGuard.js`, `HomeScreen.js`,
+`useHomePlanSummary.js`, `alphanomyPlanShape.js`, `ModelPortfolioScreen.js`,
+`PerformanceChart.js`, Privacy/Terms containers); design-literal validator
+skips tests; BROKER_CONNECTION / MODEL_PORTFOLIO / REBALANCING / SELL_AUTH doc
+entries (3-way, clean).
+
+- **Kept:** `designs/alphanomy/**` unchanged. The new container viewModel
+  fields (`featuredPlans`, `openPlanDetail`, bespoke `isSubscribed` on
+  `alphanomyPlans.bespoke`) are additive; the Alphanomy Home/Plans designs do
+  not render them yet. Alphanomy's Privacy/T&C designs are hardcoded text (no
+  WebView), so the legal guard only affects the default fall-through. Kept the
+  fork's Revopush/OTA config, SDK path depth, tenant-aware tests,
+  `design-boundary-baseline.json` (`_AppHeader` entry), whitespace-only
+  differences on older shared files.
+- **Skipped:** AlphaPro version bump `49a1e0e5`, OTA record `4cb6cc14`.
+- Jest: same single pre-existing failure as the remote tip
+  (`brokerSessionRejectedDisplay.test.js`); 4 new suites pass. No OTA, no build.
+
 
 ### 2026-10-16 — Full shared-layer reconciliation to `0287d8e7`
 

@@ -1566,6 +1566,7 @@ customer a second address (OVH Mumbai, routed via Docker1) so either network
 can carry their orders once both are whitelisted. Backend design: ccxt-india
 `docs/EGRESS_OVH_PRIMARY_DESIGN.md`. Web twin: prod-alphaquark-github
 `src/Home/BrokerConnection/BackupStaticIp.js` (BROKER_CONNECTION_ARCHITECTURE §11A.2a).
+Incident record: prod-alphaquark-github `docs/server_issues/2026-10-16-route64-transit-down-and-arihant-etf-tokens.md`.
 
 - **API:** for a `claimed` IPv6 broker `/egress/me` adds `ovh_address`,
   `ovh_role` (`secondary` = existing customer keeps their IP as primary and

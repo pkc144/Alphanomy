@@ -1,5 +1,16 @@
 # Model Portfolio Architecture
 
+## 2026-10-19 — TPIN return and the reconciliation lease
+
+Portal sell authorization may finish while reconciliation of the rejected SELL
+attempt still owns the broker-account lease. The resulting HTTP 409
+`accountRecovery.state = reconciling` is a temporary serialization result, not
+a TPIN failure. AlphaB2B's `OtherBrokerModel` now respects the server-provided
+bounded retry delay and retries the non-ordering Calculate once while showing a
+visible broker-verification state. A second busy response remains on the sheet
+with Try again; no lease is bypassed, no order is automatically replayed, and
+the customer must still review and accept the newly calculated basket.
+
 ## 2026-10-10 — rebalance execute links open the card's Accept flow
 
 A WhatsApp/Telegram rebalance link (surfaces `rebalance` / `rebalance_execute`)
