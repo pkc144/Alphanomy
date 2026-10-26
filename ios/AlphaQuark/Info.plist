@@ -14,6 +14,18 @@ zQIDAQAB
 -----END PUBLIC KEY-----</string>
 	<key>CodePushDeploymentKey</key>
 	<string>XYO75VEtVofg2g_IJWnxTbWysFY9Ny7_jWqPVl</string>
+	<!-- UPI intent: lets the Cashfree SDK detect and open installed UPI apps -->
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>phonepe</string>
+		<string>tez</string>
+		<string>gpay</string>
+		<string>paytm</string>
+		<string>paytmmp</string>
+		<string>bhim</string>
+		<string>credpay</string>
+		<string>upi</string>
+	</array>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
