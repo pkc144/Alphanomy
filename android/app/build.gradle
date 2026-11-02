@@ -57,7 +57,7 @@ android {
         applicationId "com.aq.alphanomy"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 89
+        versionCode 90
         versionName "1.0.51"
         resValue "string", "CodePushDeploymentKey", codePushDeploymentKey
         buildConfigField "String", "B2B_DESIGN_VISUAL_BUILD", designVisualTestBuild ? '"true"' : '"false"'
